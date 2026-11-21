@@ -439,6 +439,43 @@
   white-space: nowrap;
 }
 
+/* a key of type stringMap (StringMapSettingsItem): its entries as two tight
+   columns, the names muted, the values as text; the last row adds one */
+.doc-settings-map {
+  display: inline-grid;
+  grid-template-columns: max-content max-content;
+  column-gap: 0.75rem;
+  row-gap: 1px;
+  font-size: 0.74rem;
+  line-height: 1.35;
+  text-align: left;
+}
+
+.doc-settings-map-row {
+  display: contents;
+}
+
+.doc-settings-map-name {
+  color: var(--color-fd-muted-foreground);
+  white-space: nowrap;
+}
+
+.doc-settings-map-value {
+  min-width: 1.5rem;
+  white-space: nowrap;
+}
+
+.doc-settings-map-value.is-none {
+  color: var(--color-fd-muted-foreground);
+  font-style: italic;
+}
+
+.doc-settings-map-add {
+  grid-column: 1 / -1;
+  min-width: 6rem;
+  white-space: nowrap;
+}
+
 .doc-settings-key-add-select {
   max-width: 18rem;
   padding: 0 0.2rem;

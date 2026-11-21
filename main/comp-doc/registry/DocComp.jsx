@@ -7,9 +7,12 @@ import { RegisteredComp } from './RegisteredComp.jsx';
 // commentInline) instead of a block (placement commentBlock).
 // sourceLine: the line of a block's marker comment, counted in the content
 // without frontmatter; a block placement only.
-export function DocComp({ comp, compDefinition, compId, isInline, raw, lang, propsJson, sourceLine, sourceOffset, sourcePath }) {
+// place: 'listItem' for a block that is the whole text of a list item
+// (remark-comment-comp.js), handed to the component as config.place.
+export function DocComp({ comp, compDefinition, compId, isInline, raw, lang, place, propsJson, sourceLine, sourceOffset, sourcePath }) {
   const propsAuthored = propsJson ? JSON.parse(propsJson) : {};
   const configRuntime = {};
+  if (place) configRuntime.place = place;
   if (sourceOffset !== undefined) configRuntime.instanceId = `${comp}:${sourceOffset}`;
   if (sourcePath !== undefined) configRuntime.sourcePath = sourcePath;
   if (sourceLine) configRuntime.sourceLine = Number(sourceLine);

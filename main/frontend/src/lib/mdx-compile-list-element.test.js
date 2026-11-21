@@ -228,3 +228,19 @@ test('mdx: JSX components as list elements, including multi-line and children', 
   assert.match(html, /<li><x-jsx data-name="Callout"><p>inner <strong>markdown<\/strong><\/p><\/x-jsx><\/li>/);
   assert.match(html, /<li>tagged <x-jsx data-name="Tag"><\/x-jsx> inline<\/li>/);
 });
+
+// the line of a fence reaches its <pre> (data-source-line, rehypeCodeLine), in
+// the content without the frontmatter, for a block of the document and for a
+// block that is a list item; the info string keeps its own words
+test('a fenced block knows the line it starts at', async () => {
+  const result = await compileDoc({
+    source: ['---', 'title: x', '---', 'text', '', `${F}python title="a.py"`, 'x = 1', F, '', '- item', `- ${F}text`, '  kept', `  ${F}`].join('\n'),
+    internalPath: '/test/line.md',
+    format: 'md',
+    config: { isDefaultLinkRecognitionEnabled: false },
+  });
+  const preList = [];
+  const Pre = (props) => { preList.push({ line: props['data-source-line'], title: props.title }); return null; };
+  renderToStaticMarkup(createElement(result.Body, { components: { ...componentsStub, pre: Pre } }));
+  assert.deepEqual(preList, [{ line: '3', title: 'a.py' }, { line: '8', title: undefined }]);
+});

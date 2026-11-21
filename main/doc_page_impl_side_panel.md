@@ -218,6 +218,7 @@ side-panel.yaml                          side panel
 | tags, config | the node's `tags` attach to the folder asset (`folderPath`), its `config` applies to every document below ([tags](doc_page_impl_tag.md), [config](doc_page_impl_config.md#declaring-document-config)) |
 | source, pruning | the folder is a root of pruning: every page below it is retained in a build ([source pruning](doc_page_impl.md#source-pruning-for-deployment)) |
 | editing | a generated item is not renamed, moved, removed or bound, and nothing is placed next to it; its menu says why, naming the folder it mirrors. It can be read again (refresh). The source-folder item itself is an item of the file: renamed, moved, removed, rebound, detached |
+| search | the source-folder item is found by its name; the search does not go into the folder, so a generated item is not found ([Searching the items](#searching-the-items)) |
 
 **How it looks.** The reader tells the file tree from the authored items before clicking: a generated item has a small file or folder glyph before its name (`data.isGenerated`), and the source-folder item a small tree glyph after its name, the folder's path as its hover title (`data.isSourceFolder`). Both are drawn by the default renderer on the `sidebar` surface in every mode, so nothing moves when edit mode is toggled; a custom renderer wrapping `SidePanelItem` keeps them.
 
@@ -618,6 +619,44 @@ When to keep it, and when not:
 
 The option belongs to the mount (`docPageList` of the workspace file, `docEntry` of `config.yaml`, not the reusable entry), is a yaml boolean only (`"false"`, the text, is refused), and is `true` when absent; the former key `isRootVisible` is read as its opposite, with a warning. It is not a flatten: the root stays in the semantic tree, marked `isSidebarRootUnfolded` by the loader (`sidePanelRootUnfoldApply`), with its item id, bound document, tags, config, part, breadcrumb and home targets, and its `textSource` / `nodeSource` for editing (the root row carries the item's label component, so its menu and rename work in edit mode as anywhere). `page-tree.js` keeps the mark on the folder it builds and counts it in the render key of the tree, so toggling the option re-renders the side panel at once while the item ids stay. `DocSidebarFolder` draws such a folder without a folder level, the root row first when it has a document; its remembered open state is not read, so it never hides its children; the section above folds them, and a child folder keeps its own row and chevron. A consumer replacing the folder renderer (`config.sidePanel.components.Folder`) takes this case over too.
 
+## Searching the items
+
+A side panel of several doc pages holds hundreds of items, many of them in folded folders and sections. A field at the top of the side panel, above the first doc page (and above the toolbar of the sections), finds items **by their names**: the label each item shows, in the language of the page. It is the sidebar's `banner` (`DocSidePanelSearch`), so it stays in view while the tree scrolls below it, and it takes the place of the search button of fumadocs, which the page hides: the text of the documents is still searched by the dialog of fumadocs, on its key only, until a unified search of the page replaces both ([Search](doc_page_impl.md#search), [TODO](doc_page_impl_TODO.md#unified-search)).
+
+<!--renderComp=DiagramText-->
+```text
+React Doc Test                 [>_] [⚙] [◧]
+[search: diagram                       ×]   ◄ the field, in place of the
+┌────────────────────────────────────────┐     search button of fumadocs
+│ ▤ [Diagram]s                           │   ◄ the label, matched words marked
+│   example › MDX Components             │   ◄ where it is: section, folders
+│ ▤ Card [Diagram] Scenes                │
+│   cloud-dev-vis                        │
+└────────────────────────────────────────┘   ◄ floats over the tree
+WORKSPACE                        [⇕] [⇳]
+example                                ⌄
+```
+
+**What is searched** is what the reader sees in the side panel shown, in tree order (`sidePanelSearchEntryListBuild`, `lib/side-panel-search.js`):
+
+| Item | In the search |
+| --- | --- |
+| a document, a panel, an inline item | found, with its route |
+| a folder bound to a document | found, with the route of its document |
+| a folder, a separator | found, without a route: choosing it reveals it |
+| a section (a doc page of a workspace of several) | not an item: its alias heads the path of the items below it |
+| a sole root unfolded | found when it is bound to a document (its root row), not when it is not (nothing of it is drawn); no level of the path either way |
+| the item of a source folder | found by its own name, and **the search stops there** |
+| an item generated below a source folder | never found |
+
+**The search stops at a source folder.** An item mirroring a source folder shows a file tree below it ([An item mirroring a source folder](#an-item-mirroring-a-source-folder)); the search finds that item, and does not go into the folder. This is a choice for now, not a limit of the tree, which holds the generated items already: they are files on disk rather than items someone wrote, a folder can hold far more of them than the authored side panel has items, and they would crowd out the authored items in the results. Searching them, kept apart from the authored items, is left for later ([TODO](doc_page_impl_TODO.md#side-panel-search-source-folder)). A tree generated without any side panel has no source-folder item, and is searched whole.
+
+**Matching.** The query is split into words; an item matches when its label holds every word, case-insensitively, in any order. The results come best first: a label starting with the query as typed, then one holding the query as typed, then one holding its words apart, in tree order within each (`sidePanelSearchMatch`); the first 50 are listed, and the list says how many more match. Each result shows the label with every occurrence of every word marked (`.doc-search-match`, the mark of every search of the page), an icon of its kind, and below it the path, the section's alias and the labels of the folders above, so two items of the same name tell apart.
+
+**Choosing a result** (a click, or Enter on the one the arrow keys are on, the first when none is) opens the section and every folder above the item, opens the item too when it is a folder, navigates to it when it has a route, and marks its row: the row of the item scrolls itself into the middle of the side panel and is tinted for a moment (`searchRevealItemId`, read by `SidePanelItemHost`, `data-search-reveal`), so an item without a route, a folder or a separator, is shown where it stands.
+
+**The results** float over the tree, so nothing below the field moves while the reader types, and the wheel over them scrolls them and never the document under them, even when they are too few to scroll (`useWheelContain`: a wheel the list has no room for is stopped there, since a short list is no scroll container the browser would keep it in). They go when the pointer goes down outside the search or a result is chosen; the field focused or clicked again shows them, Escape closes them and a second Escape clears the query. The state is the side panel store's (`DocSidePanelStore`: `searchQuery`, `searchIsOpen`, `searchIndexActive`, `searchRevealItemId`; `searchChoose`), so another part of the page can open a result the same way.
+
 ## Embedded height and scrolling
 
 The document page is its own scroll container (`.doc-page-mdx`, `height: 100%; overflow: auto`) and fills a host of definite height, which is often shorter than the window: a tab of an application, a panel. Fumadocs sizes the sticky sidebar wrapper and the layout's minimum height from `--fd-docs-height`, which it initializes to `100dvh` on `#nd-docs-layout`. Embedded, the two contracts disagree: the sidebar measures the window, the page shows only the host, and the last side-panel items fall below the visible page while the sidebar's scrollbar believes everything fits. Capping the inner aside does not help, since the wrapper keeps the window's height.
@@ -659,10 +698,12 @@ frontend/src/lib/page-tree.js            tree conversion, routes, parts, tag and
 frontend/src/lib/side-panel-move.js      place index, what a move is allowed to do and writes
 frontend/src/lib/side-panel-node.js      what a structure change is allowed to do and writes
 frontend/src/lib/side-panel-item.js      renderer choice and item data
+frontend/src/lib/side-panel-search.js    the items searched (stopping at a source folder), matching
 frontend/src/lib/text-localized.js       localized label parsing and selection, shared with indexes
 frontend/src/store/DocEditStore.ts       sidePanelText: the label being edited, the write
 frontend/src/store/DocSidePanelStore.ts  folder open state, drag, picker, context menu, the move, the
-                                         structure changes and their dialog, refresh (sidePanel route)
+                                         structure changes and their dialog, refresh (sidePanel route),
+                                         the search (query, results, the item chosen and revealed)
 comp-doc/side-panel/SidePanelItemHost.jsx  runtime context, surfaces, edit state and owner of the
                                            label, the drag wrapper
 comp-doc/side-panel/SidePanelItem.jsx      default renderer (common/SidePanelItem), label editing,
@@ -676,5 +717,6 @@ comp-doc/side-panel/SidePanelItemDialog.jsx  the dialog of a new folder, a bindi
 comp-doc/side-panel/DocSidebarFolder.jsx   default folder gesture, open state by item id, an unfolded
                                            sole root drawn as its children (its root row first when bound)
 comp-doc/side-panel/DocSidePanelSection.jsx  a root doc page of a workspace of several: heading, toolbar
+comp-doc/side-panel/DocSidePanelSearch.jsx   the search of the items, the sidebar's banner
 comp-mdx/tag/TagLabel.jsx, TagList.jsx     tag display
 ```

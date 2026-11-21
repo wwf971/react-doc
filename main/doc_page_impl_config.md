@@ -109,6 +109,9 @@ configDefault:
   TagsDisplayAtLinkIsOn: false
   TagsDisplayAtLinkPosition: after
   TagsOverviewPopupIsOn: true
+  EditInsertRankByEntry:        # a stringMap: later levels add to it entry by entry
+    text:paragraph: c
+    text:heading: e
   compConfig:
     Image:
       PasteReplaceConfirmIsOn: true
@@ -127,14 +130,17 @@ Built-in keys:
 | `FontMonoFamily` | doc | not set | The font of code and of source being edited in the document, a css `font-family` over `--font-mono` of the page. A source rule sets it for the documents of one doc page, for example a fallback for their language. |
 | `ListItemGap` | doc | `4` | The space between two lines of a list, in px: between two items, and between an item and the items under it. One value for all of them, so a line stands as far from the line above it at every level. |
 | `ListMarkerGap` | doc | `5` | The space between the bullet or number of a list item and the start of its text, in px. |
-| `CodeBlockView` | doc | `card` | The view of a fenced code block that names none in the info of its fence: `card`, a card with its own background, or `plain`, a thin frame around lines that stand like plain text. |
+| `CodeBlockView` | doc | `card` | The view of a fenced code block that names none in the info of its fence: `card`, a card with its own background, `plain`, a thin frame around lines that stand like plain text, or `icon`, a tile whose lines open in a dialog. |
 | `CodeBlockViewAsListItem` | doc | `plain` | The view of a fenced code block that is a list item (the whole text of the item, as Shift + Enter in an item writes it) and names none. |
+| `CodeBlockViewInListItem` | doc | `plain` | The view of a fenced code block in the text of a list item among other things (under its text, between its lines, beside other blocks) that names none. |
+| `CodeBlockIconAlign` | doc | `bottom` | Where the tile of a code block in the icon view stands in the line of text it is in: `bottom`, its bottom edge on the bottom edge of the line, or `top`, its top edge at the top of the line ([The icon view](doc_page_impl_mdx_code.md#the-icon-view)). |
 | `TagsDisplayAtLinkPosition` | doc | `after` | `before` or `after` the link text. |
 | `TagsOverviewPopupIsOn` | page | `true` | Clicking a tag opens the tag overview popup. |
 | `TagsOverviewPopupAtSidePanelItemIsOn` | page | `false` | The popup also opens from a tag on a side-panel item. Off, a click there is a plain navigation gesture. |
 | `EditBlockEnterMode` | page | `click` | `click`: a block enters edit mode by clicking it (the caret at the clicked text) as well as through the Edit button of its toolbar; `button`: through the Edit button only. Development server only. |
+| `EditInsertRankByEntry` | doc | the basic blocks, in `config.yaml` | The [ranks](#ranks) of the entries of the insert menu, by entry id (`text:paragraph`, `component:{tag name}`, `service:{component id}`): a ranked entry is listed before every unranked one, in its row and in the results of a search. A `stringMap`, merged entry by entry; `null` takes a rank away. |
 
-How the tag features behave is described in [Tag system](doc_page_impl_tag.md#where-tags-are-displayed), the edit key in [MDX document in-place editing](doc_page_impl_edit.md#availability-and-mode), the measures of a list in [The spacing of a list](doc_page_impl_mdx_li.md#the-spacing-of-a-list), the views of a code block in [Fenced code blocks](doc_page_impl_mdx_code.md#which-view-a-block-gets).
+How the tag features behave is described in [Tag system](doc_page_impl_tag.md#where-tags-are-displayed), the edit keys in [MDX document in-place editing](doc_page_impl_edit.md#availability-and-mode) and [The order of the insert menu](doc_page_impl_edit.md#the-order-of-the-insert-menu), the measures of a list in [The spacing of a list](doc_page_impl_mdx_li.md#the-spacing-of-a-list), the views of a code block in [Fenced code blocks](doc_page_impl_mdx_code.md#which-view-a-block-gets).
 
 A doc-scope key that is a measure of the document's look reaches the stylesheet as a css variable: `DocsShell` reads the value for the document shown (`configStore.valueDocGet`) and sets the variable on the root element, and the rules read it with the default of the default layer as fallback. `FontMonoFamily` sets `--font-mono`, `ListItemGap` and `ListMarkerGap` set `--doc-list-item-gap` and `--doc-list-marker-gap`. So a value changed in the settings panel, by a source rule or in the frontmatter of one document shows at once, without a compile.
 
@@ -160,7 +166,7 @@ config:
       FileStoreDir: ${dirImage}
 ```
 
-Every mapping of keys is one **declaration**, named by its file and its yaml address (`entry.yaml › config.1`). The loader (`plugin/doc-entry.ts`) records them while it reads the files, each with the alias of the doc page it belongs to, and the page keeps **one layer per doc page of the workspace**, named by the doc page's alias, holding that doc page's declarations in the order read (the entry's `config`, a config file where it is named, then the `config` of the files its side panels reach), a later one winning key by key:
+Every mapping of keys is one **declaration**, named by its file and its yaml address (`entry.yaml › config.1`). The loader (`plugin/doc-entry.ts`) records them while it reads the files, each with the alias of the doc page it belongs to, and the page keeps **one layer per doc page of the workspace**, named by the doc page's alias, holding that doc page's declarations in the order read (the entry's `config`, a config file where it is named, then the `config` of the files its side panels reach), the last valid one winning key by key (a `stringMap` takes them all, merged entry by entry: `configDeclaredListMerge`):
 
 ```text
 the doc page layers of a workspace (workspace.yaml: example, second; example includes sub):
@@ -225,7 +231,7 @@ Result     every key with the value in effect at page level and the level that d
            (a doc page level is named docPage:{alias})
 ```
 
-An item shows the value as written (a variable stays `${name}`), with a control for its type: a switch for `boolean`, a dropdown for `enum`, a number or text field otherwise, a path field with completion for `sourcePath`; `any` keys are not listed. A key a layer declares but cannot use (unknown, a value of the wrong type) is listed as written, greyed out, with the reason. The header of the panel says which layer is shown and what it is in this workspace (`layer.note`: the main doc page, a doc page included by another, the workspace file) or how it is kept; a layer that cannot be written says why as well, and its items are disabled with the same reason; a write that failed is reported there until dismissed. The **Asset service** tab is not config of the page at all but the folders of the local store of the asset service layer: a change there is written to the store's own file by the development server ([the local store](doc_page_impl_asset.md#the-local-store-folders-fully-reflected)). Below the folders it lists the orphan objects, the objects no block references, and the broken references, and opens the asset panel of an object in place ([Usage](doc_page_impl_asset.md#usage)). It lives in the settings panel because it is where a reader looks for how the page is set up. The **Services** tab is not config either: the service templates of the service backend and its instances, in two areas of cards (the instances with the system ones, none yet), a template with its versions and the creation of an instance from it, an instance with the template it was created from, its apis and its config dashboard ([The Services tab](doc_page_impl_service_dashboard.md#the-services-tab)). The **Workspace** tab draws the workspace the page serves as a graph: its doc pages, which includes which under what alias, and the alias conflicts ([The Workspace tab](doc_page_impl_source.md#the-workspace-tab)). The **API** tab shows the unified api registry: the address a caller outside the page uses, every api with whether it can run and its key, the keyboard maps of the doc pages with the reader's choice of a map, the resolved keys, and the last calls ([The API tab](doc_page_impl_api.md#the-api-tab)). The tabs without layers say in the panel's header where what they show lives. The tab shown is `DocConfigStore.settingsTabId`, kept while the panel is closed.
+An item shows the value as written (a variable stays `${name}`), with a control for its type: a switch for `boolean`, a dropdown for `enum`, a number or text field otherwise, a path field with completion for `sourcePath`, the entries of a `stringMap` one row each (`StringMapSettingsItem`: edited in place, and one added, in the client layer; shown elsewhere, since the in-place yaml write sets a scalar or a list, and a mapping is changed in its file); `any` keys are not listed. A key a layer declares but cannot use (unknown, a value of the wrong type) is listed as written, greyed out, with the reason. The header of the panel says which layer is shown and what it is in this workspace (`layer.note`: the main doc page, a doc page included by another, the workspace file) or how it is kept; a layer that cannot be written says why as well, and its items are disabled with the same reason; a write that failed is reported there until dismissed. The **Asset service** tab is not config of the page at all but the folders of the local store of the asset service layer: a change there is written to the store's own file by the development server ([the local store](doc_page_impl_asset.md#the-local-store-folders-fully-reflected)). Below the folders it lists the orphan objects, the objects no block references, and the broken references, and opens the asset panel of an object in place ([Usage](doc_page_impl_asset.md#usage)). It lives in the settings panel because it is where a reader looks for how the page is set up. The **Services** tab is not config either: the service templates of the service backend and its instances, in two areas of cards (the instances with the system ones, none yet), a template with its versions and the creation of an instance from it, an instance with the template it was created from, its apis and its config dashboard ([The Services tab](doc_page_impl_service_dashboard.md#the-services-tab)). The **Workspace** tab draws the workspace the page serves as a graph: its doc pages, which includes which under what alias, and the alias conflicts ([The Workspace tab](doc_page_impl_source.md#the-workspace-tab)). The **API** tab shows the unified api registry: the address a caller outside the page uses, every api with whether it can run and its key, the keyboard maps of the doc pages with the reader's choice of a map, the resolved keys, and the last calls ([The API tab](doc_page_impl_api.md#the-api-tab)). The tabs without layers say in the panel's header where what they show lives. The tab shown is `DocConfigStore.settingsTabId`, kept while the panel is closed.
 
 ```text
 settings panel, tab of layer L ──► DocConfigStore.layerValueSet / layerDeclarationValueSet / layerKeyAdd ...
@@ -275,10 +281,11 @@ value of a document-level key K for document D:
 4. side panel     side-panel nodes that bind D, or a folder node above an item of D, in tree order
 5. document       frontmatter config.K of D
 6. layers above   the config layers above the document levels, in stack order: client (this browser)
--> a later level replaces the value of an earlier one, key by key
+-> a later level replaces the value of an earlier one, key by key; a stringMap is
+   merged entry by entry (an entry written null removes the one below)
 ```
 
-A level only replaces the keys it writes. If a document sets `TagsDisplayAtLinkPosition` in its frontmatter, the other keys keep the values from the earlier levels.
+A level only replaces the keys it writes. If a document sets `TagsDisplayAtLinkPosition` in its frontmatter, the other keys keep the values from the earlier levels. A `stringMap` goes one step further, a level replacing only the entries it writes: a doc page ranks its own components in the insert menu (`EditInsertRankByEntry`) without restating the ranks of the package.
 
 A page-level key written at levels 3 to 5 is ignored with a warning. So is an unknown key or a value of the wrong type. When this happens, the earlier value stays in effect. The layers (levels 2 and 6) take both scopes; a layer above the document levels is where a value is meant to win for the whole page, whatever the documents declare.
 
@@ -407,7 +414,15 @@ A new feature adds its key definitions to `configDefineListBuiltin` in `lib/doc-
 }
 ```
 
-Supported types are `boolean`, `string`, `number`, `enum` (with `valueList`), `stringList`, `sourcePath`, and `any`. `null` is accepted only when it is the default, and it means "not set". `description` is the text of the key in the settings panel; `isUserSettable: false` keeps a key out of the panel (the default is listed).
+Supported types are `boolean`, `string`, `number`, `enum` (with `valueList`), `stringList`, `stringMap`, `sourcePath`, and `any`. `null` is accepted only when it is the default, and it means "not set". `valuePattern`, a regular expression as text, is matched by every string of a `string`, `stringList` or `stringMap` value. `description` is the text of the key in the settings panel; `isUserSettable: false` keeps a key out of the panel (the default is listed).
+
+A `stringMap` is a mapping of names to strings, the one type that is not replaced by a later level: it is **merged entry by entry** (`configValueMerge`), a later level adding entries and replacing those it names, an entry written `null` removing the one below. So a value set for a few names (the rank of one component) never erases what the levels below say of the others, at every level: the layers, the declarations of one layer, source rules, side-panel items, frontmatter. Its default is a mapping (`{}`), never `null`.
+
+### Ranks
+
+A value that orders things (`EditInsertRankByEntry`, the entries of the insert menu) is a **rank**, in the manner of LexoRank: a string of the digits `0`-`9` and the letters `a`-`z`, never ending with `0`, compared character by character by code unit (never by the locale or the length): `c` < `ci` < `d` < `d5` < `e`. Read as the digits of a fraction in base 36, every rank lies between 0 and 1 and there is always a rank between two, so a thing is put between two others by a rank between theirs and nothing else is renumbered; the trailing `0` is excluded because `c0` would be `c` again. A thing without a rank comes after every ranked one, and the unranked keep an order of their own. Ranks are given with gaps (`c`, `e`, `g`, …) to leave room for single letters, and a longer rank fits anywhere: between `c` and `d` lies `ci`.
+
+`lib/doc-rank.js` holds the rule for every user: `rankIsValid`, `rankCompare`, `rankOrderCompare` (a ranked thing before an unranked one, 0 when the caller's own order decides), `rankBetween(before, after)` (a rank strictly between two, `''` for an open end: `rankBetween('c', 'd')` is `ci`), and `RANK_PATTERN_TEXT`, the `valuePattern` of a key holding ranks.
 
 A `sourcePath` key holds a string that names a folder or a file of the doc page source by its source path (`~root/…` of the declaring doc page, or `~page:root/…`, [source paths](doc_page_impl_source.md#source-paths)). The definition says what it names with `pathSpec` ([path completion](doc_page_impl_source.md#path-completion): `{ kind: 'dir' | 'file' | 'any', extList?, rootIdList?, dirPath? }`), and the settings panel edits it with completion from the doc page source service layer (`SourcePathInput`: an `EditValueInline`, a dropdown of `sourceStore.pathComplete(typed, pathSpec)` below it, arrow keys and Enter; a click outside commits, and the path ends at the right of the value column), instead of a plain text field. A revert button appears before the path when there is something to go back to. While the path is being edited and its text differs from the value it had when the editing started, the button resets the text to that value; nothing is written and the field stays in edit mode. Once an edit has been written, the panel remembers the value the item had before its first edit of the page session (`DocConfigStore.settingsValueOriginalByItemId`, by item, so per layer), and the button writes that value back, an ordinary write of the layer; an edit back to the remembered value, by the button or by hand, forgets it and the button disappears. The value is validated as a string; a path that does not exist is still accepted, since a folder for files the page creates may not exist yet. The field says so instead: a warning icon before the path, while it is typed too, when it names no folder (or no file, by `pathSpec.kind`) of the source (`DocSourceStore.pathMissingWarningGet`, `SourcePathInput` `isMissingWarned`); the icon's place is kept whether it shows or not, so the path never moves as the warning comes and goes.
 
@@ -495,8 +510,9 @@ All config logic uses the `doc-config` prefix:
 ```text
 frontend/src/lib/doc-config-define.js      key definitions, layer definitions (configLayerDefineList, one per doc
                                            page for isPerDocPage: configLayerIdOfDocPage), value validation (shared
-                                           with the plugin), the component key index (compConfigDefineByCompIdBuild),
-                                           variableExpand
+                                           with the plugin), configValueMerge (a stringMap entry by entry), the
+                                           component key index (compConfigDefineByCompIdBuild), variableExpand
+frontend/src/lib/doc-rank.js               ranks (LexoRank-like): validation, order, a rank between two
 frontend/plugin/doc-entry.ts               the doc page layers and the workspace layer: "config" sections and config
                                            files read while the entries and the workspace are loaded, every
                                            declaration with its doc page (docPageAlias, '' for the workspace's),
@@ -504,6 +520,7 @@ frontend/plugin/doc-entry.ts               the doc page layers and the workspace
 frontend/plugin/doc-config-source.ts       source and frontmatter levels, called from the source scan
 frontend/src/lib/doc-config-side-panel.js  side-panel level, called from page-tree.js
 frontend/src/lib/doc-config-model.js       resolution into the config model, the layers as a list;
+                                           configDeclaredListMerge, the declarations of one layer merged;
                                            configDeclaredCheck, one declaration key by key for the panel
 frontend/src/store/doc-config-layer.ts     the layer objects: ConfigLayerPackage (configDefault, read only),
                                            ConfigLayerDeclared (the declarations of one doc page, or of the workspace,

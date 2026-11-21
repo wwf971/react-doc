@@ -1,4 +1,4 @@
-import { CONFIG_LEVEL_DEFAULT, COMP_CONFIG_KEY, configDeclaredIs, configValueNormalize, variableExpand } from './doc-config-define.js';
+import { CONFIG_LEVEL_DEFAULT, COMP_CONFIG_KEY, configDeclaredIs, configValueMerge, configValueNormalize, variableExpand } from './doc-config-define.js';
 
 // Resolves every config declaration of the doc page into one config model.
 // Design: doc_page_impl_config.md
@@ -15,7 +15,8 @@ import { CONFIG_LEVEL_DEFAULT, COMP_CONFIG_KEY, configDeclaredIs, configValueNor
 //                     (client: the reader's values kept in the browser)
 // page-scoped keys are read at the layer levels only (2 and 6). a feature
 // with an inline form (for example a link title marker) applies it after
-// level 6 by itself.
+// level 6 by itself. a later level replaces the value, except for a key of
+// type stringMap, merged entry by entry (configValueMerge).
 //
 // a layer is { id, config, compConfig, isCompKeyedById, isAboveDocLevels }:
 // config is { K: value } of the page keys, compConfig { Comp: { K: value } }
@@ -210,9 +211,41 @@ function configLevelApply(configResolved, configDeclared, { configDefineByKey, v
       console.warn(`[doc-config] invalid value for "${key}" in ${originText}: ${JSON.stringify(valueDeclared)}`);
       continue;
     }
-    configResolved.valueByKey[key] = value;
+    configResolved.valueByKey[key] = configValueMerge(define, configResolved.valueByKey[key], value);
     configResolved.levelByKey[key] = level;
   }
+}
+
+// the page keys of the declarations of one layer, merged in order as the
+// layer's config: a later declaration replaces a key, a stringMap is merged
+// entry by entry, its null entries kept so that they still remove what the
+// levels below declare. a value that is not valid is passed over, so the
+// layer takes the last valid one (the settings panel marks that one); an
+// unknown key, or one never declared valid, is passed on as written for the
+// model to report.
+//   configList   [{ Key: value }] in stack order
+export function configDeclaredListMerge(configList, { defineByKey, variableByName = {} }) {
+  const result = {};
+  const keyValidSet = new Set();
+  for (const configDeclared of configList) {
+    if (!configDeclaredIs(configDeclared)) continue;
+    for (const [key, valueDeclared] of Object.entries(configDeclared)) {
+      if (key === COMP_CONFIG_KEY) continue;
+      const define = defineByKey.get(key);
+      if (!define) {
+        result[key] = valueDeclared;
+        continue;
+      }
+      const { isValid } = configValueNormalize(define, variableExpand(valueDeclared, variableByName, '', true));
+      if (!isValid) {
+        if (!keyValidSet.has(key)) result[key] = valueDeclared;
+        continue;
+      }
+      result[key] = keyValidSet.has(key) ? configValueMerge(define, result[key], valueDeclared, true) : valueDeclared;
+      keyValidSet.add(key);
+    }
+  }
+  return result;
 }
 
 // ----- component-level keys -----
@@ -272,7 +305,7 @@ function compConfigOneApply(configResolved, configDeclared, defineByKey, { varia
       console.warn(`[doc-config] invalid value for "${key}" in ${originText}: ${JSON.stringify(valueDeclared)}`);
       continue;
     }
-    configResolved.valueByKey[key] = value;
+    configResolved.valueByKey[key] = configValueMerge(define, configResolved.valueByKey[key], value);
     configResolved.levelByKey[key] = level;
   }
 }

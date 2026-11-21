@@ -156,7 +156,16 @@ the source                      what the editor of item 0.0 shows
 ````
 
 - **The surface lies over the rendered item.** The rendered `<li>` stays as it is; the source is laid exactly over its own text by the layer, in the type of the item, on the page background (`DocEditItemEditor`). So entering an item moves nothing, whatever the margins of the list are ([The layer](#the-layer)). As the text is typed, the item takes the room its source needs ([The room of an item being edited](#the-room-of-an-item-being-edited)).
-- **The bar** stands where the text ends: while the text is one line that leaves room after it, the bar is on that line, right after the text, and moves on as the text is typed; else it floats above the first line of the item, at its right end. It holds the label, the level buttons, the new-item button, the switch of the [slash menu](doc_page_impl_edit_slash.md#on-and-off), Save and Cancel.
+- **The bar** stands where the text ends: while the text is one line that leaves room after it, the bar is on that line, right after the text, and moves on as the text is typed; else it floats above the first line of the item, at its right end. It holds the label, the level buttons, the new-item buttons (`+↑` a new item above, `+↓` below, as the block toolbar draws its insert buttons), **To text** for an item with code blocks ([The lines as text](doc_page_impl_mdx_code.md#the-lines-as-text)), the switch of the [slash menu](doc_page_impl_edit_slash.md#on-and-off), Save and Cancel.
+
+<!--renderComp=DiagramText-->
+```text
+[List item] [⇤][⇥] [+↑][+↓] [¶ To text] [☑ / menu] [✓ Save] [× Cancel]
+                    │    │    └ the lines being edited, or the chip selected,
+                    │    │      joined into one line of text
+                    │    └ a new item below (Enter at the end of the text)
+                    └ a new item above: this one written as typed
+```
 - **The editor is a registered component**, `ListItem` (`common/ListItem`, `built-in/comp-mdx/text/ListItemEdit.jsx`), built on `TextBlockEdit` like the editors of paragraphs and headings, so a host replaces it through `compRegistry`, and it offers the [slash mode](doc_page_impl_edit_slash.md).
 - **Leaving saves, Escape cancels**, as for a block ([Sessions](doc_page_impl_edit.md#sessions-leave-and-cancel)). A leave writes the list block with the new text of the item; the block shows the saved text until the document is compiled again.
 
@@ -196,12 +205,12 @@ An item is structure as well as text. In a list a line is an item, so while an i
 | Enter | in the text | the item is split at the caret: a new item right below takes the text after the caret and everything that was under the item; the author goes on at its start |
 | Enter | at the end of the text | a new item without text right below the caret: after the item, or, when the item has items under it, as the first of them |
 | Enter | in an item without text | the item goes one level up; at the first level it is taken out and the editing ends, which is the way out of a list |
-| Shift + Enter | anywhere | a line break: the item becomes a [text block](#a-text-block); in a text block, one more line |
+| Shift + Enter | anywhere | a line break: the item becomes a [text block](#a-text-block); in a text block, one more line; in the text of an item with code blocks, the segment at the caret becomes a text block of its own ([Code blocks in the text of an item](#code-blocks-in-the-text-of-an-item)) |
 | Backspace | at the start of the text | the item joins the row above: its text goes to the end of that row, and the caret stands where the two texts meet |
 | Delete | at the end of the text | the row below joins the item, the same way |
 | Tab, Shift + Tab | anywhere | the item one level deeper, one level up, with what is under it; the caret stays where it was |
 | ← , → | at the start, at the end | the caret goes on at the end of the row above, the start of the row below |
-| ↑ , ↓ | on the first line, on the last | the row above, below, the caret keeping its x; from the first or last item the neighbor block, and from a block the first or last item of a list (`sessionFocusShift`) |
+| ↑ , ↓ | on the first line, on the last | the row above, below, the caret keeping its x; from the first or last item the neighbor block, and from a block the first or last item of a list (`sessionFocusShift`). The lines of a code block among the text of an item are lines like the others: the caret goes into them and out of them at its x ([Code blocks in the text of an item](#code-blocks-in-the-text-of-an-item)) |
 
 <!--renderComp=DiagramText-->
 ```text
@@ -222,7 +231,8 @@ caret and what was under the item          "fuji"; "seckel" keeps its level
 - **At the end of an item with sub-items, Enter makes the first of them**, not an item beside it. The new row stands right below the caret either way; but a split gives its second part everything under the item, and a part without text has no claim to it.
 - **An item without text that holds items** (a new item that Enter took one level up, an item whose text was deleted) is no way out of the list at the first level: Enter says so in the bar, and Backspace gives the items back to the item above.
 - **A text block is split and joined like a line**, at any place of its lines ([A text block](#a-text-block)).
-- **A text of lines that is no text is left whole.** In a block of code, and in an item whose source has several lines (two paragraphs, a component with its data), Enter is a line break, and Backspace at its start joins nothing while it has a text: a place in such a source is not always one an item can be cut at ([TODO](doc_page_impl_TODO.md#edit-structure-split-lines)). A row that ends with code takes no text, and the join says so.
+- **A text of lines that is no text is left whole.** In a block of code, and in an item whose source has several lines (two paragraphs, a component with its data), Enter is a line break, and Backspace at its start joins nothing while it has a text: a place in such a source is not always one an item can be cut at ([TODO](doc_page_impl_TODO.md#edit-structure-split-lines)).
+- **No kind of thing has to be the whole text of an item.** Texts that meet at a code block are joined as they are written, a line apart: a row that ends with a block of code (or with any fenced block) takes the text of the row below after its block, and a text joins a row above it that is a block of code the same way. Only the lines of a text block of text join like lines of text. So an item holds text and blocks in any order, and Backspace and Delete never refuse because of a block (`listItemMergeUp`; the caret goes where the two texts meet, counted in the text as written, `isOffsetSource`).
 
 **One write, with the text being typed.** A key of the list does not save the item first and change the list after: the draft goes into the edit. The store closes the session without a write (`sessionDiscard`), computes the edit on the item model with the draft as the text of the item (`listItemSplit`, `listItemMergeUp`, or `listEditThen(listItemTextSet, listItemIndent)` for a level change), writes the result once, and opens the session of the item the caret belongs in, at the offset the edit names. An edit that is refused leaves the session as it was, with the reason in its bar; a write that fails opens the item again with the draft.
 
@@ -262,8 +272,9 @@ Shift + Enter, the caret after "Example Trading Co."
 - **Shift + Enter in a text block is one more line; Enter splits the block**, as it splits any item: the lines after the caret go into a new item below, with what was under the item, and the author goes on at its start. Tab changes the level of the item, as for any item.
 - **A text is a block while it holds a line break.** Every text the page writes out of a text block (the two parts of a split, the text of a join, the block when it is saved) is written as its lines ask (`itemTextWrite`): a text block when it still holds a line break, a plain line when it is down to one. So a block never loses its fences while it has lines, and a block of one line is a line of text again.
 - **Backspace and Delete join it like a line**: the text of the item below goes to the end of the last line of the block, the block to the end of the line above it, and the joined text is a block when it holds a line break. Enter and Backspace undo each other here too.
-- **A fenced block of another language** that is the whole text of an item is code, not text: it is edited as its lines the same way and keeps its language, but it is left whole. Enter is a line break in it, nothing joins it, it stays a block when it is one line, and the new-item button of its bar adds an item below it.
-- **Back to one line**: join the lines by hand (Backspace at the start of a line of the block), and the block that is down to one line is saved as a plain line. An action that joins all its lines at once is not offered yet ([TODO](doc_page_impl_TODO.md#edit-structure-text-block-back)).
+- **A fenced block of another language** that is the whole text of an item is code, not text: it is edited as its lines the same way and keeps its language, but it is left whole. Enter is a line break in it, no text joins its lines (a text joining the item stands after the block, as written), it stays a block when it is one line, and the new-item button of its bar adds an item below it.
+- **A code block drawn as an icon** is not edited as its lines: it is one thing of the text of the item ([below](#code-blocks-in-the-text-of-an-item)), whether it is the whole item or stands among other things; so is a code block of any view standing among text.
+- **Back to one line**: **To text** in the bar joins all its lines at once into one line of text, the line breaks removed ([The lines as text](doc_page_impl_mdx_code.md#the-lines-as-text)); by hand, Backspace at the start of a line of the block joins it to the line above, and the block that is down to one line is saved as a plain line.
 
 <!--renderComp=DiagramText-->
 ````text
@@ -279,16 +290,58 @@ the part of one line is a plain line,         each part is written as its lines 
 the part with lines a text block
 ````
 
+#### Code blocks in the text of an item
+
+An item holds text and code blocks in any order, and no block has to be the whole item. How a block stands in the item is told by its view ([The views of a code block](doc_page_impl_mdx_code.md#the-views-of-a-code-block)): a block in the view `icon` is a tile **in the line** of the text, its bottom edge on the bottom edge of the line by default (`CodeBlockIconAlign`); a block in another view (`card`, `plain`) takes **a line of its own**: the text before it ends a line, the text after it starts one. A line of its own is not the whole item: text and other blocks stand around it. The editor of the item shows each code block as **one thing of its text**, a chip in the place of the rendered block, never as its source:
+
+<!--renderComp=DiagramText-->
+````text
+the source of the item          what the editor of the item types, one
+                                character for each chip (U+E000 + its number):
+- see the query
+  ```sql view=icon title="weekly"   see the query￼then the script￼and after
+  select 1                          the card
+  ```
+  then the script
+  ```js view=card
+  const a = 1;
+  ```
+  and after the card
+
+the item, rendered, and in its editor with a chip in the place of each block
+
+                ┌──────┐
+                │  ▤   │                    an icon: in the line, its bottom
+• see the query │weekly│ then the script    edge on the bottom edge of the line
+                └──────┘
+  ╭──────────────────────────────╮
+  │ const a = 1;                 │          a block of another view: a line of
+  ╰──────────────────────────────╯          its own, not the whole item
+  and after the card
+````
+
+- **What is an atom.** Every code block of the own text of the item: a fenced code block, or a block of `Code` (its marker on the line before its fence), of the kind its view gives it, the view written in it or given by the config for its place (`itemAtomModelBuild`, `lib/doc-edit-item-atom.js`; the session holds it as `itemAtom`): `icon`, a chip in the line, or `block`, a chip as wide as the item. A block of another view that is the whole text of the item is no atom: that item is edited as the lines of its block ([A text block](#a-text-block)). Other blocks of an item (the data of an `Image`) stay source in the editor.
+- **Typed as one character.** The text the editor types holds one character of the private use area per atom; the atom stands for its block and for the line breaks around it, which only Markdown needs. Saved, every atom is a block on lines of its own again, the text around it on the lines before and after it, the spaces next to it dropped (a blank line would make the list loose, an indented line code) (`itemAtomTextBuild`). A text not typed is written back as it was.
+- **The chip is the rendered block, in its place.** So nothing moves when the item is entered. The chip of an icon is the tile, the same box at the same alignment, a space from what stands beside it; it holds no text of its own (`surface-atom.js`: its icon and label are drawn by the stylesheet). The chip of a block is as wide as the surface, which puts it on a line of its own, and shows a copy of the rendered block, inert, with the margins it has in the item (DocEditItemEditor fills it as soon as the surface writes it, `ATOM_FILL_EVENT`, before the caret is placed). The text of the editor, the ranges of the browser and the slash mode never meet the words of a chip. A text node stands on each side of every chip (a zero-width spacer where there is none), so the caret has a place between two chips and after the last one. **The caret beside a block** is drawn by the page, as tall as the frame of the block, on the side it stands (`data-caret` of the chip, a blinking bar of the color of the caret): the caret of the browser is as high as the line of text it stands in, the spacer beside the chip, and is hidden there. Beside an icon, and in any text, the caret is the browser's.
+- **The keys.** ← and → move over a chip in one step, Shift + ← / → select over it; Backspace or Delete next to a chip selects it first, and deletes it when pressed again (Undo brings it back); a click on a chip selects it (and To text in the bar turns it into its lines as one line of text); a double click on the chip of a block edits its lines in place (below), on the chip of an icon it saves the item and opens the dialog of the lines (`codeLinesOpen`, [Editing the lines](doc_page_impl_mdx_code.md#editing-the-lines)). A copy of a part of the text with chips carries their blocks as text; a paste never makes a chip. Enter splits the item between the chips (before a block, the block goes to the new item with what follows it), Backspace at its start joins it to the row above, Tab changes its level, as for any item.
+- **Shift + Enter makes a text block.** In the text of an item with code blocks, Shift + Enter makes **the segment of text the caret is in** (the run between two chips, or between line breaks) a text block of its own, broken at the caret: a fenced block of language `text` standing where the segment stood, drawn in the view of a block in a list item (`CodeBlockViewInListItem`, plain by default), and the author goes on in its lines, after the break. The text before and after the segment stays as it was.
+- **The lines of a block among the text** are edited where they are drawn, as the lines of an item that is one block are ([A text block](#a-text-block)): the session edits one **part** of the item (`session.itemPart`, `itemPartGet` and `itemPartTextWrite` of `lib/doc-edit-item-atom.js`), laid over the lines of that block, and writes them back into the text of the item. A part is entered by a click on the lines of the block, by a double click on its chip, or by Shift + Enter as above. In it, Enter and Shift + Enter are line breaks; ← at the start of the lines and → at their end write the lines and lead back into the text of the item, beside the chip (`editItemPartLeaveRequest`); Backspace or Delete in empty lines takes the block out.
+- **↑ and ↓ go through the lines of a block** as through lines of text, the caret keeping its x: from a line of text (or an icon) right above or below a block into its first or last line (`surfaceAtomBlockLineGet`, `ATOM_LINES_EVENT`); from its first or last line to the line above or below it in the item, or on to the row above or below when the block begins or ends the item; and from the row above or below into the block that begins or ends an item (`sessionItemStart` with a line to start on). A block of text down to one line is written as a line of text among the others. Tab changes the level of the item, and the part stays open. An icon has no part: its lines are in its dialog.
+- **Its place.** A block that is the whole item, and one among other things, can be drawn differently when their view is the config's (`CodeBlockViewAsListItem`, `CodeBlockView`). A block whose view came from the config keeps it when text is typed beside it, or taken away: the view is written into it.
+
 ### The toolbar of an item
 
 <!--renderComp=DiagramText-->
 ```text
 under the pointer   [⠿] [✎] [+↑] [+↓] [list ▾] [🗑]
+a code block        [⠿] [✎] [⇧] [+↑] [+↓] [list ▾] [🗑]   ⇧ to asset, asked first
+its lines moved     [⠿] [✎] [⏱] [+↑] [+↓] [list ▾] [🗑]   ⏱ asset: the panel of the item it reads
 
 pinned              [Item with 2 sub-items]
                     [⠿] [✎] [+↑] [+↓] [⇤] [⇥] [˄] [˅] [list ▾] [🗑]
 
-list ▾   LEVEL    Deeper, item only · Deeper, with sub-items · Up
+list ▾   CODE BLOCK  Card · Plain · Icon · By config · To text
+         LEVEL    Deeper, item only · Deeper, with sub-items · Up
          ORDER    Move up · Move down
          LIST     New sub-item · Bullets · Numbers
          SELECT   Select this item
@@ -297,7 +350,8 @@ list ▾   LEVEL    Deeper, item only · Deeper, with sub-items · Up
 - **Where it is.** An item of one line that leaves room after its text has the toolbar there, starting a little after the end of the text: next to what it is about, a short way for the pointer, covering nothing. An item whose first line is long has it at the right end of that line, as high as a line, so it covers no other item; pinned to a selection, such an item has it above the frame, at its right end. A toolbar that starts after the text grows to the right: the name of the selection, a confirmation or a failure message follow the buttons, which stay where they are. A block's toolbar keeps showing above the list while the pointer is on an item, since a list block has no place that is not an item.
 - **`⠿`** the grip: a click selects the item, a drag moves it with what is under it ([Dragging](#dragging)).
 - **`✎`** opens the text of the item. **`+↑` `+↓`** create an item above, or below the item and what is under it.
-- **`list ▾`** holds the operations of the list. An item with sub-items can go deeper alone or with them; an entry that cannot be chosen is greyed out and says why on hover (the first item of a list has no item before it to go under).
+- **`list ▾`** holds the operations of the list. An item with sub-items can go deeper alone or with them; an entry that cannot be chosen is greyed out and says why on hover (the first item of a list has no item before it to go under). An item that is a code block (a fenced block that is its whole text, or a block of the component `Code`) has a **Code block** group first: its view, written into it ([Changing the view from the page](doc_page_impl_mdx_code.md#changing-the-view-from-the-page)), and **To text**, its lines joined into one line, the item a plain item ([The lines as text](doc_page_impl_mdx_code.md#the-lines-as-text)).
+- **`⇧` `⏱`** the asset service layer, as buttons of the toolbar, never entries of the menu. An item that is a fenced code block has the **to asset** button (`⇧`), asked first in the toolbar like a deletion; an item whose lines are an item of the store (a block of `Code` reading it) has the **asset** button (`⏱`) in its place, which opens the asset panel of that item ([The lines in the asset service layer](doc_page_impl_mdx_code.md#the-lines-in-the-asset-service-layer)). A code block standing in the text of an item among other things has the same two buttons in the dialog of its lines (a click on its icon, a double click on its chip).
 - **Pinned**, the level and move operations are buttons, because what they act on is the selection: `⇥` takes the item alone or with its sub-items, as selected.
 - **`🗑`** asks in the toolbar itself, like the deletion of a block. Under the pointer, an item with sub-items offers both ways (`With the 3 items under it` · `Item only`); pinned, the question is about what is selected.
 
@@ -445,6 +499,8 @@ A structural edit of an item is an operation of the document, so the toolbar, th
 | `editItemLevelRequest` | `{ direction: 'in' \| 'out', scope, offset? }` | `itemLevelChange`; from the editor of an item: `sessionItemLevelChange`, with the draft, and the item opened again with the caret at `offset` |
 | `editItemMoveRequest` | `{ direction: 'up' \| 'down' }` | `itemMoveSibling` |
 | `editItemListTypeRequest` | `{ type: 'ordered' \| 'unordered' }` | `itemListTypeSet` |
+| `editItemCodeViewRequest` | `{ view: 'card' \| 'plain' \| 'icon' \| '' }` | `itemCodeViewSet`: the view of an item that is a code block, written into it; `''` removes it |
+| `editItemCodeAssetRequest` | `{}` | `itemCodeAssetMove`: the lines of an item that is a fenced code block into an item of the store, the item a block of `Code` |
 | `editStructDropRequest` | `{ target }` | `dragDropApply`: the selection moved to a place |
 
 The selection itself is state of the page, not a change of the document: it is set by calls of the store.
@@ -550,7 +606,12 @@ frontend/src/lib/doc-edit-list.js          the item model of a list block: the p
                                            edits (listItemTextSet / Insert / Delete / Indent / Outdent / Move /
                                            MoveSibling / Detach / Attach / ListTypeSet / Split / MergeUp, and
                                            listEditThen for two as one), each read back before it is answered; an
-                                           item as a text block (itemBlockFormatGet, itemBlockTextBuild) (pure)
+                                           item as a text block (itemBlockFormatGet, itemBlockTextBuild); texts
+                                           meeting at a block joined as written (itemJoinIsSource) (pure)
+frontend/src/lib/doc-edit-item-atom.js     the atoms of an item: its code blocks as chips, the text the editor
+                                           types (one character each) and the text written back (itemAtomModelBuild,
+                                           itemAtomTextBuild, itemAtomOffsetDisplayGet); a part, one block among the
+                                           text edited as its lines (itemPartGet, itemPartTextWrite) (pure); .test.js
 frontend/src/lib/doc-edit-block.js         remarkEditBlock marks and describes the list blocks; editDocModelBuild
                                            gives a list block its item model (block.list)
 frontend/src/store/DocEditStructStore.ts   the selection and its growth, the hover / menu / confirmation of an item,
@@ -572,7 +633,9 @@ comp-doc/edit/DocEditBlock.jsx             a click on a list block opens the ite
 comp-doc/edit/DocEditBlockToolbar.jsx      the grip of a block; a move of the selected block
 comp-doc/edit/DocEditBody.jsx              the layer; data-struct-selected / data-struct-dragging of the body
 comp-doc/edit/EditSourceSurface.jsx        onKeyDownFirst: the keys an editor takes before the surface, with the
-                                           place of the caret in the text
+                                           place of the caret in the text; atomModel: chips in the text
+comp-doc/edit/surface-atom.js              the chips of a surface: written and read, spacers, the keys over them,
+                                           the selection marked, a double click asking to open one
 comp-doc/edit/caret-place.js               the caret at an offset of the text
 built-in/comp-mdx/text/ListItem.jsx, ListItemEdit.jsx   the default editor of a list item (common/ListItem): the
                                            keys of an item

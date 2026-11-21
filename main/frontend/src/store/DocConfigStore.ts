@@ -3,7 +3,7 @@ import type { DocSourceStore } from './DocSourceStore.js';
 import type { DocEnvStore } from './DocEnvStore.js';
 import type { DocStore } from './DocStore.js';
 import { compConfigDefineByCompIdBuild, configDefineByKeyBuild, configLayerDefineList } from '../lib/doc-config-define.js';
-import { configDeclaredCheck, configModelBuild } from '../lib/doc-config-model.js';
+import { configDeclaredCheck, configDeclaredListMerge, configModelBuild } from '../lib/doc-config-model.js';
 import { compIdBuiltinByName, compIdResolve } from '../../../comp-doc/registry/comp-registry.js';
 import {
   configLayerCreate,
@@ -91,6 +91,9 @@ export type ConfigGridRow = {
   // the declaration whose value the layer takes: the last one declaring a
   // valid value; '' when none does
   declarationIdDeciding: string;
+  // a stringMap: every declaration with a valid value adds to the value of
+  // the layer, merged entry by entry (configDeclaredListMerge)
+  isMerged: boolean;
 };
 
 export type ConfigGridColumn = { id: string; label: string; file: string; path: (string | number)[] };
@@ -204,7 +207,7 @@ export class DocConfigStore {
       // the main doc page's (doc_page_impl_config.md#the-doc-page-layers)
       layerList: this.layerList.filter((layer) => layer.isParticipating).map((layer) => ({
         id: layer.id,
-        config: layer.config,
+        config: this.layerConfigMergedGet(layer),
         compConfig: layer.compConfig,
         isCompKeyedById: layer.isCompKeyedById,
         isAboveDocLevels: layer.define.isAboveDocLevels,
@@ -258,7 +261,18 @@ export class DocConfigStore {
     for (const declaration of layer.declarationList) {
       for (const key of Object.keys(declaration.config)) declarationByKey.set(key, declaration);
     }
-    return this.itemListBuild(layer.config, this.configDefineByKey, (key) => declarationByKey.get(key)?.label ?? '');
+    return this.itemListBuild(this.layerConfigMergedGet(layer), this.configDefineByKey, (key) => declarationByKey.get(key)?.label ?? '');
+  }
+
+  // the page keys of a layer, its declarations merged by the rules of the
+  // keys (configDeclaredListMerge): a stringMap entry by entry, every other
+  // key by the last valid declaration. layer.config, merged key by key, says
+  // only which keys the layer declares
+  layerConfigMergedGet(layer: ConfigLayer): Record<string, any> {
+    return configDeclaredListMerge(layer.declarationList.map((declaration) => declaration.config), {
+      defineByKey: this.configDefineByKey,
+      variableByName: this.variableByName,
+    });
   }
 
   // the page keys one declaration of a layer declares
@@ -474,7 +488,8 @@ export class DocConfigStore {
         item: column.itemList.find((item) => item.key === key),
       }));
       const cellDeciding = [...cellList].reverse().find((cell) => cell.item?.isValid);
-      return { key, define: defineGet(key), cellList, declarationIdDeciding: cellDeciding?.declarationId ?? '' };
+      const define = defineGet(key);
+      return { key, define, cellList, declarationIdDeciding: cellDeciding?.declarationId ?? '', isMerged: define?.type === 'stringMap' };
     });
   }
 

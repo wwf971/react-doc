@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useId } from 'react';
+import { createContext, useContext, useEffect, useId, useRef } from 'react';
 import { observer } from 'mobx-react-lite';
 import { useDocStores } from '../../frontend/src/store/context.js';
 import { RegisteredComp } from '../registry/RegisteredComp.jsx';
@@ -52,6 +52,11 @@ export const SidePanelItemSurfaceContext = createContext('sidebar');
 // structure changes) instead of the browser's, for every item in edit mode;
 // the "more" button of the label opens the same menu under it.
 //
+// the item just chosen in the search of the side panel
+// (doc_page_impl_side_panel.md#searching-the-items, DocSidePanelStore
+// searchRevealItemId) scrolls its row into view on the sidebar surface and
+// marks it for a moment (data-search-reveal), then clears the mark.
+//
 // in edit mode an item bound to a file or folder can have it read again
 // (doc_page_impl_side_panel.md#reading-an-item-again): the renderer receives
 //   config.isRefreshable, config.refreshStatus, config.refreshMessage
@@ -77,6 +82,15 @@ export const SidePanelItemHost = observer(function SidePanelItemHost({
   } = useDocStores();
   const surface = useContext(SidePanelItemSurfaceContext);
   const instanceId = `side-panel-display:${itemId}:${useId()}`;
+  const hostRef = useRef(null);
+  const isSearchRevealed = surface === 'sidebar' && sidePanelStore.searchRevealItemId === itemId;
+  useEffect(() => {
+    if (!isSearchRevealed) return undefined;
+    // the host takes no box: the row is the element holding it
+    hostRef.current?.parentElement?.scrollIntoView({ block: 'center' });
+    const timer = setTimeout(() => sidePanelStore.searchRevealClear(itemId), SEARCH_REVEAL_MS);
+    return () => clearTimeout(timer);
+  }, [isSearchRevealed, itemId, sidePanelStore]);
   // tags on side-panel items open the overview only when the page asks for
   // it (TagsOverviewPopupAtSidePanelItemIsOn): a click in the side panel is
   // a navigation gesture by default
@@ -123,8 +137,10 @@ export const SidePanelItemHost = observer(function SidePanelItemHost({
   };
   return (
     <span
+      ref={hostRef}
       className="doc-side-panel-item-host"
       data-side-panel-item-id={itemId}
+      data-search-reveal={isSearchRevealed || undefined}
       data-movable={isMovable || undefined}
       data-dragged={isDragged || undefined}
       onPointerDown={isMovable
@@ -192,3 +208,6 @@ export const SidePanelItemHost = observer(function SidePanelItemHost({
     </span>
   );
 });
+
+// how long the row of an item chosen in the search stays marked
+const SEARCH_REVEAL_MS = 1600;

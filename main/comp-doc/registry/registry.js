@@ -37,6 +37,7 @@ import { Tag } from '../../../built-in/comp-mdx/tag/Tag.jsx';
 import { TagLabel } from '../../../built-in/comp-mdx/tag/TagLabel.jsx';
 import { TagOverview } from '../../../built-in/comp-mdx/tag/TagOverview.jsx';
 import { BlockSource } from '../../../built-in/comp-mdx/text/BlockSource.jsx';
+import { Code } from '../../../built-in/comp-mdx/text/Code.jsx';
 import { Heading } from '../../../built-in/comp-mdx/text/Heading.jsx';
 import { List } from '../../../built-in/comp-mdx/text/List.jsx';
 import { ListItem } from '../../../built-in/comp-mdx/text/ListItem.jsx';
@@ -60,6 +61,7 @@ import {
   blockQAExpose,
   blockSimpleExpose,
   calloutExpose,
+  codeExpose,
   diagramMermaidExpose,
   diagramTextExpose,
   fileDownloadExpose,
@@ -125,6 +127,9 @@ const compImageGrid = compDefine(ImageGrid, {
   expose: imageGridExpose,
 });
 const compDiagramText = compDefine(DiagramText, { placementList: ['commentBlock'], expose: diagramTextExpose });
+// lines of code drawn from data: a code block whose lines moved into the asset
+// service layer (doc_page_impl_mdx_code.md#the-lines-in-the-asset-service-layer)
+const compCode = compDefine(Code, { placementList: ['commentBlock'], isAssetAware: true, expose: codeExpose });
 // mermaid itself is not a package dependency: the host app supplies
 // config.mermaidLoad through DocPageMdx config.compConfigHost.
 const compDiagramMermaid = compDefine(DiagramMermaid, { placementList: ['mdx', 'commentBlock'], expose: diagramMermaidExpose });
@@ -211,6 +216,7 @@ export const compById = {
   'common/Image': compImage,
   'common/ImageGrid': compImageGrid,
   'common/DiagramText': compDiagramText,
+  'common/Code': compCode,
   'common/DiagramMermaid': compDiagramMermaid,
   'common/ExcelUniver': compExcelUniver,
   'common/Block': compBlock,

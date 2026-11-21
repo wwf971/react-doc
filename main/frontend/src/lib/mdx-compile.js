@@ -16,7 +16,7 @@ import { remarkCommentComp } from './remark-comment-comp.js';
 import { remarkAnchor } from './remark-anchor.js';
 import { rehypeCodeInline } from './rehype-code-inline.js';
 import { rehypeListItemTextless } from './rehype-list-item.js';
-import { codeMetaParse, codeTransformerList, rehypeCodePlace } from './rehype-code-view.js';
+import { codeMetaParse, codeTransformerList, rehypeCodeLine, rehypeCodePlace } from './rehype-code-view.js';
 import { assetRefLangIs } from './doc-asset-ref.js';
 import {
   multiLangCompNameIs,
@@ -108,6 +108,8 @@ export async function compileDoc({ source, internalPath, format, config = {} }) 
       rehypeKatex,
       rehypeCodeInline,
       rehypeListItemTextless,
+      // the line of every fence, through its info string (data-source-line)
+      rehypeCodeLine,
       // a language shiki does not have is plain text, not a document that fails to render
       // the info string of a fence also names the view of the block (view=plain)
       [rehypeCode, { fallbackLanguage: 'text', parseMetaString: codeMetaParse, transformers: codeTransformerList, ...config.rehypeCodeOptions }],

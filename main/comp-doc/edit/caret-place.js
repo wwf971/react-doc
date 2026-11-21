@@ -144,9 +144,19 @@ export function caretRectGet(element) {
   if (!selection || selection.rangeCount === 0 || !selection.isCollapsed) return undefined;
   const range = selection.getRangeAt(0);
   if (!element.contains(range.startContainer)) return undefined;
+  const container = range.startContainer;
+  // right after a line break the browser may give the box at the end of the
+  // line above: the character after the caret, on its own line, says where it is
+  if (container.nodeType === Node.TEXT_NODE && range.startOffset > 0 && container.data[range.startOffset - 1] === '\n'
+    && range.startOffset < container.data.length && container.data[range.startOffset] !== '\n') {
+    const rangeAfter = document.createRange();
+    rangeAfter.setStart(container, range.startOffset);
+    rangeAfter.setEnd(container, range.startOffset + 1);
+    const rect = rangeAfter.getBoundingClientRect();
+    if (rect.height > 0) return new DOMRect(rect.left, rect.top, 0, rect.height);
+  }
   const rectCaret = range.getClientRects()[0];
   if (rectCaret && rectCaret.height > 0) return rectCaret;
-  const container = range.startContainer;
   if (container.nodeType !== Node.TEXT_NODE) return undefined;
   const offset = range.startOffset;
   const textContainer = container.data;

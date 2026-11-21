@@ -351,6 +351,8 @@ function itemNameCreate(node, label, context, options) {
     // the folder node has no label and its items stand in its parent) and the
     // node that declares the folder
     generatedFrom: options.generatedFrom,
+    // the item of a source folder node, mirroring the folder below it
+    isSourceFolder: options.dataItem?.isSourceFolder === true,
   });
   return sidePanelItemNameCreate(node, label, context, options);
 }

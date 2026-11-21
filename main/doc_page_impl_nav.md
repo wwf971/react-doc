@@ -24,6 +24,7 @@ The current location has three related identities, and one derived from them:
 - `docCurrentPath`: source document rendered by that item, as its full source path `~page:root/...` ([source paths](doc_page_impl_source.md#source-paths)).
 - `docCurrentHash`: optional place inside the document.
 - `docCurrentFocus`: optional place finer than the fragment, one reference written in the document, asked for by a navigation to a backlink (`navigate(target, hash, { focus })`) and applied once the body is rendered; cleared by every navigation that asks for none, and never part of the URL or the history ([Going to a backlink](doc_page_impl_nav_backlink.md#going-to-a-backlink)).
+- `docCurrentPlace`: optional reading place the navigation brings back, where the reader was in the document when they left it: the place of the history entry returned to, or the latest place of a document opened again by a link ([Reading places](#reading-places)); never part of the URL.
 - `docPageCurrentAlias`: the doc page the current document belongs to, read from its path; the *local* doc page of everything resolved while it is shown.
 
 Side-panel item identity remains separate from source identity because the same source can appear in more than one semantic location. `DocStore.navigate()` resolves the requested route or source path to one side-panel item before changing any current-location state. A source document that is not represented in the side panel is not directly navigable. The navigation always holds a document by its full path, so a document of an included doc page and a document of the including one with the same root and name are two locations; a path in the local form given to `navigate()` (an older url, a link written in the page itself) is taken as one of the current doc page when it has the document, else of the doc page that has it (`docPathFullGet`).
@@ -146,17 +147,18 @@ new document
 	-> wait for the compiled body
 	-> paint the title, the side panel and a loading mark
 	-> mount the body
-	-> find and align the requested fragment
-	-> keep it aligned while the body settles
+	-> bring back the reading place, if the navigation carries one;
+	   else find and align the requested fragment (or the focus, or the top)
+	-> keep it there while the body settles
 
 same fragment again
 	-> if already aligned and highlighted: no visual change
 	-> if manually displaced: align it again
 ```
 
-`useDocDestinationNavigation()` owns this behavior. It scopes fragment lookup to the rendered document body, retries briefly while the destination is mounting, and calculates the destination position within the document viewport. Browser scroll anchoring is disabled on that viewport.
+`useDocDestinationNavigation()` owns this behavior. It scopes fragment lookup to the rendered document body, retries briefly while the destination is mounting, and calculates the destination position within the document viewport, **below the sticky head of the page** (the toolbar and the path bar, [History and navigation controls](#history-and-navigation-controls)), so a destination is never aligned under it: the head's bottom, measured from the top of the page, is what `pageStickyInsetGet` answers and what `--doc-page-head-inset` holds for the css (`scroll-padding-top` of the page, so `scrollIntoView` stops below the head too). Browser scroll anchoring is disabled on that viewport.
 
-The resolved destination receives `doc-navigation-target`. The package stylesheet displays this as a full-content-width yellow marker until navigation selects another document or place. Alignment runs again after the browser layout phase only when movement is needed. Pending images above the destination also request another alignment when they finish loading, and for a few seconds after a destination is reached, every change of the size of the body does too: blocks that draw later (a component reading its data, [a frontend object waiting for its turn](doc_page_impl_obj_frontend.md#reading-many-assets)) grow above it. The reader takes over by scrolling, clicking or pressing a key, which ends this at once.
+The resolved destination receives `doc-navigation-target`. The package stylesheet displays this as a full-content-width yellow marker until navigation selects another document or place. Alignment runs again after the browser layout phase only when movement is needed. Pending images above the destination also request another alignment when they finish loading, and for a few seconds after a destination is reached, every change of the size of the body does too: blocks that draw later (a component reading its data, [a frontend object waiting for its turn](doc_page_impl_obj_frontend.md#reading-many-assets)) grow above it. The reader takes over by scrolling, clicking or pressing a key, which ends this at once; so does any scroll the alignment did not make itself (the scrollbar dragged, a script), since the hold knows the offset it last left the page at.
 
 **A click is answered before the body mounts.** Mounting a document can take long, and nothing is painted while it runs. So `DocPageView` first commits the new document with its title, its table of contents and `DocPageBodyLoading` in place of the body, and sets `docStore.docBodyPathMounted` two animation frames later, once that frame is painted; only then the body mounts (and only then the destination is looked for). A recompile of the document on screen stays mounted. The mark fades in, so a light document shows no flash, and it holds the height of the body, so the footer does not jump. The table of contents gets a new list when the body mounts, since it looks for its headings when it receives its list.
 
@@ -223,7 +225,7 @@ Fumadocs wraps heading text in hash links. Releasing the pointer after selecting
 
 History entries contain the semantic route and fragment together. Repeating the current destination reruns its destination behavior without adding a duplicate entry. Normal navigation after moving backward removes the forward branch.
 
-`DocNavigationButtons` exposes the same actions in the document toolbar and compact floating controls. The document toolbar (navigation, language, edit toggle, document edit controls) never shows a scrollbar: when it is wider than the page column, it sits in the host-injected `config.components.ScrollHorizontal`, which clips it and moves it horizontally by the mouse wheel over it (the page does not scroll meanwhile), and brings a control reached by keyboard focus into view. The offset is `DocStore.toolbarScrollLeft`, starting at the left edge. Without the injected component the toolbar wraps onto a second row.
+`DocNavigationButtons` exposes the same actions in the document toolbar and compact floating controls. **The head of the page stays at the top**: the document toolbar and the path bar below it are one sticky element (`DocPageHead`), which sticks below the sticky rows of fumadocs (`--fd-docs-row-3`: the header and the toc popover of a narrow page) while the document scrolls under it, with the background of the page and a hairline under it once it is stuck (`DocStore.pageHeadIsStuck`). Its padding lies over negative margins, so at rest it takes exactly the place the toolbar and the path bar took, and nothing moves when it starts to stick. Whatever is aligned at the top of the page goes below it: the destination of a navigation and a reading place, `scrollIntoView`, and the floating controls of a block in edit mode ([Floating controls](doc_page_impl_edit.md#floating-controls)). The document toolbar (navigation, language, edit toggle, document edit controls) never shows a scrollbar: when it is wider than the page column, it sits in the host-injected `config.components.ScrollHorizontal`, which clips it and moves it horizontally by the mouse wheel over it (the page does not scroll meanwhile), and brings a control reached by keyboard focus into view. The offset is `DocStore.toolbarScrollLeft`, starting at the left edge. Without the injected component the toolbar wraps onto a second row.
 
 The actions:
 
@@ -232,6 +234,38 @@ The actions:
 3. **Up** calls `DocStore.navigationUp()` with the page-tree model's nearest valid ancestor destination.
 
 For Up navigation, a folder's own document is its first document. A virtual folder follows only its first-child chain recursively; later siblings are not fallback candidates. Starting from the current item, `itemAboveById` checks containing folders from nearest to root and selects the first available document whose source differs from the current document. Up then passes that route through ordinary `navigate()`, so it participates in history and URL synchronization.
+
+## Reading places
+
+Going back to a document, or opening again one read before, brings the reader back to where they were in it. A scroll offset alone would not: between leaving and returning, blocks above can grow (a component drew its data, an image loaded), shrink, be deleted or inserted. So the page remembers a **reading place**, where the reader was by the structure of the document, and resolves it again from the document as it is when they come back (`lib/doc-reading-place.js`).
+
+```text
+the reading line: just below the sticky head
+   section   the heading at or above the line, the one the table of contents marks  (headingId)
+   block     the root-level block at the line: its index in the section, the start of its text
+   offset    how far into the block the line is (a fraction of it, if it changed height)
+   then      the same distance below the heading, if the block is gone
+   last      the scroll offset itself
+```
+
+**What is remembered.** When a navigation leaves a document, the store asks the view for the place of the body shown, while the page still shows it (`DocStore.readingPlaceReader`, given by `DocPageView`), and records it on the history entry being left and as the latest place of that document (`readingPlaceByContentPath`). A move in the history records first and then moves the index: `navigationHistoryMove` in memory mode, `onPopState` in query mode (the browser has changed the URL, the page has not changed yet). Each visit is an entry of its own, so going from document A to B, to A, to B again keeps four places, each where that visit was left.
+
+**What is brought back** (`docCurrentPlace`):
+
+| navigation | the reader lands |
+| --- | --- |
+| Back, Forward (the toolbar, the browser), to any entry | at the place that entry was left at; the fragment of the entry keeps its yellow mark, the place decides the scroll |
+| a link or a side-panel item to another document, with neither fragment nor focus | at the latest place that document was left at, when it was read before; else at its top |
+| a link with a fragment, a backlink (focus) | at the fragment or the reference, as asked |
+| the current destination again | as before: its top or its fragment, aligned again |
+
+Within one document the same holds: following a heading of the table of contents is a navigation to a fragment, and Back from it returns to where the reader was before following it.
+
+**Resolving** (`readingPlaceScrollTopResolve`, pure, tested on block lists): the block at its index in the section when its text still begins the same; else the nearest block of the section with that text; else the nearest block of the whole document with that text (the section was renamed or moved); else the same distance below the heading, kept inside its section (the block was rewritten); else the offset, kept inside the document. A line that was in the margin after a block stays as far below its end. The blocks are the root-level blocks of the body (`[data-doc-content]` children in reading mode, the block wrappers of the edit body in edit mode, their controls left out of the text); the headings are the ones the table of contents lists, by their ids.
+
+**Applying** reuses the destination of a navigation: `useDocDestinationNavigation` receives the place, applies it once the body is mounted, and keeps it in place while the body settles, resolving it again whenever the body changes size, until the reader scrolls ([Fragment scrolling and highlighting](#fragment-scrolling-and-highlighting)). A body that is not mounted yet (a navigation away before it was painted) records nothing, so the entry keeps the place it had.
+
+The places are kept in memory: a reload of the page starts without them ([TODO](doc_page_impl_TODO.md#nav-reading-place-reload)).
 
 ## Side-panel routes and folder navigation
 

@@ -10,6 +10,7 @@ import {
   pageScrollDestinationIsAligned,
   pageScrollTopReset,
 } from './doc-destination-navigation.js';
+import { readingPlaceScrollTopGet } from './doc-reading-place.js';
 
 const destinationFindAttemptMax = 12;
 // a focused reference may be inside a component that reveals it on request
@@ -23,6 +24,11 @@ const destinationHoldDuration = 5000;
 // new document, the fragment's place, and the focus a navigation asked for
 // beyond the fragment (doc_page_impl_nav_backlink.md#going-to-a-backlink):
 //
+//   place          a reading place to bring back (doc_page_impl_nav.md#reading-places):
+//                  the place a history entry was left at, or the latest place
+//                  of a document opened again by a link. it wins over the
+//                  fragment (which keeps its mark) and is resolved again from
+//                  the blocks whenever the body changes size while it settles
 //   focus          { kind: 'link', target, sourceLine?, blockLine, heading? }
 //   eventRouter    the event layer: the components at the focused block are
 //                  told first (placeReveal), so one that holds the reference
@@ -36,6 +42,7 @@ export function useDocDestinationNavigation({
   navigationRequestVersion,
   pageElementRef,
   pathContent,
+  place,
 }) {
   const pathContentPreviousRef = useRef('');
   // the request version whose destination was applied to the current document.
@@ -62,7 +69,14 @@ export function useDocDestinationNavigation({
     let imagePendingList = [];
     let isCanceled = false;
     let destinationHoldStop = () => {};
-    const destinationAlign = () => pageScrollDestinationAlign(pageElement, elementTarget);
+    // the offset the last alignment left the page at: a scroll to another one
+    // is the reader's, which ends the hold (alignTracked)
+    let scrollTopAligned = null;
+    const alignTracked = (align) => () => {
+      align();
+      scrollTopAligned = pageElement.scrollTop;
+    };
+    const destinationAlign = alignTracked(() => pageScrollDestinationAlign(pageElement, elementTarget));
     // the images above the destination that are still loading move it when
     // they get their size: the destination is aligned again after each
     const imagePendingWatch = (contentElement) => {
@@ -77,22 +91,47 @@ export function useDocDestinationNavigation({
     };
     // blocks drawn later (a component reading its data, one waiting for its turn) grow above
     // the destination and move it: it is aligned again whenever the body changes size, until
-    // the reader takes over the scrolling or the body has had time to settle
+    // the reader takes over the scrolling (an input, or a scroll the alignment did not make:
+    // the scrollbar dragged, a script) or the body has had time to settle
     const destinationHold = (contentElement, align) => {
       destinationHoldStop();
       const observer = new ResizeObserver(() => align());
       const eventTypeList = ['wheel', 'touchmove', 'pointerdown', 'keydown'];
+      const scrollHandle = () => {
+        if (scrollTopAligned !== null && Math.abs(pageElement.scrollTop - scrollTopAligned) > 2) stop();
+      };
       const stop = () => {
         observer.disconnect();
         clearTimeout(timer);
         for (const eventType of eventTypeList) pageElement.removeEventListener(eventType, stop);
+        pageElement.removeEventListener('scroll', scrollHandle);
       };
       const timer = setTimeout(stop, destinationHoldDuration);
       for (const eventType of eventTypeList) pageElement.addEventListener(eventType, stop, { passive: true });
+      pageElement.addEventListener('scroll', scrollHandle, { passive: true });
       observer.observe(contentElement);
       destinationHoldStop = stop;
     };
+    // the place the reader left the document at: resolved from its section and
+    // block (lib/doc-reading-place.js), again whenever the body grows or
+    // shrinks while it settles, until the reader scrolls
+    const placeApply = () => {
+      const contentElement = pageElement.querySelector('[data-doc-content]');
+      const elementAnchor = hash ? destinationElementFind(contentElement, hash) : null;
+      navigationHighlightSet(pageElement, elementAnchor ? navigationHighlightTargetGet(elementAnchor) : null);
+      const placeAlign = alignTracked(() => {
+        const scrollTop = readingPlaceScrollTopGet(pageElement, place);
+        if (scrollTop !== undefined && Math.abs(pageElement.scrollTop - scrollTop) > 0.5) pageElement.scrollTop = scrollTop;
+      });
+      placeAlign();
+      frameId = requestAnimationFrame(placeAlign);
+      if (contentElement) destinationHold(contentElement, placeAlign);
+    };
     const destinationFindAndApply = () => {
+      if (place && !focus) {
+        placeApply();
+        return;
+      }
       if (!hash) {
         navigationHighlightSet(pageElement, null);
         if (!focus) pageScrollTopReset(pageElement);
@@ -152,7 +191,7 @@ export function useDocDestinationNavigation({
       }
       elementTarget = focusBlockGet(elementFocus);
       navigationFocusSet(pageElement, elementFocus);
-      const focusAlign = () => pageScrollDestinationAlign(pageElement, elementTarget, 24);
+      const focusAlign = alignTracked(() => pageScrollDestinationAlign(pageElement, elementTarget, 24));
       focusAlign();
       frameId = requestAnimationFrame(focusAlign);
       imagePendingWatch(contentElement);
@@ -184,7 +223,7 @@ export function useDocDestinationNavigation({
         image.removeEventListener('error', destinationAlign);
       }
     };
-  }, [compiledStatus, eventRouter, focus, hash, navigationRequestVersion, pageElementRef, pathContent]);
+  }, [compiledStatus, eventRouter, focus, hash, navigationRequestVersion, pageElementRef, pathContent, place]);
 }
 
 function elementIsLaidOut(element) {

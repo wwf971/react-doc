@@ -111,6 +111,14 @@ Every document knows which documents link to it. The control at the top of the r
 
 Try it here: switch the right column to **Backlinks**. [Link Test Cases](links.mdx) links to this document several times, and [Ambiguous Name Example](notes.md) links to [Linking to a section](link-usage.md#Linking%20to%20a%20section) from inside a folded answer, which unfolds when the backlink is followed.
 
+## Coming back to where you were
+
+The toolbar and the path below it stay at the top of the page while a document scrolls, so Back, Forward, Up and the path are always at hand; a place a link scrolls to stops just below them.
+
+Going **Back** or **Forward** returns to where you were in that document when you left it, and a link (or the side panel) to a document you have read before opens it where you left it. Try it: scroll this page down to the middle, open [Link Test Cases](links.mdx), scroll there, then press Back, then Forward, then follow the side panel back here. Each visit keeps its own place, so switching between two documents several times returns to each place in turn. Following a heading of **On this page** and pressing Back returns to where you were before following it.
+
+The place is remembered by the structure of the document rather than by a distance from its top: the section, the block at the top of the view and how far into it. A block above it that grew, shrank or was deleted in the meantime (edit something above in edit mode, then come back) does not move you off it. A link with a section (`#place`) always goes to that section.
+
 ## Deprecated: span markers
 
 Earlier documents placed raw HTML markers before a heading, separated from it by a blank line:

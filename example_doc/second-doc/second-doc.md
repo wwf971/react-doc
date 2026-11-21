@@ -21,6 +21,7 @@ docPageList:
 With one root doc page, the side panel is that doc page's own side panel. With several, it shows them one after the other, each under its alias as a muted heading:
 
 ```text
+[Search the side panel]       ◄ finds items of every doc page by their names
 WORKSPACE   [unfold] [fold]   ◄ unfold / fold every doc page at once
 example                       ◄ the alias of the first root doc page
   Example Docs
@@ -33,6 +34,12 @@ second                        ◄ the alias of this doc page
 ```
 
 A heading folds its doc page's side panel away (a click on it); the buttons above the first heading unfold or fold every section at once. The workspace only arranges the side panels: each doc page keeps its own tree, written in its own entry (this doc page's is `second-doc/.doc-page/entry.yaml`).
+
+## Searching the items
+
+The field at the top of the side panel, above the first doc page, finds items of every section by their names, as they are shown (in the language of the page). Type a few letters, or several words in any order: each result shows its name with the matched words marked, and below it where it is, the alias of its doc page and the folders above it, so that two items of the same name tell apart. A click, or Enter, opens the item; its section and folders open, and its row is scrolled into view and tinted for a moment, which is how an item that opens nothing is shown: try `tests`, a separator of `example`. Arrow keys move in the results, Escape closes them and a second Escape clears the field.
+
+The search stops at an item that mirrors a source folder: `mirrored` finds *Mirrored Folder* in the side panel sandbox, but not the files shown under it (*Mirrored Overview*, *Mirrored Detail*), which come from the folder on disk rather than from a side panel file. The text of the documents is searched by the dialog on ⌘K / Ctrl+K, whose button the page no longer shows; one search of the page is to take the place of both.
 
 ## One occurrence per doc page
 

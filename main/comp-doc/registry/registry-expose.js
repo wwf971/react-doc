@@ -1,4 +1,5 @@
 import {
+  FileCode,
   ChevronsDownUp,
   FoldersIcon,
   FolderTreeIcon,
@@ -142,6 +143,15 @@ export const multiLangExpose = {
     raw: 'The paragraph in English.\n\n日本語の段落です。',
     props: { type: 'paragraphs', languages: '[en,jp]' },
   }),
+};
+
+// a code block whose lines are in the asset service layer
+// (doc_page_impl_mdx_code.md#the-lines-in-the-asset-service-layer): made by
+// "to asset" on a code block, not offered by the insert menu (a fenced code
+// block is the block to start from)
+export const codeExpose = {
+  meta: { label: 'Code', description: 'Lines of code or text drawn as a fenced code block, from data: the lines of a code block moved into the asset service layer.' },
+  icon: FileCode,
 };
 
 export const diagramTextExpose = {

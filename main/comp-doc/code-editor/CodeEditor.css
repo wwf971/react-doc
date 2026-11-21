@@ -1,0 +1,147 @@
+/* ---------- a text in a code editor (CodeEditor) ----------
+   the look of an editor: a gutter of line numbers and folding marks in a
+   quiet color, the line of the caret marked, the words of a language in a few
+   colors (the classes of the highlighter: tok-keyword, tok-string ...), light
+   and dark, on the page's own background and mono font. it fills the box it
+   is put in, which gives it its height. */
+.doc-code-editor {
+  position: relative;
+  height: 100%;
+  min-height: 0;
+  background: var(--color-fd-card, var(--color-fd-background));
+  color: var(--color-fd-foreground);
+}
+
+.doc-code-editor-host,
+.doc-code-editor .cm-editor {
+  height: 100%;
+}
+
+.doc-code-editor .cm-editor {
+  font-size: 13px;
+  background: transparent;
+  color: var(--color-fd-foreground);
+}
+
+.doc-code-editor .cm-editor.cm-focused {
+  outline: none;
+}
+
+.doc-code-editor .cm-scroller {
+  font-family: var(--font-mono, ui-monospace, 'SF Mono', Menlo, Consolas, monospace);
+  line-height: 1.55;
+}
+
+.doc-code-editor .cm-content {
+  padding: 8px 0;
+  caret-color: var(--color-fd-foreground);
+}
+
+/* the box's own color, so a line scrolled sideways goes under the numbers */
+.doc-code-editor .cm-gutters {
+  border-right: 1px solid color-mix(in srgb, var(--color-fd-border) 70%, transparent);
+  background: var(--color-fd-card, var(--color-fd-background));
+  color: color-mix(in srgb, var(--color-fd-muted-foreground) 75%, transparent);
+}
+
+.doc-code-editor .cm-lineNumbers .cm-gutterElement {
+  min-width: 2.4em;
+  padding: 0 8px 0 10px;
+}
+
+.doc-code-editor .cm-foldGutter .cm-gutterElement {
+  padding: 0 4px 0 0;
+  color: color-mix(in srgb, var(--color-fd-muted-foreground) 70%, transparent);
+}
+
+.doc-code-editor .cm-activeLine,
+.doc-code-editor .cm-activeLineGutter {
+  background: color-mix(in srgb, var(--color-fd-foreground) 4%, transparent);
+}
+
+/* in view the caret's line is not marked: nothing is being typed */
+.doc-code-editor[data-read-only] .cm-activeLine,
+.doc-code-editor[data-read-only] .cm-activeLineGutter {
+  background: transparent;
+}
+
+.doc-code-editor .cm-selectionBackground {
+  background: color-mix(in srgb, var(--color-fd-primary) 16%, transparent) !important;
+}
+
+.doc-code-editor .cm-editor.cm-focused .cm-selectionBackground,
+.doc-code-editor .cm-content ::selection {
+  background: color-mix(in srgb, var(--color-fd-primary) 26%, transparent) !important;
+}
+
+.doc-code-editor .cm-cursor {
+  border-left-color: var(--color-fd-foreground);
+}
+
+.doc-code-editor .cm-foldPlaceholder {
+  border: 1px solid var(--color-fd-border);
+  background: var(--color-fd-muted);
+  color: var(--color-fd-muted-foreground);
+}
+
+.doc-code-editor .cm-tooltip,
+.doc-code-editor .cm-panels {
+  border: 1px solid var(--color-fd-border);
+  background: var(--color-fd-popover, var(--color-fd-background));
+  color: var(--color-fd-foreground);
+}
+
+/* the text before CodeMirror is there: the same type and room */
+.doc-code-editor-fallback {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  padding: 8px 12px 8px 52px;
+  overflow: auto;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 13px;
+  line-height: 1.55;
+  white-space: pre;
+}
+
+/* the words: a few quiet colors, light */
+.doc-code-editor .tok-keyword,
+.doc-code-editor .tok-operatorKeyword,
+.doc-code-editor .tok-modifier { color: #7c3aed; }
+.doc-code-editor .tok-string,
+.doc-code-editor .tok-string2 { color: #b42318; }
+.doc-code-editor .tok-comment { color: #3f7d3f; font-style: italic; }
+.doc-code-editor .tok-number,
+.doc-code-editor .tok-bool,
+.doc-code-editor .tok-atom { color: #b5590a; }
+.doc-code-editor .tok-typeName,
+.doc-code-editor .tok-className,
+.doc-code-editor .tok-namespace { color: #0f6ca8; }
+.doc-code-editor .tok-propertyName { color: #155e75; }
+.doc-code-editor .tok-definition { color: #1d4ed8; }
+.doc-code-editor .tok-meta,
+.doc-code-editor .tok-labelName { color: #6b7280; }
+.doc-code-editor .tok-heading { font-weight: 600; color: #1d4ed8; }
+.doc-code-editor .tok-link { text-decoration: underline; }
+.doc-code-editor .tok-emphasis { font-style: italic; }
+.doc-code-editor .tok-strong { font-weight: 600; }
+.doc-code-editor .tok-invalid { color: #dc2626; }
+
+/* the words, dark */
+.dark .doc-code-editor .tok-keyword,
+.dark .doc-code-editor .tok-operatorKeyword,
+.dark .doc-code-editor .tok-modifier { color: #c4a7ff; }
+.dark .doc-code-editor .tok-string,
+.dark .doc-code-editor .tok-string2 { color: #f5a3a3; }
+.dark .doc-code-editor .tok-comment { color: #86b886; }
+.dark .doc-code-editor .tok-number,
+.dark .doc-code-editor .tok-bool,
+.dark .doc-code-editor .tok-atom { color: #f0b37a; }
+.dark .doc-code-editor .tok-typeName,
+.dark .doc-code-editor .tok-className,
+.dark .doc-code-editor .tok-namespace { color: #7cc4f0; }
+.dark .doc-code-editor .tok-propertyName { color: #8bd5e6; }
+.dark .doc-code-editor .tok-definition { color: #93b4ff; }
+.dark .doc-code-editor .tok-meta,
+.dark .doc-code-editor .tok-labelName { color: #9ca3af; }
+.dark .doc-code-editor .tok-heading { color: #93b4ff; }

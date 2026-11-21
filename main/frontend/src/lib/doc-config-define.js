@@ -1,3 +1,5 @@
+import { RANK_PATTERN_TEXT } from './doc-rank.js';
+
 // Definitions of the doc page config keys and of the config layers.
 // Design: doc_page_impl_config.md
 //
@@ -20,6 +22,11 @@
 //                      source (~root/... or ~page:root/...); pathSpec { kind: 'dir' | 'file', extList? }
 //                      says what it names, so the settings panel completes it from
 //                      the doc page source service layer (doc_page_impl_source.md)
+//                    | stringMap: a mapping of names to strings, merged entry by
+//                      entry: a later level adds and replaces entries, and an
+//                      entry written null removes the one below (configValueMerge)
+//   valuePattern     a regular expression (as text) every string of a string,
+//                    stringList or stringMap value must match
 //
 // Component-level keys (doc_page_impl_config.md#component-level-config): a
 // registered component declares its own keys in its definition
@@ -40,6 +47,7 @@
 //   TagsDisplayAtLink...        tags beside document links
 //   TagsOverviewPopup...        popup listing the assets of one tag
 //   EditBlock...                in-place editing of blocks (doc_page_impl_edit.md)
+//   EditInsert...               the insert menu of the edit layer (doc_page_impl_edit.md)
 //   List...                     the spacing of the lists of a document
 export const configDefineListBuiltin = [
   {
@@ -127,18 +135,36 @@ export const configDefineListBuiltin = [
     // of a block that names none in the info of its fence, by where it stands
     key: 'CodeBlockView',
     type: 'enum',
-    valueList: ['card', 'plain'],
+    valueList: ['card', 'plain', 'icon'],
     valueDefault: 'card',
     scope: 'doc',
-    description: 'The view of a fenced code block that names none (view=... in the info of its fence): card, a card with its own background, or plain, a thin frame around lines that stand like plain text.',
+    description: 'The view of a fenced code block that names none (view=... in the info of its fence): card, a card with its own background; plain, a thin frame around lines that stand like plain text; or icon, a tile whose lines open in a dialog.',
   },
   {
     key: 'CodeBlockViewAsListItem',
     type: 'enum',
-    valueList: ['card', 'plain'],
+    valueList: ['card', 'plain', 'icon'],
     valueDefault: 'plain',
     scope: 'doc',
     description: 'The view of a fenced code block that is a list item (the whole text of the item, as Shift + Enter in an item writes it) and names none: by default plain, so that its lines keep the rhythm of the list.',
+  },
+  {
+    key: 'CodeBlockViewInListItem',
+    type: 'enum',
+    valueList: ['card', 'plain', 'icon'],
+    valueDefault: 'plain',
+    scope: 'doc',
+    description: 'The view of a fenced code block that stands in the text of a list item among other things (text, other blocks) and names none: by default plain, lines that belong to the text of the item, on a line of their own.',
+  },
+  {
+    // where the tile of a code block in the icon view stands in the line of
+    // text it is in (doc_page_impl_mdx_code.md#the-icon-view)
+    key: 'CodeBlockIconAlign',
+    type: 'enum',
+    valueList: ['bottom', 'top'],
+    valueDefault: 'bottom',
+    scope: 'doc',
+    description: 'Where the tile of a code block drawn as an icon stands in the line of text it is in: bottom, its bottom edge on the bottom edge of the line, the text beside its lower part; or top, its top edge at the top of the line.',
   },
   {
     // how the edit mode of a block is entered while the page is in edit mode:
@@ -151,6 +177,20 @@ export const configDefineListBuiltin = [
     valueDefault: 'click',
     scope: 'page',
     description: 'How a block enters its edit mode: with the Edit button of its toolbar only, or also by clicking the block.',
+  },
+  {
+    // the order of the insert menu (doc_page_impl_edit.md#the-order-of-the-insert-menu):
+    // entry id -> rank (doc-rank.js). an entry with a rank is listed before
+    // every entry without one, in its row and among the matches of a search;
+    // the ranks of the basic blocks are the package's, in config.yaml
+    // configDefault. merged entry by entry, so a doc page, a folder or a
+    // document ranks its own components without restating the others
+    key: 'EditInsertRankByEntry',
+    type: 'stringMap',
+    valuePattern: RANK_PATTERN_TEXT,
+    valueDefault: {},
+    scope: 'doc',
+    description: 'The rank of the entries of the insert menu, by entry id (text:paragraph, component:{tag name}, service:{component id}): a ranked entry comes before every unranked one, ranks in order (0-9 and a-z, compared character by character, never ending with 0); null removes a rank declared below.',
   },
 ];
 
@@ -309,8 +349,9 @@ export function configValueNormalize(define, value) {
   if (define.type === 'boolean') {
     return { isValid: typeof value === 'boolean', value };
   }
+  const isStringOk = (text) => typeof text === 'string' && valuePatternMatch(define, text);
   if (define.type === 'string' || define.type === 'sourcePath') {
-    return { isValid: typeof value === 'string', value };
+    return { isValid: isStringOk(value), value };
   }
   if (define.type === 'number') {
     return { isValid: typeof value === 'number' && Number.isFinite(value), value };
@@ -319,10 +360,35 @@ export function configValueNormalize(define, value) {
     return { isValid: (define.valueList ?? []).includes(value), value };
   }
   if (define.type === 'stringList') {
-    const isValid = Array.isArray(value) && value.every((valueItem) => typeof valueItem === 'string');
+    const isValid = Array.isArray(value) && value.every(isStringOk);
+    return { isValid, value };
+  }
+  if (define.type === 'stringMap') {
+    // an entry may be null: it removes the entry of a level below
+    const isValid = configDeclaredIs(value) && Object.values(value).every((valueEntry) => valueEntry === null || isStringOk(valueEntry));
     return { isValid, value };
   }
   return { isValid: true, value };
+}
+
+function valuePatternMatch(define, text) {
+  if (typeof define.valuePattern !== 'string' || define.valuePattern === '') return true;
+  return new RegExp(define.valuePattern).test(text);
+}
+
+// a valid value declared at a level, over the value below it: replaces it,
+// except a stringMap, merged entry by entry (an entry written null removes
+// the one below). isNullKept keeps the null entries, for a merge of the
+// declarations of one layer that is itself applied over the levels below
+// (configDeclaredListMerge); the value resolved never holds one.
+export function configValueMerge(define, valueBelow, value, isNullKept = false) {
+  if (define?.type !== 'stringMap' || !configDeclaredIs(value)) return value;
+  const result = { ...(configDeclaredIs(valueBelow) ? valueBelow : {}) };
+  for (const [name, valueEntry] of Object.entries(value)) {
+    if (valueEntry === null && !isNullKept) delete result[name];
+    else result[name] = valueEntry;
+  }
+  return result;
 }
 
 // a "config" value written in source rules, side-panel nodes, or frontmatter

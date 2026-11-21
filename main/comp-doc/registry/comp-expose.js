@@ -432,9 +432,13 @@ export function compViewModeListGet(definition) {
 }
 
 // the view mode a block shows before a reader picks one; undefined for a
-// component without view modes
-export function compViewModeDefaultIdGet(definition) {
-  return compViewModeListGet(definition).find((mode) => mode.isDefault)?.id;
+// component without view modes. a mode may be the default of some places
+// (isDefaultInPlaceList: ['listItem', 'inListItem'], the place of a block of a
+// list item, config.place): there it comes before the mode marked isDefault
+export function compViewModeDefaultIdGet(definition, place) {
+  const modeList = compViewModeListGet(definition);
+  const modeOfPlace = place ? modeList.find((mode) => (mode.isDefaultInPlaceList ?? []).includes(place)) : undefined;
+  return (modeOfPlace ?? modeList.find((mode) => mode.isDefault))?.id;
 }
 
 // the edit modes a block of this component can be opened in: the declared

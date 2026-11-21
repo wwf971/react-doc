@@ -100,7 +100,10 @@ export function assetBlockTextExpand(text, textGet) {
 // content without it, as the compiled body counts them (splitFrontmatter of
 // mdx-compile.js, the sourceLine of DocComp): the same regex.
 const REGEX_FRONTMATTER = /^---\r?\n([\s\S]*?)\r?\n---\r?\n/;
-const REGEX_FENCE_OPEN = /^([ \t]*)(`{3,}|~{3,})(.*)$/;
+// the indentation of a fence may hold list markers: a fenced block that is a
+// list item opens right after its marker ("- ```text"); its lines stand at
+// the text column, as wide as all of it
+const REGEX_FENCE_OPEN = /^((?:[ \t]*(?:[-*+]|\d{1,9}[.)])[ \t]+)*[ \t]*)(`{3,}|~{3,})(.*)$/;
 // a marker comment standing alone on its line, or ending a line of text (a
 // component inside a list item, doc_page_impl_mdx_li.md)
 const REGEX_MARKER_AT_LINE_END = /(<!--[\s\S]*?-->)[ \t]*$/;

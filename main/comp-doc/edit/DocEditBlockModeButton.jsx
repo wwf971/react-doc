@@ -3,6 +3,7 @@ import { observer } from 'mobx-react-lite';
 import { SlidersHorizontal } from '../../frontend/UICommon.js';
 import { useDocStores } from '../../frontend/src/store/context.js';
 import { DocEditBlockContext } from './DocEditDocContext.js';
+import { codeTextEntry, codeViewEntryListBuild } from './code-view-entry.js';
 import './DocEdit.css';
 
 // The mode switch of a component block: one button, next to the block's
@@ -24,6 +25,22 @@ import './DocEdit.css';
 // the entry itself cannot be chosen (the data is in the asset service layer); a
 // read-only component lists no edit mode and says so.
 //
+// a code block (a fenced block, or a block of the component Code) has no view
+// modes: its view is written in the document by its author
+// (doc_page_impl_mdx_code.md#changing-the-view-from-the-page), so its menu
+// lists the views of a code block instead, the one the block has marked
+// current, and choosing one writes it (DocEditStore.blockCodeViewWrite):
+//
+//   View ──────
+//   Card
+//   Plain            [current]
+//   Icon
+//   By config (card)
+//   Convert ──────
+//   To text                  its lines joined into a paragraph, the line breaks removed
+//   Edit mode ──────
+//   Source           [default, built-in]
+//
 // the dropdown is the Menu of @wwf971/react-comp-misc, injected by the host
 // as config.components.Menu (like ConfigPanel); without it the button is not
 // rendered. the menu is portaled to the body and closes itself when a
@@ -35,7 +52,7 @@ import './DocEdit.css';
 //   isEditAvailable  whether an edit mode can be entered now (default true)
 //   size             'toolbar' (the block toolbar's scale) | 'panel' (the editor bar's)
 export const DocEditBlockModeButton = observer(function DocEditBlockModeButton({ blockIndex, isEditAvailable = true, size = 'toolbar' }) {
-  const { componentConfig, editStore, eventRouter, onEvent: onEventPage } = useDocStores();
+  const { componentConfig, configStore, editStore, eventRouter, onEvent: onEventPage } = useDocStores();
   const editBlock = useContext(DocEditBlockContext);
   const buttonRef = useRef(null);
   // the pointer going down on the button while the menu is open closes the
@@ -54,6 +71,10 @@ export const DocEditBlockModeButton = observer(function DocEditBlockModeButton({
   const session = editStore.session;
   const editModeCurrentId = session && editStore.sessionIs(path, 'block', blockIndex) ? session.editModeId : undefined;
   const isEditLocked = !isEditAvailable || editStore.isSubmitting;
+  // a code block: the views it can be given, written into it
+  const codeView = editStore.blockCodeViewGet(path, blockIndex);
+  const codeViewEntryList = codeView ? codeViewEntryListBuild(configStore?.valueDocGet(path, 'CodeBlockView')) : [];
+  const codeTextReason = codeView ? editStore.blockCodeTextReasonGet(path, blockIndex) : '';
 
   const modeItemBuild = (group, mode, isCurrent, isDisabled, disabledReason) => ({
     id: `${group}:${mode.id}`,
@@ -61,12 +82,29 @@ export const DocEditBlockModeButton = observer(function DocEditBlockModeButton({
     comp: ModeMenuItem,
     compProps: { mode, isCurrent, isDisabled, disabledReason },
   });
+  const itemListView = codeView
+    ? [
+        { id: 'head:view', isContainer: true, comp: ModeMenuHead, compProps: { text: 'View' } },
+        ...codeViewEntryList.map((entry) => modeItemBuild(
+          'codeView',
+          entry,
+          entry.id === codeView.view,
+          editStore.isSubmitting,
+          editStore.isSubmitting ? 'a change is being written' : '',
+        )),
+        // the block turned into text: its lines joined into a paragraph
+        { id: 'head:convert', isContainer: true, comp: ModeMenuHead, compProps: { text: 'Convert' } },
+        modeItemBuild('codeText', codeTextEntry, false, editStore.isSubmitting || codeTextReason !== '', codeTextReason || (editStore.isSubmitting ? 'a change is being written' : '')),
+      ]
+    : [
+        { id: 'head:view', isContainer: true, comp: ModeMenuHead, compProps: { text: 'View mode' } },
+        ...viewModeList.map((mode) => modeItemBuild('view', mode, mode.id === viewModeCurrentId, false, '')),
+        ...(viewModeList.length === 0
+          ? [{ id: 'view:default', isContainer: true, comp: ModeMenuNote, compProps: { text: 'one way of display' } }]
+          : []),
+      ];
   const items = [
-    { id: 'head:view', isContainer: true, comp: ModeMenuHead, compProps: { text: 'View mode' } },
-    ...viewModeList.map((mode) => modeItemBuild('view', mode, mode.id === viewModeCurrentId, false, '')),
-    ...(viewModeList.length === 0
-      ? [{ id: 'view:default', isContainer: true, comp: ModeMenuNote, compProps: { text: 'one way of display' } }]
-      : []),
+    ...itemListView,
     { id: 'head:edit', isContainer: true, comp: ModeMenuHead, compProps: { text: 'Edit mode' } },
     ...editModeList.map((mode) => modeItemBuild(
       'edit',
@@ -86,6 +124,14 @@ export const DocEditBlockModeButton = observer(function DocEditBlockModeButton({
     editStore.blockModeMenuClose();
     if (group === 'view') {
       editStore.blockViewModeSet(path, blockIndex, modeId);
+      return;
+    }
+    if (group === 'codeView') {
+      void editStore.blockCodeViewWrite(path, blockIndex, modeId);
+      return;
+    }
+    if (group === 'codeText') {
+      void editStore.blockCodeTextWrite(path, blockIndex);
       return;
     }
     if (group === 'edit') {
@@ -121,8 +167,8 @@ export const DocEditBlockModeButton = observer(function DocEditBlockModeButton({
         className={size === 'panel' ? 'doc-button doc-edit-mode-button' : 'doc-edit-mode-button'}
         aria-haspopup="menu"
         aria-expanded={isOpen}
-        title="View mode / edit mode of this block"
-        aria-label="View mode / edit mode of this block"
+        title={codeView ? 'View / edit mode of this code block' : 'View mode / edit mode of this block'}
+        aria-label={codeView ? 'View / edit mode of this code block' : 'View mode / edit mode of this block'}
         onPointerDown={() => { isClosedByPointerDownRef.current = isOpen; }}
         onClick={buttonClick}
       >

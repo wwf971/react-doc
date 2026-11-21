@@ -1,4 +1,5 @@
 import { observer } from 'mobx-react-lite';
+import { itemBlockInfoIsText } from '../../frontend/src/lib/doc-edit-list.js';
 import { useDocStores } from '../../frontend/src/store/context.js';
 import { compDefinitionNormalize, compIdResolve } from '../registry/comp-registry.js';
 import { compDefinitionGet } from '../registry/comp-definition.js';
@@ -169,7 +170,13 @@ const labelByBlockKind = {
 };
 
 function sessionLabelGet(session, block, stores) {
-  if (session.type === 'item') return session.itemFormat === 'block' ? 'List item · text block' : 'List item';
+  if (session.type === 'item') {
+    if (session.itemFormat !== 'block') return 'List item';
+    const isText = itemBlockInfoIsText(session.itemBlockInfo);
+    // the lines of one code block among the text of the item
+    if (session.itemPart) return isText ? 'List item · its text block' : 'List item · its code block';
+    return isText ? 'List item · text block' : 'List item · code block';
+  }
   if (session.type === 'frontmatter') return 'Frontmatter';
   if (session.type === 'document') return 'Document source';
   return blockLabelGet(block, stores);

@@ -30,7 +30,7 @@ test('no view, a view the page does not have, a word that only ends with view: t
   assert.equal('data-view' in codeMetaParse(undefined), false);
 });
 
-test('a code block that is a list item is marked: the whole text of the item, sub-items allowed', () => {
+test('the place of a code block of a list item: the whole text of the item (sub-items allowed), or among its text', () => {
   const text = (value) => ({ type: 'text', value });
   const preItem = element('pre');
   // rehypeCode replaces a <pre> by a root holding the highlighted one
@@ -58,8 +58,8 @@ test('a code block that is a list item is marked: the whole text of the item, su
   assert.equal(preItem.properties['data-place'], 'listItem');
   assert.equal(preHighlighted.properties['data-place'], 'listItem');
   assert.equal(preWithSubItems.properties['data-place'], 'listItem');
-  assert.equal(preUnderText.properties['data-place'], undefined);
-  assert.equal(preBeforeText.properties['data-place'], undefined);
+  assert.equal(preUnderText.properties['data-place'], 'inListItem');
+  assert.equal(preBeforeText.properties['data-place'], 'inListItem');
   assert.equal(preInComponent.properties['data-place'], undefined);
   assert.equal(preOfDocument.properties['data-place'], undefined);
 });

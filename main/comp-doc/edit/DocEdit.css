@@ -281,14 +281,15 @@
 /* the first child of a block wrapper: no height, sticky. what floats in it
    is laid out from its bottom edge upward, over the gap above the block,
    centered on the block. the anchor sticks below
-   the sticky rows of the layout (--fd-docs-row-3: the end of the header and
-   toc-popover rows of fumadocs) by the height of the floating content
-   (--doc-edit-float-height, set by DocEditBlock) plus a small gap, so the
-   controls stay at the top of the block's visible range while the top of
-   the block is scrolled out. */
+   the sticky head of the page (--doc-page-head-inset: the toolbar and the
+   path bar, DocPageHead, below the header and toc-popover rows of fumadocs;
+   --fd-docs-row-3, the end of those rows, when there is no head) by the
+   height of the floating content (--doc-edit-float-height, set by
+   DocEditBlock) plus a small gap, so the controls stay at the top of the
+   block's visible range while the top of the block is scrolled out. */
 .doc-edit-block-anchor {
   position: sticky;
-  top: calc(var(--fd-docs-row-3, 0px) + var(--doc-edit-float-height, 1.35rem) + 0.25rem);
+  top: calc(var(--doc-page-head-inset, var(--fd-docs-row-3, 0px)) + var(--doc-edit-float-height, 1.35rem) + 0.25rem);
   z-index: 10;
   height: 0;
 }

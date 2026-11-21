@@ -9,6 +9,12 @@ import { compileDoc } from '../lib/mdx-compile.js';
 import { lineShiftListGet } from '../lib/doc-comp-state.js';
 import { docEditApiCreate } from '../lib/doc-edit-api.js';
 import { ASSET_REF_LANG, ASSET_STORE_ID_LOCAL, assetRefLangIs, assetRefParse, assetRefTextBuild } from '../lib/doc-asset-ref.js';
+import {
+  CODE_COMPONENT_NAME, codeBlockAssetDataGet, codeBlockAssetTextBuild, codeBlockInTextReplace, codeBlockTextParse, codeBlockValueTextSet, codeTextJoin,
+  codeTextViewGet, codeTextViewSet,
+} from '../lib/doc-edit-code.js';
+import { itemAtomModelBuild, itemAtomOffsetDisplayGet, itemAtomTextBuild, itemPartGet, itemPartTextWrite } from '../lib/doc-edit-item-atom.js';
+import { CODE_VIEW_LIST, codeViewConfigKeyGet } from '../lib/rehype-code-view.js';
 import { compDefinitionNormalize, compIdResolve, compInputNormalize } from '../../../comp-doc/registry/comp-registry.js';
 import { compDefinitionGet } from '../../../comp-doc/registry/comp-definition.js';
 import {
@@ -108,7 +114,9 @@ export type EditSelectionInitial =
   | 'end'
   | { type: 'point'; clientX: number; clientY: number }
   | { type: 'line'; line: 'first' | 'last'; clientX: number }
-  | { type: 'offset'; offset: number };
+  // isSource: an offset into the own text of an item as it is written, not
+  // as it is typed (a join of texts that meet at a code block)
+  | { type: 'offset'; offset: number; isSource?: boolean };
 
 export type EditPoint = { clientX: number; clientY: number };
 
@@ -133,6 +141,13 @@ export type EditSession = {
   // opening fence ("text"); the fences are written back when it is saved
   itemFormat?: 'block';
   itemBlockInfo?: string;
+  // item: the code blocks of its own text drawn as icons, typed as one
+  // character each (lib/doc-edit-item-atom.js): textInitial and textDraft are
+  // the typed text then, and the save writes the blocks back
+  itemAtom?: any;
+  // item: a part of it, one code block among its text edited as its lines
+  // (itemPartGet): itemFormat 'block', the draft the lines of that block
+  itemPart?: { index: number };
   // the block was created from the insert menu by this session; cancel removes it
   isCreated: boolean;
   // the edit mode the block is open in (doc_page_impl_mdx_comp.md#view-modes-and-edit-modes):
@@ -863,16 +878,59 @@ export class DocEditStore {
     path: string,
     blockIndex: number,
     itemPath: string,
-    options: { isCreated?: boolean; selectionInitial?: EditSelectionInitial; textDraft?: string } = {},
+    options: { isCreated?: boolean; selectionInitial?: EditSelectionInitial; textDraft?: string; partIndex?: number } = {},
   ): Promise<boolean> {
-    if (this.sessionItemIs(path, blockIndex, itemPath)) return true;
+    const isPartSame = options.partIndex === undefined ? !this.session?.itemPart : this.session?.itemPart?.index === options.partIndex;
+    if (this.sessionItemIs(path, blockIndex, itemPath) && isPartSame) return true;
     const isLeft = await this.sessionLeaveForIndexAction(path);
     if (!isLeft) return false;
     const list = this.docEditByPath[path]?.model?.blockList[blockIndex]?.list;
     if (!list || !listItemGet(list, itemPath)) return false;
     const textOwn = listItemTextGet(list, itemPath);
-    // an item that is one fenced block is edited as the lines inside it
-    const blockFormat = itemBlockFormatGet(textOwn);
+    // entered on its first or last line (from the row above or below) where
+    // that line is a block among the text: the caret goes into its lines
+    let partIndex = options.partIndex;
+    const selectionLine: any = options.selectionInitial;
+    if (partIndex === undefined && selectionLine?.type === 'line') {
+      const model = this.itemAtomModelGet(path, textOwn);
+      const display = String(model?.display ?? '').trim();
+      const charEdge = selectionLine.line === 'first' ? display[0] : display[display.length - 1];
+      const atomEdge = model?.atomList.find((atom: any) => atom.char === charEdge);
+      if (atomEdge?.kind === 'block') partIndex = model.atomList.indexOf(atomEdge);
+    }
+    // a part: the lines of one code block among the text, edited where they are drawn
+    const part = partIndex === undefined ? undefined : itemPartGet(textOwn, partIndex);
+    if (part && this.itemAtomModelGet(path, textOwn)?.atomList[part.index]?.kind === 'block') {
+      this.sessionStart({
+        type: 'item',
+        path,
+        blockIndex,
+        itemPath,
+        itemFormat: 'block',
+        itemBlockInfo: part.info,
+        itemPart: { index: part.index },
+        textInitial: part.textInner,
+        isCreated: options.isCreated === true,
+        editModeId: COMP_EDIT_MODE_SOURCE_ID,
+        selectionInitial: options.selectionInitial ?? 'end',
+      });
+      if (options.textDraft !== undefined && this.session) this.session.textDraft = options.textDraft;
+      return true;
+    }
+    // the code blocks drawn as icons are chips of the text, typed around
+    // (doc_page_impl_edit_structure.md#code-blocks-in-the-text-of-an-item); an item
+    // that is one other fenced block is edited as the lines inside it
+    const itemAtom = this.itemAtomModelGet(path, textOwn);
+    const blockFormat = itemAtom ? undefined : itemBlockFormatGet(textOwn);
+    let selectionInitial: EditSelectionInitial = options.selectionInitial ?? 'end';
+    // a part that is no block to edit as its lines (an icon, the lines of an
+    // item of the store): the text of the item, the caret after its chip
+    if (options.partIndex !== undefined && itemAtom?.atomList[options.partIndex]) {
+      selectionInitial = { type: 'offset', offset: itemAtom.atomList[options.partIndex].displayIndex + 1 };
+    }
+    if (typeof selectionInitial === 'object' && selectionInitial.type === 'offset' && selectionInitial.isSource && itemAtom) {
+      selectionInitial = { type: 'offset', offset: itemAtomOffsetDisplayGet(itemAtom, selectionInitial.offset) };
+    }
     this.sessionStart({
       type: 'item',
       path,
@@ -880,10 +938,11 @@ export class DocEditStore {
       itemPath,
       itemFormat: blockFormat ? 'block' : undefined,
       itemBlockInfo: blockFormat?.info,
-      textInitial: blockFormat ? blockFormat.textInner : textOwn,
+      itemAtom,
+      textInitial: itemAtom ? itemAtom.display : blockFormat ? blockFormat.textInner : textOwn,
       isCreated: options.isCreated === true,
       editModeId: COMP_EDIT_MODE_SOURCE_ID,
-      selectionInitial: options.selectionInitial ?? 'end',
+      selectionInitial,
     });
     // a text typed before the item was opened (a draft carried over an edit
     // of the list) is the draft the session starts with
@@ -897,8 +956,43 @@ export class DocEditStore {
   sessionItemTextGet(): string {
     const session = this.session;
     if (!session || session.type !== 'item') return '';
-    const text = session.textDraft.replace(/\r\n/g, '\n');
+    return this.sessionItemTextWrite(session, session.textDraft.replace(/\r\n/g, '\n'));
+  }
+
+  // the own text of the item of a session for the text typed: inside its
+  // fences for a text block (a text block of text down to one line is a plain
+  // line), the blocks of its atoms written back for an item with chips, the
+  // lines of its part written into the text of the item as it is
+  sessionItemTextWrite(session: EditSession, text: string): string {
+    if (session.itemPart) {
+      const list = this.docEditByPath[session.path]?.model?.blockList[session.blockIndex]?.list;
+      const textOwn = list ? listItemTextGet(list, String(session.itemPath)) : '';
+      return itemPartTextWrite(textOwn, session.itemPart.index, text)?.text ?? textOwn;
+    }
+    if (session.itemAtom) return itemAtomTextBuild(text, session.itemAtom);
     return session.itemFormat === 'block' ? itemTextWrite(text, session.itemBlockInfo ?? '') : text;
+  }
+
+  // the atoms of the own text of an item (lib/doc-edit-item-atom.js): its code
+  // blocks, icons in the line and blocks of a line of their own, the view of
+  // each resolved as the page draws it (the view written in it, else the
+  // config of the document for its place); a block of Code reading an item is
+  // labeled by the language of that item
+  itemAtomModelGet(path: string, textOwn: string): any {
+    return itemAtomModelBuild(textOwn, {
+      iconAlign: this.configStore?.valueDocGet?.(path, 'CodeBlockIconAlign') === 'top' ? 'top' : 'bottom',
+      viewResolve: ({ viewAuthored, place }: { viewAuthored: string; place: string }) => {
+        if (CODE_VIEW_LIST.includes(viewAuthored)) return viewAuthored;
+        const viewConfig = this.configStore?.valueDocGet?.(path, codeViewConfigKeyGet(place));
+        return CODE_VIEW_LIST.includes(viewConfig) ? viewConfig : CODE_VIEW_LIST[0];
+      },
+      labelResolve: (block: any) => {
+        const reference = assetRefParse(block.raw);
+        if (reference.message || !this.assetStore) return '';
+        const itemId = this.assetStore.refItemIdGet(reference);
+        return itemId ? String(this.assetStore.itemGet(reference.store, itemId)?.lang ?? '') : '';
+      },
+    });
   }
 
   // the open session ends without a write: its draft is not saved, and a
@@ -1038,6 +1132,8 @@ export class DocEditStore {
   // component block with more than one view mode or more than one edit mode
   blockModeMenuIsAvailable(path: string, blockIndex: number): boolean {
     const block = this.docEditByPath[path]?.model?.blockList[blockIndex];
+    // a code block: its view is chosen from the menu and written into it
+    if (this.blockCodeViewGet(path, blockIndex)) return true;
     if (!block?.component) return false;
     return this.blockViewModeListGet(path, blockIndex).length > 1 || this.blockEditModeListGet(path, blockIndex).length > 1;
   }
@@ -1106,7 +1202,7 @@ export class DocEditStore {
 
   private sessionStart(
     sessionPartial: Pick<EditSession, 'type' | 'path' | 'blockIndex' | 'textInitial' | 'isCreated' | 'editModeId' | 'selectionInitial'>
-      & Pick<Partial<EditSession>, 'itemPath' | 'itemFormat' | 'itemBlockInfo'>,
+      & Pick<Partial<EditSession>, 'itemPath' | 'itemFormat' | 'itemBlockInfo' | 'itemAtom' | 'itemPart'>,
   ) {
     runInAction(() => {
       this.insertMenu = undefined;
@@ -1432,7 +1528,7 @@ export class DocEditStore {
           // the own text of the item goes back into its list: indented to the
           // item's text column, the result read back before it is written
           // a text block is written as its lines ask: one line of text is a plain line again
-          const textItem = session.itemFormat === 'block' ? itemTextWrite(text, session.itemBlockInfo ?? '') : text;
+          const textItem = this.sessionItemTextWrite(session, text);
           const result = block.list
             ? listItemTextSet(block.list, String(session.itemPath), textItem)
             : { code: -1, message: 'The list no longer has items to edit one by one.', data: undefined };
@@ -1554,7 +1650,9 @@ export class DocEditStore {
         return { code: -1, message: 'editItemEnterRequest needs the document path, the block index and the path of the item' };
       }
       const selectionInitial: EditSelectionInitial = event.point ? { type: 'point', ...event.point } : 'end';
-      const isStarted = await this.sessionItemStart(path, blockIndex, itemPath, { selectionInitial });
+      // a click on the lines of a code block among the text of the item: that part
+      const partIndex = Number.isInteger(event.data?.partIndex) && event.data.partIndex >= 0 ? Number(event.data.partIndex) : undefined;
+      const isStarted = await this.sessionItemStart(path, blockIndex, itemPath, { selectionInitial, partIndex });
       return isStarted ? { code: 0, message: '' } : { code: -1, message: this.session?.message || 'the item was not opened for editing' };
     }
 
@@ -2030,10 +2128,198 @@ export class DocEditStore {
   // a component block with its data written inline in a fenced block can
   // move that data into the asset service layer (doc_page_impl_asset.md): a component
   // block with a reference already, or without a fenced block, cannot
+  // a component block whose data is written inline in a fenced block, or a
+  // fenced code block: its lines become an item, read by a block of the
+  // component Code (doc_page_impl_mdx_code.md#the-lines-in-the-asset-service-layer)
   blockAssetMoveIsAvailable(path: string, blockIndex: number): boolean {
     if (!this.assetStore?.isWritable) return false;
-    const component = this.docEditByPath[path]?.model?.blockList[blockIndex]?.component;
-    return Boolean(component) && component.nodeType === 'code' && !assetRefLangIs(component.lang);
+    const block = this.docEditByPath[path]?.model?.blockList[blockIndex];
+    const component = block?.component;
+    if (!component) return block?.kind === 'code' && codeTextViewGet(block.text)?.form === 'fence';
+    return component.nodeType === 'code' && !assetRefLangIs(component.lang);
+  }
+
+  // ---------- the view of a code block ----------
+  // (doc_page_impl_mdx_code.md#changing-the-view-from-the-page) a fenced code
+  // block, or a block of the component Code: its view is the author's,
+  // written in the document (the info string of the fence, the view prop of
+  // the marker), chosen from the mode menu of the block in edit mode
+
+  // { view, form } of a code block, view '' when the config decides; undefined for any other block
+  blockCodeViewGet(path: string, blockIndex: number): { view: string; form: string } | undefined {
+    const block = this.docEditByPath[path]?.model?.blockList[blockIndex];
+    if (!block) return undefined;
+    if (block.component ? block.component.compName !== CODE_COMPONENT_NAME : block.kind !== 'code') return undefined;
+    return codeTextViewGet(block.text);
+  }
+
+  // writes the view of a code block ('' removes it): one replacement of the block
+  async blockCodeViewWrite(path: string, blockIndex: number, view: string): Promise<EditResult> {
+    if (!this.blockCodeViewGet(path, blockIndex)) return { code: -1, message: 'the block is not a code block' };
+    const isLeft = await this.sessionLeaveForIndexAction(path);
+    if (!isLeft) return { code: -1, message: this.session?.message || 'The open edit could not be saved.' };
+    const block = this.docEditByPath[path]?.model?.blockList[blockIndex];
+    if (!block) return { code: -1, message: 'The block is not in the document anymore.' };
+    const built = codeTextViewSet(block.text, view);
+    if (built.code !== 0) return built;
+    const text = built.data;
+    if (text === block.text) return { code: 0, message: '', data: { isNoop: true } };
+    return this.operationApply(path, blockReplaceOperationBuild(block, text), {
+      messageFailure: 'The view of the block was not written.',
+      onApplied: () => {
+        this.blockTextPending = { path, blockIndex, text };
+      },
+    });
+  }
+
+  // a code block of the document turned into text: its lines joined into one
+  // line, the line breaks removed (codeTextJoin), a paragraph in its place;
+  // the lines of a block of Code reading an item of the store are not in the
+  // document and are not turned so ('' when the block can be turned)
+  blockCodeTextReasonGet(path: string, blockIndex: number): string {
+    const block = this.docEditByPath[path]?.model?.blockList[blockIndex];
+    if (!block || !this.blockCodeViewGet(path, blockIndex)) return 'the block is not a code block';
+    const parsed = codeBlockTextParse(block.text);
+    if (!parsed || parsed.lang === 'asset') return 'the lines are an item of the asset store: open its panel to read them';
+    if (codeTextJoin(parsed.value) === '') return 'the block has no text';
+    return '';
+  }
+
+  async blockCodeTextWrite(path: string, blockIndex: number): Promise<EditResult> {
+    const reason = this.blockCodeTextReasonGet(path, blockIndex);
+    if (reason) return { code: -1, message: reason };
+    const isLeft = await this.sessionLeaveForIndexAction(path);
+    if (!isLeft) return { code: -1, message: this.session?.message || 'The open edit could not be saved.' };
+    const block = this.docEditByPath[path]?.model?.blockList[blockIndex];
+    const parsed = block ? codeBlockTextParse(block.text) : undefined;
+    if (!block || !parsed) return { code: -1, message: 'The block is not in the document anymore.' };
+    // an Anchor before the block stays, the marker of Code goes with the block
+    const prefixList = parsed.linePrefixList.filter((line: string) => !/^\s*<!--\s*renderComp=Code\b/.test(line));
+    const text = [...prefixList, codeTextJoin(parsed.value)].join('\n');
+    return this.operationApply(path, blockReplaceOperationBuild(block, text), {
+      messageFailure: 'The block was not turned into text.',
+      onApplied: () => {
+        this.blockTextPending = { path, blockIndex, text };
+      },
+    });
+  }
+
+  // the lines of a fenced code block written, the block found by the line of
+  // its fence (counted without the frontmatter: data-source-line of its <pre>,
+  // rehypeCodeLine) from reading mode as well: a root-level code block, a
+  // list item that is one, or a block standing in the text of an item among
+  // other things (doc_page_impl_mdx_code.md#editing-the-lines). the lines are
+  // what the dialog of the icon view saves; lang, when given, is the language
+  // written as the first word of the info string
+  codeFenceLinesWrite(path: string, sourceLine: number, value: string, lang?: string): Promise<EditResult> {
+    return this.codeFenceTextChange(path, sourceLine, (blockText) => codeBlockValueTextSet(blockText, value, { lang }), 'The lines of the block were not written.');
+  }
+
+  // why the lines of a fenced code block cannot move into the asset service
+  // layer from its dialog ('' when they can)
+  codeFenceAssetMoveReasonGet(path: string): string {
+    if (!this.docIsEditable(path)) return this.isAvailable ? 'the document cannot be written from the page' : (this.envStore as any).reasonGet?.('edit') || 'the page cannot write documents here';
+    if (!this.assetStore?.isWritable) return this.assetWriteUnavailableReasonGet();
+    return '';
+  }
+
+  // the lines of a fenced code block, found by the line of its fence wherever
+  // it stands, become an item of the local store, and the block a block of
+  // Code reading it (doc_page_impl_mdx_code.md#the-lines-in-the-asset-service-layer):
+  // the item first, the document last. data.itemId: the item
+  async codeFenceAssetMove(path: string, sourceLine: number): Promise<EditResult> {
+    const reason = this.codeFenceAssetMoveReasonGet(path);
+    if (reason) return { code: -1, message: reason };
+    let itemId = '';
+    const result = await this.codeFenceTextChange(path, sourceLine, async (blockText) => {
+      if (codeTextViewGet(blockText)?.form !== 'fence') return { code: -1, message: 'the block is not a fenced code block of the document' };
+      const created = await this.codeAssetItemCreate(path, blockText);
+      if (created.code !== 0) return created;
+      itemId = created.data.itemId;
+      return codeBlockAssetTextBuild(blockText, created.data.referenceText);
+    }, 'The block was not rewritten as a reference.');
+    if (result.code !== 0) return itemId ? { code: -1, message: `${result.message} The lines are in the asset service layer as object ${itemId}.` } : result;
+    void this.assetStore?.usageNotify([{ type: 'docChange', docPath: path }]);
+    return { code: 0, message: '', data: { ...(result.data ?? {}), itemId } };
+  }
+
+  // a fenced code block found by the line of its fence, its text replaced by
+  // what transform makes of it (codeBlockInTextReplace: the marker before
+  // the fence is part of the block), and the block of the document it is in
+  // written once
+  private async codeFenceTextChange(
+    path: string,
+    sourceLine: number,
+    transform: (blockText: string) => EditResult | Promise<EditResult>,
+    messageFailure: string,
+  ): Promise<EditResult> {
+    if (!this.docIsEditable(path)) {
+      return { code: -1, message: this.isAvailable ? 'the document cannot be written from the page' : (this.envStore as any).reasonGet?.('edit') || 'the page cannot write documents here' };
+    }
+    if (!Number.isInteger(sourceLine) || sourceLine < 1) return { code: -1, message: 'the line of the block is not known' };
+    if (!this.docEditByPath[path]?.model || this.docEditIsStale(path)) await this.docEditEnsure(path);
+    const isLeft = await this.sessionLeaveForIndexAction(path);
+    if (!isLeft) return { code: -1, message: this.session?.message || 'The open edit could not be saved.' };
+    const model = this.docEditByPath[path]?.model;
+    if (!model) return { code: -1, message: 'the document is not read' };
+    const lineFile = sourceLine + (model.frontmatter?.lineEnd ?? 0);
+    const blockIndex = model.blockList.findIndex((one: any) => one.lineStart <= lineFile && lineFile <= one.lineEnd);
+    const block = model.blockList[blockIndex];
+    const messageMoved = `no code block starts at line ${sourceLine} of ${path} (the document changed: read it again)`;
+    if (!block) return { code: -1, message: messageMoved };
+    let text: string;
+    if (block.kind === 'code' && !block.component) {
+      const changed = await codeBlockInTextReplace(block.text, lineFile - block.lineStart, transform);
+      if (changed.code !== 0) return changed.message === 'no code fence starts at that line' ? { code: -1, message: messageMoved } : changed;
+      text = changed.data.text;
+    } else if (block.list) {
+      // the deepest item whose own text has the line: the fence is the item,
+      // or a block in its text among other things
+      const located = [...block.list.itemByPath.values()]
+        .map((item: any) => {
+          const lineOwnStart = item.lineStart + (item.isMarkerLineOwn ? 1 : 0);
+          const textOwn = listItemTextGet(block.list, item.path);
+          const lineIndex = lineFile - lineOwnStart;
+          return { item, textOwn, lineIndex, isIn: lineIndex >= 0 && lineIndex < textOwn.split('\n').length };
+        })
+        .filter((one: any) => one.isIn)
+        .sort((a: any, b: any) => b.item.depth - a.item.depth)[0];
+      if (!located) return { code: -1, message: messageMoved };
+      const changed = await codeBlockInTextReplace(located.textOwn, located.lineIndex, transform);
+      if (changed.code !== 0) return changed.message === 'no code fence starts at that line' ? { code: -1, message: messageMoved } : changed;
+      const result = listItemTextSet(block.list, located.item.path, changed.data.text);
+      if (result.code !== 0) return result;
+      text = result.data.text;
+    } else {
+      return { code: -1, message: messageMoved };
+    }
+    if (text === block.text) return { code: 0, message: '', data: { isNoop: true } };
+    return this.operationApply(path, blockReplaceOperationBuild(block, text), {
+      messageFailure,
+      onApplied: () => {
+        this.blockTextPending = { path, blockIndex, text };
+      },
+    });
+  }
+
+  // a new item of the local store holding the lines of a code block, as a
+  // block of the component Code reads them; the item of a list item too
+  // (DocEditStructStore.itemCodeAssetMove)
+  async codeAssetItemCreate(path: string, text: string): Promise<EditResult> {
+    if (!this.assetStore?.isWritable) return { code: -1, message: this.assetWriteUnavailableReasonGet() };
+    const data = codeBlockAssetDataGet(text);
+    if (!data) return { code: -1, message: 'the block is not one fenced code block' };
+    const resultCreate = await this.assetStore.itemCreate({
+      store: ASSET_STORE_ID_LOCAL,
+      lang: data.lang,
+      text: data.value,
+      note: `code block moved from ${path}`,
+      docPath: path,
+      component: { name: CODE_COMPONENT_NAME },
+    });
+    const itemId: string = resultCreate.data?.item?.itemId ?? '';
+    if (resultCreate.code !== 0 || !itemId) return { code: -1, message: resultCreate.message || 'The asset item was not created.' };
+    return { code: 0, message: '', data: { itemId, referenceText: assetRefTextBuild({ store: ASSET_STORE_ID_LOCAL, itemId }) } };
   }
 
   blockAssetMoveIs(path: string, blockIndex: number): boolean {
@@ -2095,7 +2381,8 @@ export class DocEditStore {
     if (!isLeft) return false;
     const model = this.docEditByPath[path]?.model;
     const block = model?.blockList[blockIndex];
-    if (!block?.component) return false;
+    if (!block) return false;
+    if (!block.component) return this.blockCodeAssetMoveApply(path, blockIndex, block);
     // the observable copy the store keeps, as in blockMoveApply
     const move = runInAction(() => {
       this.insertMenu = undefined;
@@ -2139,6 +2426,42 @@ export class DocEditStore {
       return false;
     }
     void this.assetStore.usageNotify([{ type: 'docChange', docPath: path }]);
+    return true;
+  }
+
+  // a fenced code block moved into the store: its lines become an item (with
+  // the language of the fence, for the component Code), and the block becomes
+  // a block of Code reading it, its view and title on the marker; the item
+  // first, the document last, as for a component block
+  private async blockCodeAssetMoveApply(path: string, blockIndex: number, block: any): Promise<boolean> {
+    const move = runInAction(() => {
+      this.insertMenu = undefined;
+      this.deleteConfirm = undefined;
+      this.blockMove = undefined;
+      this.blockAssetMove = { path, blockIndex, status: 'submitting', message: '' };
+      return this.blockAssetMove!;
+    });
+    const failSet = (message: string) => {
+      runInAction(() => {
+        move.status = 'error';
+        move.message = message;
+      });
+      return false;
+    };
+    const created = await this.codeAssetItemCreate(path, block.text);
+    if (created.code !== 0) return failSet(created.message);
+    const built = codeBlockAssetTextBuild(block.text, created.data.referenceText);
+    if (built.code !== 0) return failSet(built.message);
+    const text = built.data;
+    const result = await this.operationApply(path, blockReplaceOperationBuild(block, text), {
+      messageFailure: 'The block was not rewritten as a reference.',
+      onApplied: () => {
+        if (this.blockAssetMove === move) this.blockAssetMove = undefined;
+        this.blockTextPending = { path, blockIndex, text };
+      },
+    });
+    if (result.code !== 0) return failSet(`${result.message} The lines are in the asset service layer as object ${created.data.itemId}.`);
+    void this.assetStore?.usageNotify([{ type: 'docChange', docPath: path }]);
     return true;
   }
 
@@ -2483,6 +2806,39 @@ export class DocEditStore {
   // definition extracts from the new data, unless the request names them.
   private async dataReplaceApply(event: DocEvent): Promise<EditResult> {
     const raw = String(event.data.raw ?? '');
+    // the language of the data, when the request changes it (the component Code)
+    const lang = typeof event.data.lang === 'string' ? event.data.lang.trim() : undefined;
+    if (lang !== undefined && (lang === '' || assetRefLangIs(lang) || /[\s`~]/.test(lang))) {
+      return { code: -1, message: `dataReplaceRequest: "${lang}" is not a language` };
+    }
+    const asset = event.source.asset;
+    // data in the store: the item is written, the document is not. the block
+    // is looked for only to name it and to derive the dependencies of the data;
+    // one that is not a root-level block (a block of a list item) is not
+    // found, and the item is written all the same
+    if (asset?.isFromAsset) {
+      if (!this.assetStore?.isWritable) return { code: -1, message: this.assetWriteUnavailableReasonGet() };
+      const locatedAsset = await this.blockOfEventLocate(event);
+      const isLocated = locatedAsset.code === 0;
+      const sourcePath = String(event.source.sourcePath ?? '');
+      const compName = isLocated ? locatedAsset.block.component.compName : String(event.source.compId ?? 'component').split('/').pop();
+      const dependencyListAsset = Array.isArray(event.data.dependencyList)
+        ? event.data.dependencyList
+        : isLocated ? this.blockDependencyListGet(locatedAsset.block, raw, locatedAsset.path) : undefined;
+      if (lang !== undefined && lang !== this.assetStore.itemGet(asset.store, asset.itemId)?.lang) {
+        const resultLang = await this.assetStore.itemMetaSet(asset.store, asset.itemId, { lang });
+        if (resultLang.code !== 0) return { code: resultLang.code, data: resultLang.data, message: resultLang.message };
+      }
+      const result = await this.assetStore.itemUpdate(
+        asset.store,
+        asset.itemId,
+        { text: raw },
+        undefined,
+        `${compName} data replaced from ${sourcePath}`,
+        dependencyListAsset,
+      );
+      return { code: result.code, data: result.data, message: result.message };
+    }
     const located = await this.blockOfEventLocate(event);
     if (located.code !== 0) return { code: -1, message: `dataReplaceRequest: ${located.message}` };
     const { path, blockIndex, block } = located;
@@ -2490,23 +2846,9 @@ export class DocEditStore {
       ? event.data.dependencyList
       : this.blockDependencyListGet(block, raw, path);
 
-    const asset = event.source.asset;
-    if (asset?.isFromAsset) {
-      if (!this.assetStore?.isWritable) return { code: -1, message: this.assetWriteUnavailableReasonGet() };
-      const result = await this.assetStore.itemUpdate(
-        asset.store,
-        asset.itemId,
-        { text: raw },
-        undefined,
-        `${block.component.compName} data replaced from ${path}`,
-        dependencyList,
-      );
-      return { code: result.code, data: result.data, message: result.message };
-    }
-
     const isLeft = await this.sessionLeaveForIndexAction(path);
     if (!isLeft) return { code: -1, message: 'the open edit session was not left' };
-    const text = componentBlockTextBuild(block, { raw });
+    const text = componentBlockTextBuild(block, lang !== undefined ? { raw, lang } : { raw });
     return this.operationApply(path, blockReplaceOperationBuild(block, text), {
       messageFailure: 'The data of the block was not replaced.',
       onApplied: () => {

@@ -1,0 +1,125 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import {
+  itemAtomCharStrip, itemAtomModelBuild, itemAtomOffsetDisplayGet, itemAtomTextBuild, itemAtomTextSourceGet, itemCodeBlockListGet,
+  itemPartGet, itemPartOffsetGet, itemPartTextWrite,
+} from './doc-edit-item-atom.js';
+
+const A0 = '';
+const A1 = '';
+// the view each place is given by the config of the test: a block that is the
+// whole item is an icon, any other block a card unless it says otherwise
+const viewResolve = ({ viewAuthored, place }) => viewAuthored || (place === 'listItem' ? 'icon' : 'card');
+
+const textTwo = [
+  'see the query',
+  '```sql view=icon title="weekly"',
+  'select 1',
+  '```',
+  'then the script',
+  '```sh view=icon',
+  'ls -la',
+  '```',
+].join('\n');
+
+test('the code blocks of a text', () => {
+  const blockList = itemCodeBlockListGet(textTwo);
+  assert.equal(blockList.length, 2);
+  assert.deepEqual(blockList.map((block) => [block.form, block.lang, block.title, block.viewAuthored, block.lineCount]), [
+    ['fence', 'sql', 'weekly', 'icon', 1],
+    ['fence', 'sh', '', 'icon', 1],
+  ]);
+  assert.equal(textTwo.slice(blockList[0].start, blockList[0].end), '```sql view=icon title="weekly"\nselect 1\n```');
+  // an unclosed fence takes the rest; a fence of another component is its data
+  assert.equal(itemCodeBlockListGet('a\n```js\nb').length, 0);
+  assert.equal(itemCodeBlockListGet('<!--renderComp=Image-->\n```yaml\nsrc: a.png\n```').length, 0);
+  assert.equal(itemCodeBlockListGet('```asset\nstore: local\n```').length, 0);
+});
+
+test('a block of Code: its marker is part of it', () => {
+  const text = 'run\n<!--renderComp=Code,view=icon,title=setup.py-->\n```asset\nstore: local\nitemId: abc\n```';
+  const [block] = itemCodeBlockListGet(text);
+  assert.equal(block.form, 'component');
+  assert.equal(block.viewAuthored, 'icon');
+  assert.equal(block.title, 'setup.py');
+  assert.equal(block.isReference, true);
+  assert.equal(block.source, text.slice(4));
+  const model = itemAtomModelBuild(text, { viewResolve });
+  assert.equal(model.display, `run${A0}`);
+  assert.equal(model.atomList[0].label, 'setup.py');
+});
+
+test('the typed text of an item with icons', () => {
+  const model = itemAtomModelBuild(textTwo, { viewResolve });
+  assert.equal(model.display, `see the query${A0}then the script${A1}`);
+  assert.deepEqual(model.atomList.map((atom) => atom.label), ['weekly', 'sh']);
+  // unchanged: the text as it was
+  assert.equal(itemAtomTextBuild(model.display, model), textTwo);
+  // a word typed: every block on lines of its own again
+  assert.equal(itemAtomTextBuild(`see the query${A0}then the script${A1} done`, model), `${textTwo}\ndone`);
+  // spaces and line breaks next to a block are not text
+  assert.equal(
+    itemAtomTextBuild(`see the query ${A0}  then the script \n${A1}`, model),
+    textTwo,
+  );
+  // an icon deleted, two icons next to each other
+  assert.equal(itemAtomTextBuild(`see the query${A1}`, model), 'see the query\n```sh view=icon\nls -la\n```');
+  assert.equal(itemAtomTextBuild(`${A1}${A0}`, model).split('\n').filter((line) => line === '').length, 0);
+  // a character of no atom is dropped
+  assert.equal(itemAtomTextBuild(`xy${A0}`, model).startsWith('xy\n```sql'), true);
+  assert.equal(itemAtomCharStrip(`a${A0}b`), 'ab');
+});
+
+test('a block drawn as an icon by its place keeps its view when the place changes', () => {
+  const text = '```text\naaaa\nbbbb\n```';
+  const model = itemAtomModelBuild(text, { viewResolve });
+  assert.equal(model.display, A0);
+  assert.equal(model.atomList[0].place, 'listItem');
+  // text beside it: the block is no longer the whole item, its icon is written
+  assert.equal(itemAtomTextBuild(`note${A0}`, model), 'note\n```text view=icon\naaaa\nbbbb\n```');
+  // a block of another view among text is an atom of a line of its own; the
+  // whole text of an item, it is no atom (its item is edited as its lines)
+  const card = itemAtomModelBuild('a\n```js\nx\n```\nb', { viewResolve });
+  assert.deepEqual([card.display, card.atomList[0].kind, card.atomList[0].view], [`a${A0}b`, 'block', 'card']);
+  assert.equal(itemAtomModelBuild('```js\nx\n```', { viewResolve: () => 'card' }), undefined);
+  assert.equal(itemAtomModelBuild('```js\nx\n```', { viewResolve: () => 'icon' }).atomList[0].kind, 'icon');
+  // a block of a line of its own that becomes the whole item keeps its view
+  assert.equal(itemAtomTextBuild(A0, card), '```js view=card\nx\n```');
+});
+
+test('offsets of the own text in the typed text', () => {
+  const model = itemAtomModelBuild(textTwo, { viewResolve });
+  const indexQuery = 'see the query'.length;
+  assert.equal(itemAtomOffsetDisplayGet(model, 3), 3);
+  assert.equal(itemAtomOffsetDisplayGet(model, indexQuery), indexQuery);
+  assert.equal(itemAtomOffsetDisplayGet(model, indexQuery + 4), indexQuery + 1);
+  const indexThen = textTwo.indexOf('then');
+  assert.equal(itemAtomOffsetDisplayGet(model, indexThen), indexQuery + 1);
+  assert.equal(itemAtomOffsetDisplayGet(model, textTwo.length), model.display.length);
+});
+
+test('the typed text copied out with its blocks', () => {
+  const model = itemAtomModelBuild(textTwo, { viewResolve });
+  assert.equal(itemAtomTextSourceGet(`query${A0}then`, model), 'query\n```sql view=icon title="weekly"\nselect 1\n```\nthen');
+});
+
+test('a part of an item: the lines of a code block among its text, edited and written back', () => {
+  const text = ['see', '```text', 'one', 'two', '```', 'then', '```sh view=icon', 'ls', '```'].join('\n');
+  const part = itemPartGet(text, 0);
+  assert.deepEqual([part.info, part.textInner], ['text', 'one\ntwo']);
+  // the whole text of an item, and a block of Code reading an item, are no parts
+  assert.equal(itemPartGet('```text\na\n```', 0), undefined);
+  assert.equal(itemPartGet('a\n<!--renderComp=Code-->\n```asset\nitemId: x\n```', 0), undefined);
+  const written = itemPartTextWrite(text, 0, 'one\ntwo\nthree');
+  assert.equal(written.text, ['see', '```text', 'one', 'two', 'three', '```', 'then', '```sh view=icon', 'ls', '```'].join('\n'));
+  // a block of text down to one line is a line of text among the others
+  assert.equal(itemPartTextWrite(text, 0, 'one two').text, ['see', 'one two', 'then', '```sh view=icon', 'ls', '```'].join('\n'));
+  // taken out with a line break
+  const removed = itemPartTextWrite(text, 0, '', { isRemoved: true });
+  assert.equal(removed.text, ['see', 'then', '```sh view=icon', 'ls', '```'].join('\n'));
+  // the place before and after it, read as places of the typed text
+  const model = itemAtomModelBuild(text, { viewResolve });
+  assert.equal(model.display, `see${A0}then${A1}`);
+  assert.equal(itemAtomOffsetDisplayGet(model, itemPartOffsetGet(text, written.start, 'before')), 3);
+  assert.equal(itemAtomOffsetDisplayGet(model, itemPartOffsetGet(text, model.atomList[0].end, 'after')), 4);
+});

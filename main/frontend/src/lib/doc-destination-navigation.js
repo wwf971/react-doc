@@ -1,3 +1,5 @@
+import { pageStickyInsetGet } from './doc-reading-place.js';
+
 function pageScrollTopReset(pageElement) {
   if (!pageElement) return;
   const documentElement = pageElement.ownerDocument?.documentElement;
@@ -111,22 +113,25 @@ function navigationHighlightSet(pageElement, targetElement) {
   targetElement?.classList.add('doc-navigation-target');
 }
 
+// a destination is aligned below the sticky head of the page (the toolbar and
+// the path bar stay at the top while the document scrolls, DocPageHead), so
+// it is never hidden under it
 function pageScrollDestinationIsAligned(pageElement, targetElement, tolerance = 1) {
   if (!pageElement || !targetElement) return false;
   const pageRect = pageElement.getBoundingClientRect();
   const targetRect = targetElement.getBoundingClientRect();
-  return Math.abs(targetRect.top - pageRect.top - 8) <= tolerance;
+  return Math.abs(targetRect.top - pageRect.top - pageStickyInsetGet(pageElement) - 8) <= tolerance;
 }
 
-// offsetTop: the gap kept above the destination; a focused reference gets
-// a larger one, so its ring and the line above it are in view
+// offsetTop: the gap kept above the destination, below the sticky head; a
+// focused reference gets a larger one, so its ring and the line above it are in view
 function pageScrollDestinationAlign(pageElement, targetElement, offsetTop = 8) {
   if (!pageElement || !targetElement) return;
   const pageRect = pageElement.getBoundingClientRect();
   const targetRect = targetElement.getBoundingClientRect();
   pageElement.scrollTop = Math.max(
     0,
-    pageElement.scrollTop + targetRect.top - pageRect.top - offsetTop,
+    pageElement.scrollTop + targetRect.top - pageRect.top - pageStickyInsetGet(pageElement) - offsetTop,
   );
 }
 

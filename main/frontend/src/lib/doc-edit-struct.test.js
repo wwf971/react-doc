@@ -465,3 +465,45 @@ test('a dragged block goes to the nearest border, and its own place is no place'
   assert.equal(middle.indicator.top, 50);
   assert.deepEqual(dropTargetFind({ subject, pointer: { x: 10, y: -20 }, blockRectList }).target, { kind: 'block', borderIndex: 0 });
 });
+
+test('an item with code blocks drawn as icons is typed as text and chips, split and joined between them', async () => {
+  const F = '```';
+  const source = ['# Icons', '', '- see', `  ${F}sql view=icon title="q"`, '  select 1', `  ${F}`, '  then', '- last', ''].join('\n');
+  const { editStore, structStore, lineList, restore } = await storesCreate(source);
+  try {
+    await editStore.sessionItemStart(PATH_DOC, 1, '0');
+    assert.equal(editStore.session.textInitial, 'seethen');
+    // typed around the chip: the block stays a block on lines of its own
+    editStore.sessionDraftSet('see itthen more');
+    assert.equal(await editStore.sessionLeave(), true);
+    const linesJoined = ['- see it', `  ${F}sql view=icon title="q"`, '  select 1', `  ${F}`, '  then more', '- last'];
+    assert.deepEqual(lineList().slice(2, 8), linesJoined);
+    // Enter right after the chip: the item split there
+    await editStore.sessionItemStart(PATH_DOC, 1, '0');
+    const split = await structStore.eventHandle(eventFromEditor('editItemSplitRequest', { offsetStart: 7, offsetEnd: 7 }));
+    assert.equal(split.code, 0, split.message);
+    assert.deepEqual(lineList().slice(2, 8), ['- see it', `  ${F}sql view=icon title="q"`, '  select 1', `  ${F}`, '- then more', '- last']);
+    // Backspace at the start of the new item: it joins the row above after its block,
+    // and the caret stands after the chip, where the two texts meet
+    const joined = await structStore.eventHandle(eventFromEditor('editItemMergeRequest', { direction: 'previous' }));
+    assert.equal(joined.code, 0, joined.message);
+    assert.deepEqual(lineList().slice(2, 8), linesJoined);
+    assert.deepEqual([editStore.session.textInitial, editStore.session.selectionInitial], ['see itthen more', { type: 'offset', offset: 7 }]);
+    // Shift + Enter in the text after the chip: that segment becomes a text
+    // block of its own, broken at the caret, and its lines are edited (a part)
+    const blocked = await structStore.eventHandle(eventFromEditor('editItemFormatRequest', { offsetStart: 11, offsetEnd: 11 }));
+    assert.equal(blocked.code, 0, blocked.message);
+    assert.deepEqual(lineList().slice(2, 12), [
+      '- see it', `  ${F}sql view=icon title="q"`, '  select 1', `  ${F}`, `  ${F}text`, '  then', '  more', `  ${F}`, '- last', '',
+    ]);
+    assert.deepEqual([editStore.session.itemPart, editStore.session.textInitial, editStore.session.selectionInitial], [{ index: 1 }, 'then\nmore', { type: 'offset', offset: 5 }]);
+    // the lines typed on, then → at their end: written, and back in the text of the item after the chip
+    editStore.sessionDraftSet('then\nmore\nand more');
+    const left = await structStore.eventHandle(eventFromEditor('editItemPartLeaveRequest', { direction: 'after' }));
+    assert.equal(left.code, 0, left.message);
+    assert.deepEqual(lineList().slice(7, 12), ['  then', '  more', '  and more', `  ${F}`, '- last']);
+    assert.deepEqual([editStore.session.itemPart, editStore.session.textInitial, editStore.session.selectionInitial], [undefined, 'see it\ue000\ue001', { type: 'offset', offset: 8 }]);
+  } finally {
+    restore();
+  }
+});

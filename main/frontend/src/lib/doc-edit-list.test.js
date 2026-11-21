@@ -450,12 +450,14 @@ test('joins an item to the row above it; no other line changes its level', () =>
   assert.deepEqual(linesAfter(listItemMergeUp(modelOf(['- a', '-', '- b']), '1')), ['- a', '- b']);
 });
 
-test('refuses to join where there is nothing to join to, or a code block is in the way', () => {
+test('refuses to join where there is nothing to join to; a text meeting a code block joins as written', () => {
   assert.equal(listItemMergeUp(modelOf(listNested), '0').code, -1);
+  // the row above ends with a block: the text follows it, a line apart
   const withBlock = modelOf(['- a', `  ${F}text`, '  one', `  ${F}`, '- b']);
   const result = listItemMergeUp(withBlock, '1');
-  assert.equal(result.code, -1);
-  assert.match(result.message, /code block/);
+  assert.equal(result.code, 0);
+  assert.deepEqual(linesAfter(result), ['- a', `  ${F}text`, '  one', `  ${F}`, '  b']);
+  assert.deepEqual([result.data.offset, result.data.isOffsetSource], [`a\n${F}text\none\n${F}`.length, true]);
 });
 
 test('a split and a join undo each other', () => {
@@ -579,10 +581,14 @@ test('a plain line joins the text block above it, and a text block the line abov
   assert.deepEqual(linesAfter(typed), ['- fruit', `  - ${F}text`, '    one', '    two morepear', `    ${F}`, '- bread']);
 });
 
-test('two lines joined out of a text block are a plain line; code joins nothing', () => {
+test('two lines joined out of a text block are a plain line; code joins as written', () => {
   const split = modelOf(['- one', `- ${F}js`, '  const a = 1;', `  ${F}`, '- after']);
-  assert.equal(listItemMergeUp(split, '1').code, -1);
-  assert.match(listItemMergeUp(split, '2').message, /code block/);
+  // a block of code under the text of the row above, and a text after a block of code
+  assert.deepEqual(linesAfter(listItemMergeUp(split, '1')), ['- one', `  ${F}js`, '  const a = 1;', `  ${F}`, '- after']);
+  assert.deepEqual(linesAfter(listItemMergeUp(split, '2')), ['- one', `- ${F}js`, '  const a = 1;', `  ${F}`, '  after']);
+  // a block of text does not take a text holding a fence into its lines
+  const textAndIcon = modelOf(['- ```text', '  one', '  ```', '- see', `  ${F}sh view=icon`, '  ls', `  ${F}`]);
+  assert.deepEqual(linesAfter(listItemMergeUp(textAndIcon, '1')), ['- ```text', '  one', '  ```', '  see', `  ${F}sh view=icon`, '  ls', `  ${F}`]);
   // a block of one line (as typed) joined to a line is a line
   const model = modelOf(['- one', '- two']);
   const joined = listItemMergeUp(model, '1', { textItem: `${F}text\ntwo\n${F}` });

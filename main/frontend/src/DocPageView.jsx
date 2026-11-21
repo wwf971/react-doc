@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { observer } from 'mobx-react-lite';
 import {
   DocsPage,
@@ -16,7 +16,9 @@ import { useDocStores } from './store/context.js';
 import { buildMdxComps } from './lib/mdx-comps.js';
 import { MdxBody } from './lib/MdxBody.jsx';
 import { useDocDestinationNavigation } from './lib/use-doc-destination-navigation.js';
+import { readingPlaceCapture } from './lib/doc-reading-place.js';
 import { DocPageToolbar } from '../../comp-doc/page/DocPageToolbar.jsx';
+import { DocPageHead } from '../../comp-doc/page/DocPageHead.jsx';
 import { DocPageSkeleton } from '../../comp-doc/page/DocPageSkeleton.jsx';
 import { DocPageBodyLoading } from '../../comp-doc/page/DocPageBodyLoading.jsx';
 import { DocPageToc } from '../../comp-doc/toc/DocPageToc.jsx';
@@ -66,7 +68,22 @@ export const DocPageView = observer(function DocPageView() {
     navigationRequestVersion,
     pageElementRef,
     pathContent,
+    place: docStore.docCurrentPlace,
   });
+  // the reading place of the body shown (doc_page_impl_nav.md#reading-places),
+  // read by the store when a navigation leaves it, while the page still shows
+  // it: the document whose body is mounted, in reading or in edit mode
+  const bodyShownRef = useRef({ pathContent: '', isShown: false });
+  bodyShownRef.current = { pathContent, isShown: Boolean(docEdit) || (isBodyMounted && compiled?.status === 'done') };
+  useEffect(() => {
+    docStore.readingPlaceReaderSet(() => {
+      const { pathContent: pathShown, isShown } = bodyShownRef.current;
+      if (!isShown || !pathShown) return undefined;
+      const place = readingPlaceCapture(pageElementRef.current);
+      return place ? { pathContent: pathShown, place } : undefined;
+    });
+    return () => docStore.readingPlaceReaderSet(undefined);
+  }, [docStore, pageElementRef]);
 
   const warningNavigation = docStore.navigationError ? (
     <div className="doc-navigation-warning" role="alert">
@@ -266,10 +283,12 @@ function pathNormalize(path) {
   return path;
 }
 
-// path bar: the breadcrumb, followed by the tags of the current page
+// the head of the page: the toolbar, then the path bar (the breadcrumb,
+// followed by the tags of the current page), staying at the top while the
+// document scrolls (DocPageHead)
 function DocPageBreadcrumb(props) {
   return (
-    <>
+    <DocPageHead>
       <DocPageToolbar />
       <div className="doc-page-path-bar">
         <SidePanelItemSurfaceContext.Provider value="breadcrumb">
@@ -277,6 +296,6 @@ function DocPageBreadcrumb(props) {
         </SidePanelItemSurfaceContext.Provider>
         <DocPageTagBar />
       </div>
-    </>
+    </DocPageHead>
   );
 }

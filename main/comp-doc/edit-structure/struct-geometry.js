@@ -146,13 +146,31 @@ export function textEndGet(element) {
   if (rectList.length === 0) return { right: rectElement.left, isSingleLine: !element.textContent.includes('\n') };
   let top = Infinity;
   let bottom = -Infinity;
+  let topLast = -Infinity;
   let right = rectElement.left;
   for (const rect of rectList) {
     top = Math.min(top, rect.top);
     bottom = Math.max(bottom, rect.bottom);
+    topLast = Math.max(topLast, rect.top);
     right = Math.max(right, rect.right);
   }
+  // a surface with chips (surface-atom.js): a chip is higher than a line of
+  // text, so one line is told by where the boxes start, not where they end
+  if (element.hasAttribute('data-atoms')) return { right, isSingleLine: topLast - top < lineHeight * 0.5 && !element.textContent.includes('\n') };
   return { right, isSingleLine: bottom - top < lineHeight * 1.5 && !element.textContent.includes('\n') };
+}
+
+// the code blocks of the own text of an item, in order: the elements that
+// carry the key of their block (data-code-key: a tile, or the figure of a
+// block of another view), not those of the items under it
+export function itemCodeElementListGet(itemElement) {
+  return [...itemElement.querySelectorAll('[data-code-key]')].filter((element) => element.closest('li') === itemElement);
+}
+
+// the <pre> of the lines of a part of an item (its code block at that index
+// among the code blocks of its text), or null
+export function itemPartBlockElementGet(itemElement, partIndex) {
+  return itemCodeElementListGet(itemElement)[partIndex]?.querySelector('pre') ?? null;
 }
 
 // the code block the own text of an item is rendered as (an item that is a
@@ -180,7 +198,7 @@ export function itemBlockElementGet(itemElement) {
 // room it needs beyond the height it had (heightBase) is added below it, as
 // margin above its first nested list or as padding of an item without one.
 // nothing is added to the list: the styles set here are taken off again.
-export function itemRoomOpen(itemElement, { isBlockFormat = false, heightBase = 0 } = {}) {
+export function itemRoomOpen(itemElement, { isBlockFormat = false, heightBase = 0, blockElement: blockElementGiven } = {}) {
   const restoreList = [];
   const styleSet = (element, name, value) => {
     const valueBefore = element.style.getPropertyValue(name);
@@ -194,7 +212,7 @@ export function itemRoomOpen(itemElement, { isBlockFormat = false, heightBase = 
     }
     restoreList.length = 0;
   };
-  const blockElement = isBlockFormat ? itemBlockElementGet(itemElement) : null;
+  const blockElement = isBlockFormat ? blockElementGiven ?? itemBlockElementGet(itemElement) : null;
   if (blockElement) {
     // a long block scrolls inside its viewport; while it is typed, it shows all its lines
     const viewport = blockElement.parentElement;

@@ -145,10 +145,28 @@ export function remarkCommentComp(options = {}) {
       if (Array.isArray(structuredData?.contents) && structuredData.contents.length > 0) {
         nodeReplacement.data = { structuredData };
       }
+      // a block of a list item says where it stands, as a fenced code block
+      // does (rehypeCodePlace): 'listItem', the whole text of the item, or
+      // 'inListItem', among its text. its component may draw it otherwise
+      // there (the component Code takes the view of the config for its place;
+      // a view mode may be the default of a place, comp-expose.js)
+      if (!options.isSearchIndex && parent?.type === 'listItem') {
+        nodeReplacement.attributes.push({ type: 'mdxJsxAttribute', name: 'place', value: blockIsListItemWhole(parent, index) ? 'listItem' : 'inListItem' });
+      }
       parent.children.splice(index, 2, nodeReplacement);
       return index + 1;
     });
   };
+}
+
+// the block marked at index is the whole text of a list item: nothing before
+// its marker in the item but other markers (an Anchor), nothing after the
+// block but the lists under the item
+function blockIsListItemWhole(parent, index) {
+  if (parent?.type !== 'listItem') return false;
+  const isMarker = (child) => child.type === 'html' && REGEX_RENDER_COMP.test(String(child.value ?? '').trim());
+  return parent.children.slice(0, index).every(isMarker)
+    && parent.children.slice(index + 2).every((child) => child.type === 'list');
 }
 
 // a line that starts with the marker, as in

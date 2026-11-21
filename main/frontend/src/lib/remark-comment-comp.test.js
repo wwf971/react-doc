@@ -65,3 +65,41 @@ test('an html block without marker and inline code is left alone', () => {
   assert.equal(componentList.length, 0);
   assert.equal(tree.children[0].children[0].children[0].type, 'html');
 });
+
+// a component block of a list item says where it stands, as a fenced code
+// block does: place listItem (the whole text of the item) or inListItem
+// (among its text); the component Code draws it in the view of that place
+test('a component block of a list item is marked with its place', () => {
+  const placeGet = (lineList) => {
+    const { tree } = treeTransform(lineList);
+    const found = [];
+    const walk = (node) => {
+      if (node?.name === 'DocComp') found.push(node.attributes.find((attribute) => attribute.name === 'place')?.value ?? '');
+      for (const child of node?.children ?? []) walk(child);
+    };
+    walk(tree);
+    return found;
+  };
+  assert.deepEqual(placeGet([
+    '- first item',
+    '- <!--renderComp=Code-->',
+    '  ```asset',
+    '  store: local',
+    '  itemId: abc',
+    '  ```',
+    '  - a sub-item',
+  ]), ['listItem']);
+  assert.deepEqual(placeGet([
+    '- the text of the item',
+    '  <!--renderComp=Code-->',
+    '  ```python',
+    '  x = 1',
+    '  ```',
+  ]), ['inListItem'], 'a block under the text of an item stands among its text');
+  assert.deepEqual(placeGet([
+    '<!--renderComp=Code-->',
+    '```python',
+    'x = 1',
+    '```',
+  ]), [''], 'a block of the document');
+});

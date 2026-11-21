@@ -7,7 +7,11 @@ import { DocEditBlockContext, DocEditBlockFloatContext, useDocEditDoc } from '..
 import { DocEditBlockEditor } from '../edit/DocEditBlockEditor.jsx';
 import { useEditOutsidePointer } from '../edit/use-edit-outside-pointer.js';
 import { DocEditItemToolbar } from './DocEditItemToolbar.jsx';
-import { blockElementGet, blockRectGet, itemBlockElementGet, itemElementGet, itemRectsGet, itemRoomOpen, textEndGet } from './struct-geometry.js';
+import {
+  blockElementGet, blockRectGet, itemBlockElementGet, itemCodeElementListGet, itemElementGet, itemPartBlockElementGet, itemRectsGet, itemRoomOpen, textEndGet,
+} from './struct-geometry.js';
+import { ATOM_FILL_EVENT, ATOM_LINES_EVENT, ATOM_OPEN_EVENT } from '../edit/surface-atom.js';
+import { codeLinesOpen } from '../code-editor/code-lines-open.js';
 import { useStructPointer } from './use-struct-pointer.js';
 import './DocEditStruct.css';
 
@@ -204,8 +208,96 @@ const DocEditItemEditor = observer(function DocEditItemEditor({ bodyRef, layoutK
   const blockIndex = session.blockIndex;
   const itemPath = session.itemPath;
   const isBlockFormat = session.itemFormat === 'block';
+  // the lines of a part: one code block among the text of the item
+  const partIndex = session.itemPart?.index;
   useEditOutsidePointer(ownRef, true, () => void editStore.sessionLeave());
   const blockContextValue = useMemo(() => ({ path, blockIndex }), [path, blockIndex]);
+
+  // a chip of the text double-clicked (surface-atom.js): the item is saved,
+  // and the dialog of the lines of the code block the chip stands for opens
+  // (its n-th code block, in the rendered item once it is drawn again: the
+  // key it carries, codeLinesOpen)
+  useEffect(() => {
+    const own = ownRef.current;
+    if (!own) return undefined;
+    const atomOpen = async (event) => {
+      const index = Number(event.detail?.index);
+      // a block of another view: its lines edited where they are drawn (a part)
+      if (event.detail?.kind === 'block' && Number.isInteger(index)) {
+        const result = await structStore.eventHandle({ type: 'editItemPartEnterRequest', data: { partIndex: index }, source: { sourcePath: path, blockIndex } });
+        if (result?.code === 0 && editStore.session?.itemPart) return;
+      }
+      const isLeft = await editStore.sessionLeave();
+      if (!isLeft || !Number.isInteger(index)) return;
+      const timeEnd = Date.now() + 3000;
+      const linesOpen = () => {
+        const body = bodyRef.current;
+        const element = body ? itemElementGet(body, blockIndex, itemPath) : null;
+        const codeElement = element ? itemCodeElementListGet(element)[index] : undefined;
+        if (codeElement && !editStore.blockTextPending && codeLinesOpen(codeElement.getAttribute('data-code-key'))) return;
+        if (Date.now() < timeEnd) requestAnimationFrame(linesOpen);
+      };
+      linesOpen();
+    };
+    // ↑ / ↓ onto the line of a block among the text: its lines, at the x of the caret
+    const atomLinesEnter = (event) => {
+      const { index, line, clientX } = event.detail ?? {};
+      if (!Number.isInteger(index)) return;
+      void structStore.eventHandle({
+        type: 'editItemPartEnterRequest',
+        data: { partIndex: index, selectionInitial: { type: 'line', line, clientX } },
+        source: { sourcePath: path, blockIndex },
+      });
+    };
+    own.addEventListener(ATOM_OPEN_EVENT, atomOpen);
+    own.addEventListener(ATOM_LINES_EVENT, atomLinesEnter);
+    return () => {
+      own.removeEventListener(ATOM_OPEN_EVENT, atomOpen);
+      own.removeEventListener(ATOM_LINES_EVENT, atomLinesEnter);
+    };
+    // the editor is drawn once its place is measured: listened to from then on
+  }, [bodyRef, blockIndex, itemPath, editStore, place === null]);
+
+  // the chips of code blocks of another view (a line of their own) show the
+  // block as it is rendered in the item: a copy of its element, inert, with
+  // the margins it has there, so the item keeps its height when it is
+  // entered. the surface asks when it writes its chips (ATOM_FILL_EVENT),
+  // before it places the caret: listened to on the holder, which is there a
+  // render before the surface
+  useLayoutEffect(() => {
+    const holder = surfaceHolderRef.current;
+    const body = bodyRef.current;
+    if (!holder || !body) return undefined;
+    const chipListFill = () => {
+      const chipList = [...holder.querySelectorAll('.doc-edit-atom-block:not([data-filled])')];
+      if (chipList.length === 0) return;
+      const element = itemElementGet(body, blockIndex, itemPath);
+      const surface = holder.querySelector('.doc-edit-surface');
+      if (!element || !surface) return;
+      const atomList = [...surface.querySelectorAll('[data-atom]')];
+      const codeList = itemCodeElementListGet(element);
+      // the chips stand for the code blocks of the item in order; anything else is not trusted
+      if (codeList.length !== atomList.length) return;
+      for (const chip of chipList) {
+        const codeElement = codeList[atomList.indexOf(chip)];
+        if (!codeElement || codeElement.classList.contains('doc-code-icon')) continue;
+        const style = getComputedStyle(codeElement);
+        const copy = codeElement.cloneNode(true);
+        copy.removeAttribute('id');
+        for (const descendant of copy.querySelectorAll('[id]')) descendant.removeAttribute('id');
+        copy.style.marginTop = style.marginTop;
+        copy.style.marginBottom = style.marginBottom;
+        // the caret drawn beside the chip stands as high as the frame of the block
+        chip.style.setProperty('--doc-edit-atom-inset-top', style.marginTop);
+        chip.style.setProperty('--doc-edit-atom-inset-bottom', style.marginBottom);
+        chip.replaceChildren(copy);
+        chip.setAttribute('data-filled', '');
+      }
+    };
+    chipListFill();
+    holder.addEventListener(ATOM_FILL_EVENT, chipListFill);
+    return () => holder.removeEventListener(ATOM_FILL_EVENT, chipListFill);
+  }, [bodyRef, blockIndex, itemPath, place === null]);
 
   useLayoutEffect(() => {
     const body = bodyRef.current;
@@ -213,7 +305,7 @@ const DocEditItemEditor = observer(function DocEditItemEditor({ bodyRef, layoutK
     if (!element) return;
     const rects = itemRectsGet(body, element);
     const rectBody = body.getBoundingClientRect();
-    const blockElement = isBlockFormat ? itemBlockElementGet(element) : null;
+    const blockElement = isBlockFormat ? (partIndex === undefined ? itemBlockElementGet(element) : itemPartBlockElementGet(element, partIndex)) : null;
     if (blockElement) {
       // over the lines of the code block, in their type and on the background
       // of the block: the box of its lines (the lines of a highlighted block
@@ -257,7 +349,7 @@ const DocEditItemEditor = observer(function DocEditItemEditor({ bodyRef, layoutK
     });
     // the place is the one the item had when its session started: the
     // rendered item under the surface does not change while it is edited
-  }, [bodyRef, blockIndex, itemPath, isBlockFormat, layoutKey]);
+  }, [bodyRef, blockIndex, itemPath, isBlockFormat, partIndex, layoutKey]);
 
   // the height the own text of the item had when the session started: what
   // the room of the item is counted from
@@ -274,7 +366,11 @@ const DocEditItemEditor = observer(function DocEditItemEditor({ bodyRef, layoutK
     const holder = surfaceHolderRef.current;
     const element = body ? itemElementGet(body, blockIndex, itemPath) : null;
     if (!isPlaced || !holder || !element) return undefined;
-    const room = itemRoomOpen(element, { isBlockFormat, heightBase: heightBaseRef.current ?? 0 });
+    const room = itemRoomOpen(element, {
+      isBlockFormat,
+      heightBase: heightBaseRef.current ?? 0,
+      blockElement: partIndex === undefined ? undefined : itemPartBlockElementGet(element, partIndex) ?? undefined,
+    });
     // the source is in the holder one render after the holder: until then there is no height to follow
     const roomApply = () => {
       if (holder.querySelector('.doc-edit-surface')) room.heightSet(holder.offsetHeight);
@@ -286,7 +382,7 @@ const DocEditItemEditor = observer(function DocEditItemEditor({ bodyRef, layoutK
       observer.disconnect();
       room.close();
     };
-  }, [bodyRef, blockIndex, itemPath, isBlockFormat, isPlaced]);
+  }, [bodyRef, blockIndex, itemPath, isBlockFormat, partIndex, isPlaced]);
 
   // where the bar stands: after the text while it is one line with room
   // after it, measured again as the text is typed

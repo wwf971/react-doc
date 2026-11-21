@@ -106,6 +106,24 @@ configDefault:
   ListMarkerGap: 5                          # document level: px between a bullet or number and its text
   CodeBlockView: card                       # document level: the view of a fenced code block (card | plain)
   CodeBlockViewAsListItem: plain            # document level: the view of a code block that is a list item
+  # document level: the ranks of the insert menu (doc_page_impl_edit.md#the-order-of-the-insert-menu).
+  # a ranked entry comes before every unranked one, in its row and in the
+  # results of a search, ranks compared character by character (0-9, a-z,
+  # never ending with 0; between "c" and "e" lies "d", between "c" and "d"
+  # lies "ci"). the basic blocks first, then the most basic components; a doc
+  # page ranks its own in its config, merged entry by entry with these.
+  EditInsertRankByEntry:
+    text:paragraph: c
+    text:heading: e
+    text:list: g
+    text:quote: i
+    text:code: k
+    text:table: m
+    text:comment: o
+    component:Image: q
+    component:Callout: s
+    component:Tabs: u
+    component:DiagramText: w
   compConfig:
     Image:
       PasteReplaceConfirmIsOn: true         # ask before a paste replaces an existing image
@@ -141,6 +159,7 @@ compRegistry:
   Image: common/Image
   ImageGrid: common/ImageGrid
   DiagramText: common/DiagramText
+  Code: common/Code                    # a code block whose lines are in the asset service layer
   DiagramMermaid: common/DiagramMermaid
   # DiagramER, DiagramDataverseEntity, DiagramPowerAutomate, DiagramBusinessRule
   # and CardDiagram are components of the package cloud-dev-vis, which the

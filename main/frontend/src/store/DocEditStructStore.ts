@@ -29,6 +29,9 @@ import {
   pathDepthGet,
   pathIsWithin,
 } from '../lib/doc-edit-list.js';
+import { itemAtomCharIs, itemAtomTextBuild, itemCodeBlockListGet, itemPartOffsetGet, itemPartTextWrite } from '../lib/doc-edit-item-atom.js';
+import { codeBlockAssetTextBuild, codeBlockTextParse, codeTextJoin, codeTextViewGet, codeTextViewSet, textJoinSpaceIs } from '../lib/doc-edit-code.js';
+import { assetRefParse } from '../lib/doc-asset-ref.js';
 
 // Structural edit of a document (design: doc_page_impl_edit_structure.md).
 // A content edit changes what one block or one list item says; a structural
@@ -117,9 +120,15 @@ export const structEventTypeList = [
   'editItemLevelRequest',
   'editItemMoveRequest',
   'editItemListTypeRequest',
+  'editItemCodeViewRequest',
+  'editItemCodeAssetRequest',
   'editItemSplitRequest',
   'editItemMergeRequest',
   'editItemFormatRequest',
+  'editItemPartEnterRequest',
+  'editItemPartLeaveRequest',
+  'editItemTextJoinRequest',
+  'editItemCodeTextRequest',
   'editStructDropRequest',
 ];
 
@@ -131,6 +140,9 @@ export class DocEditStructStore {
   itemHover: StructItemRef | undefined = undefined;
   itemMenu: StructItemRef | undefined = undefined;
   itemConfirm: StructItemConfirm | undefined = undefined;
+  // the item that is a code block whose lines are asked to move into the
+  // asset service layer, confirmed in its toolbar like a deletion
+  itemCodeAssetConfirm: StructItemRef | undefined = undefined;
   itemWrite: StructItemWrite | undefined = undefined;
   drag: StructDrag | undefined = undefined;
   // the keys typed while an edit asked from the editor of an item is written
@@ -221,6 +233,7 @@ export class DocEditStructStore {
           this.selection = undefined;
           this.itemHover = undefined;
           this.itemMenu = undefined;
+          this.itemCodeAssetConfirm = undefined;
           if (this.itemConfirm?.status !== 'submitting') this.itemConfirm = undefined;
           if (this.itemWrite?.status !== 'submitting') this.itemWrite = undefined;
           if (this.drag?.status !== 'submitting') this.drag = undefined;
@@ -355,7 +368,7 @@ export class DocEditStructStore {
   // Escape: what is open on the selection closes first (a menu, a
   // confirmation, a failure), then the selection ends
   selectionEscape() {
-    if (this.itemMenu || this.itemConfirm || this.itemWrite) {
+    if (this.itemMenu || this.itemConfirm || this.itemCodeAssetConfirm || this.itemWrite) {
       this.overlayClose();
       return;
     }
@@ -398,6 +411,7 @@ export class DocEditStructStore {
   // what belongs to one toolbar: closed when the selection changes
   private overlayClose() {
     this.itemMenu = undefined;
+    this.itemCodeAssetConfirm = undefined;
     if (this.itemConfirm?.status !== 'submitting') this.itemConfirm = undefined;
     if (this.itemWrite?.status !== 'submitting') this.itemWrite = undefined;
   }
@@ -447,7 +461,7 @@ export class DocEditStructStore {
         ? undefined
         : { path, blockIndex: selection.blockIndex, itemPath: selection.itemPath, isPinned: true };
     }
-    const ref = [this.itemConfirm, this.itemMenu, this.itemWrite, this.itemHover]
+    const ref = [this.itemConfirm, this.itemCodeAssetConfirm, this.itemMenu, this.itemWrite, this.itemHover]
       .find((candidate) => candidate && candidate.path === path && this.itemGet(candidate));
     if (!ref) return undefined;
     if (this.editStore.sessionIs(path, 'block', ref.blockIndex)) return undefined;
@@ -484,6 +498,72 @@ export class DocEditStructStore {
     return list ? listItemTextGet(list, ref.itemPath) : '';
   }
 
+  // ---------- an item that is a code block ----------
+  // (doc_page_impl_mdx_code.md#changing-the-view-from-the-page) an item whose
+  // own text is one fenced code block, or a block of the component Code: its
+  // view is written into it, and the lines of a fenced one can move into the
+  // asset service layer, as for a root-level code block
+
+  // { view, form } of an item that is a code block; undefined for any other item
+  itemCodeViewGet(ref: StructItemRef): { view: string; form: string } | undefined {
+    return codeTextViewGet(this.itemTextGet(ref));
+  }
+
+  // the item of the asset service layer the lines of an item read (a block of
+  // Code reading an item): { store, itemId, versionIdRef }, undefined for any other item
+  itemCodeAssetRefGet(ref: StructItemRef): { store: string; itemId: string; versionIdRef: string } | undefined {
+    const text = this.itemTextGet(ref);
+    if (codeTextViewGet(text)?.form !== 'component') return undefined;
+    const parsed = codeBlockTextParse(text);
+    if (!parsed || parsed.lang !== 'asset') return undefined;
+    const reference = assetRefParse(parsed.value);
+    if (reference.message) return undefined;
+    const itemId = this.editStore.assetStore?.refItemIdGet(reference) ?? '';
+    return itemId ? { store: reference.store, itemId, versionIdRef: reference.versionId ?? '' } : undefined;
+  }
+
+  // why the lines of the item cannot move into the asset service layer, '' when they can
+  itemCodeAssetMoveReasonGet(ref: StructItemRef): string {
+    const codeView = this.itemCodeViewGet(ref);
+    if (!codeView) return 'the item is not a code block';
+    if (codeView.form !== 'fence') return 'the lines are in the asset service layer already';
+    if (!this.editStore.assetStore?.isWritable) return 'the asset service layer cannot be written here';
+    return '';
+  }
+
+  // the view of the item written into it ('' removes it: the config decides)
+  itemCodeViewSet(ref: StructItemRef, view: string): Promise<EditResult> {
+    return this.itemEdit(ref, (list) => {
+      const built = codeTextViewSet(listItemTextGet(list, ref.itemPath), view);
+      if (built.code !== 0) return built;
+      return listItemTextSet(list, ref.itemPath, built.data);
+    });
+  }
+
+  // the lines of the item become an item of the local store, and the item a
+  // block of the component Code reading it: the store item first, the
+  // document last, as for a root-level block
+  async itemCodeAssetMove(ref: StructItemRef): Promise<EditResult> {
+    const reason = this.itemCodeAssetMoveReasonGet(ref);
+    if (reason) return this.itemWriteFail(ref, reason);
+    runInAction(() => {
+      this.itemCodeAssetConfirm = undefined;
+      this.itemMenu = undefined;
+      this.itemWrite = { ...ref, status: 'submitting', message: '' };
+    });
+    const created = await this.editStore.codeAssetItemCreate(ref.path, this.itemTextGet(ref));
+    runInAction(() => { this.itemWrite = undefined; });
+    if (created.code !== 0) return this.itemWriteFail(ref, created.message);
+    const result = await this.itemEdit(ref, (list) => {
+      const built = codeBlockAssetTextBuild(listItemTextGet(list, ref.itemPath), created.data.referenceText);
+      if (built.code !== 0) return built;
+      return listItemTextSet(list, ref.itemPath, built.data);
+    });
+    if (result.code !== 0) return this.itemWriteFail(ref, `${result.message} The lines are in the asset service layer as object ${created.data.itemId}.`);
+    void this.editStore.assetStore?.usageNotify([{ type: 'docChange', docPath: ref.path }]);
+    return result;
+  }
+
   itemWriteIs(ref: StructItemRef): boolean {
     return refIsSame(this.itemWrite, ref);
   }
@@ -516,7 +596,17 @@ export class DocEditStructStore {
       const offsetGet = (name: string, fallback: number) => (Number.isInteger(event.data[name]) ? Number(event.data[name]) : fallback);
       const textLength = session!.textDraft.length;
       if (event.type === 'editItemSplitRequest') return this.sessionItemSplit(offsetGet('offsetStart', textLength), offsetGet('offsetEnd', textLength));
+      if (event.type === 'editItemInsertRequest' && event.data.position === 'before') return this.sessionItemInsertBefore();
       if (event.type === 'editItemInsertRequest') return this.sessionItemSplit(textLength, textLength);
+      if (event.type === 'editItemPartEnterRequest') return this.sessionItemPartEnter(Number(event.data.partIndex), event.data.selectionInitial);
+      if (event.type === 'editItemPartLeaveRequest') {
+        return this.sessionItemPartLeave(event.data.direction === 'before' ? 'before' : 'after', event.data.isRemoved === true, {
+          isVertical: event.data.isVertical === true,
+          point: event.data.point,
+          pointCaret: event.data.pointCaret,
+        });
+      }
+      if (event.type === 'editItemTextJoinRequest') return this.sessionItemTextJoin();
       if (event.type === 'editItemMergeRequest') return this.sessionItemMerge(event.data.direction === 'next' ? 'next' : 'previous');
       if (event.type === 'editItemFormatRequest') return this.sessionItemBlockFormat(offsetGet('offsetStart', textLength), offsetGet('offsetEnd', textLength));
       if (event.type === 'editItemLevelRequest') {
@@ -531,6 +621,9 @@ export class DocEditStructStore {
     if (event.type === 'editItemLevelRequest') return this.itemLevelChange(ref, event.data.direction === 'out' ? 'out' : 'in', scope);
     if (event.type === 'editItemMoveRequest') return this.itemMoveSibling(ref, event.data.direction === 'up' ? 'up' : 'down');
     if (event.type === 'editItemListTypeRequest') return this.itemListTypeSet(ref, event.data.type === 'ordered' ? 'ordered' : 'unordered');
+    if (event.type === 'editItemCodeViewRequest') return this.itemCodeViewSet(ref, typeof event.data.view === 'string' ? event.data.view : '');
+    if (event.type === 'editItemCodeAssetRequest') return this.itemCodeAssetMove(ref);
+    if (event.type === 'editItemCodeTextRequest') return this.itemCodeTextSet(ref);
     return undefined;
   }
 
@@ -604,11 +697,18 @@ export class DocEditStructStore {
   // and the fences are never lost. a block of code is not split (its editor
   // does not ask); the new-item button leaves it whole and adds an item.
   sessionItemSplit(offsetStart: number, offsetEnd: number): Promise<EditResult> {
-    return this.sessionItemEdit((list, { ref, textDraft, session }) => {
-      // how a part is written: the session of a text block types lines
+    return this.sessionItemEdit((list, { ref, textDraft, textItem, session }) => {
+      // how a part is written: the session of a text block types lines, the
+      // session of an item with icons types each block as one character
       const info: string | undefined = session.itemFormat === 'block' ? String(session.itemBlockInfo ?? '') : undefined;
-      const textWrite = (text: string) => itemTextWrite(text, info);
-      if (textDraft.trim() === '') {
+      // a part (a code block among the text of the item) asks no split: the
+      // new-item button of its bar adds an item after the item as it is written
+      const isPart = Boolean(session.itemPart);
+      const textWrite = (text: string) => {
+        if (isPart) return text;
+        return session.itemAtom ? itemAtomTextBuild(text, session.itemAtom) : itemTextWrite(text, info);
+      };
+      if (!isPart && textDraft.trim() === '') {
         const item = listItemGet(list, ref.itemPath);
         const isAtFirstLevel = !item?.pathParent;
         if (!isAtFirstLevel) {
@@ -626,9 +726,10 @@ export class DocEditStructStore {
         return { result: listItemDelete(list, ref.itemPath, LIST_SCOPE_ITEM) };
       }
       // what stands at the place of the split is text of neither item
-      const { textBefore, textAfter } = info !== undefined && !itemBlockInfoIsText(info)
+      let { textBefore, textAfter } = info !== undefined && !itemBlockInfoIsText(info)
         ? { textBefore: textDraft, textAfter: '' }
         : itemTextSplit(textDraft, offsetStart, offsetEnd);
+      if (isPart) ({ textBefore, textAfter } = { textBefore: textItem, textAfter: '' });
       // at the end of an item that has items under it, the new item is the
       // first of them: right below the caret, like any new item, and beside
       // the items the author sees there. (a split gives the second part what
@@ -672,6 +773,9 @@ export class DocEditStructStore {
   sessionItemBlockFormat(offsetStart: number, offsetEnd: number): Promise<EditResult> {
     return this.sessionItemEdit((list, { ref, textDraft, session }) => {
       if (session.itemFormat === 'block') return { result: { code: -1, message: 'the item is a text block already' } };
+      // an item with code blocks: the segment of text at the caret becomes a
+      // text block of its own, and the author goes on in its lines
+      if (session.itemAtom) return this.itemSegmentBlockCompute(list, ref, textDraft, session.itemAtom, offsetStart, offsetEnd);
       const textBefore = textDraft.slice(0, offsetStart);
       const textInner = `${textBefore}\n${textDraft.slice(Math.max(offsetStart, offsetEnd))}`;
       return {
@@ -688,8 +792,144 @@ export class DocEditStructStore {
       result: listEditThen(list, listItemTextSet(list, ref.itemPath, textItem), (listNext: any, itemPath: string) => (direction === 'in'
         ? listItemIndent(listNext, itemPath, LIST_SCOPE_SUBTREE)
         : listItemOutdent(listNext, itemPath))),
-      next: { isCreated: session.isCreated, selectionInitial: { type: 'offset', offset } as EditSelectionInitial },
+      next: { isCreated: session.isCreated, selectionInitial: { type: 'offset', offset } as EditSelectionInitial, partIndex: session.itemPart?.index },
     }));
+  }
+
+  // Shift + Enter in the text of an item with code blocks: the segment of
+  // text the caret is in (the run between two chips, or a line break) becomes
+  // a fenced block of language text, its lines broken at the caret, written
+  // between what stands before and after it; the author goes on in the lines
+  // of that block, a part of the item, after the break. its view is the one
+  // the config gives a block in the text of an item (CodeBlockViewInListItem)
+  private itemSegmentBlockCompute(list: any, ref: StructItemRef, display: string, model: any, offsetStart: number, offsetEnd: number) {
+    const isBoundary = (char: string) => char === '\n' || itemAtomCharIs(char);
+    let start = Math.max(0, Math.min(offsetStart, display.length));
+    let end = Math.max(start, Math.min(offsetEnd, display.length));
+    while (start > 0 && !isBoundary(display[start - 1])) start -= 1;
+    while (end < display.length && !isBoundary(display[end])) end += 1;
+    // the spaces at the break are text of neither line, as at a split
+    const lineBefore = display.slice(start, Math.min(offsetStart, offsetEnd)).trim();
+    const lineAfter = display.slice(Math.max(offsetStart, offsetEnd), end).trim();
+    const sourceBefore = itemAtomTextBuild(display.slice(0, start), model).replace(/\s+$/, '');
+    const sourceAfter = itemAtomTextBuild(display.slice(end), model).replace(/^\s+/, '');
+    const textNew = [sourceBefore, itemBlockTextBuild(`${lineBefore}\n${lineAfter}`, 'text'), sourceAfter].filter((text) => text !== '').join('\n');
+    return {
+      result: listItemTextSet(list, ref.itemPath, textNew),
+      next: {
+        partIndex: itemCodeBlockListGet(sourceBefore).length,
+        selectionInitial: { type: 'offset', offset: lineBefore.length + 1 } as EditSelectionInitial,
+      },
+    };
+  }
+
+  // a part left by its edges (← at its start, → at its end, ↑ / ↓ from its
+  // first / last line), or taken out (Backspace in its empty lines): its lines
+  // written into the item, and the author goes on in the text of the item,
+  // the caret before or after its chip (where it was, when it was taken out).
+  // left by ↑ / ↓ (isVertical), the caret goes on the line above or below the
+  // block at the same x (point), and when nothing of the item stands there,
+  // on to the row above or below, as from any item (pointCaret: its x)
+  async sessionItemPartLeave(
+    direction: 'before' | 'after',
+    isRemoved: boolean,
+    { isVertical = false, point, pointCaret }: { isVertical?: boolean; point?: any; pointCaret?: any } = {},
+  ): Promise<EditResult> {
+    const session = this.editStore.session;
+    if (isVertical && session?.type === 'item' && session.itemPart) {
+      const list = this.editStore.docEditGet(session.path)?.model?.blockList[session.blockIndex]?.list;
+      const textOwn = list ? listItemTextGet(list, String(session.itemPath)) : '';
+      const block = itemCodeBlockListGet(textOwn)[session.itemPart.index];
+      const isBeyondEmpty = block && (direction === 'before' ? textOwn.slice(0, block.start) : textOwn.slice(block.end)).trim() === '';
+      if (isBeyondEmpty) {
+        const isShifted = await this.editStore.sessionFocusShift(direction === 'before' ? 'previous' : 'next', pointCaret);
+        return isShifted ? { code: 0, message: '' } : { code: -1, message: `nothing ${direction === 'before' ? 'above' : 'below'} the block the caret can enter` };
+      }
+    }
+    return this.sessionItemEdit((list, { ref, textDraft, session: sessionOpen }) => {
+      const session = sessionOpen;
+      const index = session.itemPart?.index;
+      if (index === undefined) return { result: { code: -1, message: 'no part of the item is being edited' } };
+      const written = itemPartTextWrite(listItemTextGet(list, ref.itemPath), index, textDraft, { isRemoved });
+      if (!written) return { result: { code: -1, message: 'the block is not in the item anymore' } };
+      const offset = isRemoved || direction === 'before'
+        ? itemPartOffsetGet(written.text, written.start, 'before')
+        : itemPartOffsetGet(written.text, written.end, 'after');
+      const selectionInitial: EditSelectionInitial = isVertical && !isRemoved && Number.isFinite(point?.clientX) && Number.isFinite(point?.clientY)
+        ? { type: 'point', clientX: point.clientX, clientY: point.clientY }
+        : { type: 'offset', offset, isSource: true };
+      return { result: listItemTextSet(list, ref.itemPath, written.text), next: { selectionInitial } };
+    });
+  }
+
+  // the chip of a block double-clicked in the text of the item: the text is
+  // written, and the lines of that block are edited where they are drawn
+  sessionItemPartEnter(partIndex: number, selectionInitial?: EditSelectionInitial): Promise<EditResult> {
+    return this.sessionItemEdit((list, { ref, textItem }) => ({
+      result: listItemTextSet(list, ref.itemPath, textItem),
+      next: { partIndex, selectionInitial: selectionInitial ?? ('end' as EditSelectionInitial) },
+    }));
+  }
+
+  // the new-item button above of the bar: the item written as it is typed,
+  // a new item without text right before it, opened
+  sessionItemInsertBefore(): Promise<EditResult> {
+    return this.sessionItemEdit((list, { ref, textItem }) => ({
+      result: listEditThen(list, listItemTextSet(list, ref.itemPath, textItem), (listNext: any, itemPath: string) => listItemInsert(listNext, itemPath, 'before', '')),
+      next: { isCreated: true, selectionInitial: 'start' as EditSelectionInitial },
+    }));
+  }
+
+  // To text, in the bar of an item edited as the lines of a code block (the
+  // whole item, or a part): the lines joined into one line of text, the line
+  // breaks removed (codeTextJoin), in the place of the block
+  sessionItemTextJoin(): Promise<EditResult> {
+    return this.sessionItemEdit((list, { ref, textDraft, session }) => {
+      if (session.itemFormat !== 'block') return { result: { code: -1, message: 'the item is not a code block' } };
+      const joined = codeTextJoin(textDraft);
+      if (joined === '') return { result: { code: -1, message: 'the block has no text to keep' } };
+      const index = session.itemPart?.index;
+      if (index === undefined) return { result: listItemTextSet(list, ref.itemPath, joined), next: { selectionInitial: 'end' as EditSelectionInitial } };
+      const textOwn = listItemTextGet(list, ref.itemPath);
+      const block = itemCodeBlockListGet(textOwn)[index];
+      if (!block) return { result: { code: -1, message: 'the block is not in the item anymore' } };
+      // the line breaks around it go too, where a line of text stands beside it:
+      // the text runs on, a space apart (none between CJK characters)
+      let head = textOwn.slice(0, block.start);
+      let tail = textOwn.slice(block.end);
+      const isTextLine = (line: string | undefined) => line !== undefined && line.trim() !== '' && !/^\s*(`{3,}|~{3,}|<!--)/.test(line);
+      const lineBefore = head.endsWith('\n') ? head.slice(0, -1).split('\n').pop() : undefined;
+      const lineAfter = tail.startsWith('\n') ? tail.slice(1).split('\n')[0] : undefined;
+      if (isTextLine(lineBefore)) head = head.slice(0, -1) + (textJoinSpaceIs(lineBefore, joined) ? ' ' : '');
+      if (isTextLine(lineAfter)) tail = (textJoinSpaceIs(joined, lineAfter) ? ' ' : '') + tail.slice(1);
+      return {
+        result: listItemTextSet(list, ref.itemPath, `${head}${joined}${tail}`),
+        next: { selectionInitial: { type: 'offset', offset: head.length + joined.length, isSource: true } as EditSelectionInitial },
+      };
+    });
+  }
+
+  // To text, from the list menu of an item that is a code block: its lines
+  // joined into one line of text, the item a plain item ('' when it can be)
+  itemCodeTextReasonGet(ref: StructItemRef): string {
+    const text = this.itemTextGet(ref);
+    const parsed = codeBlockTextParse(text);
+    if (!parsed || !codeTextViewGet(text)) return 'the item is not a code block';
+    if (parsed.lang === 'asset') return 'the lines are an item of the asset store: open its panel to read them';
+    if (codeTextJoin(parsed.value) === '') return 'the block has no text';
+    return '';
+  }
+
+  itemCodeTextSet(ref: StructItemRef): Promise<EditResult> {
+    const reason = this.itemCodeTextReasonGet(ref);
+    if (reason) return Promise.resolve(this.itemWriteFail(ref, reason));
+    return this.itemEdit(ref, (list) => {
+      const parsed = codeBlockTextParse(listItemTextGet(list, ref.itemPath));
+      if (!parsed) return { code: -1, message: 'the item is not a code block' };
+      // an Anchor before the block stays, the marker of Code goes with the block
+      const prefixList = parsed.linePrefixList.filter((line: string) => !/^\s*<!--\s*renderComp=Code\b/.test(line));
+      return listItemTextSet(list, ref.itemPath, [...prefixList, codeTextJoin(parsed.value)].join('\n'));
+    });
   }
 
   // one edit asked from the editor of an item.
@@ -704,7 +944,7 @@ export class DocEditStructStore {
   // bar; a write that fails opens the item again with the text typed.
   private async sessionItemEdit(compute: (list: any, context: {
     ref: StructItemRef; textDraft: string; textItem: string; session: any;
-  }) => { result: EditResult; next?: { selectionInitial?: EditSelectionInitial; isCreated?: boolean } }): Promise<EditResult> {
+  }) => { result: EditResult; next?: { selectionInitial?: EditSelectionInitial; isCreated?: boolean; partIndex?: number } }): Promise<EditResult> {
     const session = this.editStore.session;
     if (!session || session.type !== 'item' || session.status === 'submitting') return { code: -1, message: 'no item is being edited' };
     if (this.itemWrite?.status === 'submitting') return { code: -1, message: 'another change of the list is being written' };
@@ -714,7 +954,7 @@ export class DocEditStructStore {
     if (!state || !list || this.editStore.docEditIsStale(ref.path)) return { code: -1, message: 'the document is being read again' };
     const textDraft = session.textDraft.replace(/\r\n/g, '\n');
     const textItem = this.editStore.sessionItemTextGet();
-    let computed: { result: EditResult; next?: { selectionInitial?: EditSelectionInitial; isCreated?: boolean } };
+    let computed: { result: EditResult; next?: { selectionInitial?: EditSelectionInitial; isCreated?: boolean; partIndex?: number } };
     try {
       computed = compute(list, { ref, textDraft, textItem, session });
     } catch (error: any) {
@@ -739,7 +979,7 @@ export class DocEditStructStore {
       if (resultWrite.code !== 0) {
         // nothing typed is lost: the item is opened again with its draft
         runInAction(() => { this.itemWrite = undefined; });
-        const isReopened = await this.editStore.sessionItemStart(ref.path, ref.blockIndex, ref.itemPath, { textDraft, isCreated: session.isCreated });
+        const isReopened = await this.editStore.sessionItemStart(ref.path, ref.blockIndex, ref.itemPath, { textDraft, isCreated: session.isCreated, partIndex: session.itemPart?.index });
         if (!isReopened) this.typeAheadClose();
         this.editStore.sessionMessageSet(resultWrite.message);
         return resultWrite;
@@ -750,6 +990,7 @@ export class DocEditStructStore {
       const isStarted = await this.editStore.sessionItemStart(ref.path, ref.blockIndex, result.data.itemPath, {
         selectionInitial: next.selectionInitial,
         isCreated: next.isCreated === true,
+        partIndex: next.partIndex,
       });
       // no editor to take what was typed
       if (!isStarted) this.typeAheadClose();
@@ -926,6 +1167,24 @@ export class DocEditStructStore {
     this.itemConfirm = undefined;
   }
 
+  // ---------- the lines of an item moved into the store, confirmed in its toolbar ----------
+
+  itemCodeAssetConfirmIs(ref: StructItemRef): boolean {
+    return refIsSame(this.itemCodeAssetConfirm, ref);
+  }
+
+  itemCodeAssetConfirmSet(ref: StructItemRef) {
+    if (this.itemCodeAssetMoveReasonGet(ref)) return;
+    this.itemMenu = undefined;
+    this.itemWrite = undefined;
+    this.itemConfirm = undefined;
+    this.itemCodeAssetConfirm = { ...ref };
+  }
+
+  itemCodeAssetConfirmClear() {
+    this.itemCodeAssetConfirm = undefined;
+  }
+
   // ---------- blocks ----------
 
   // the selected block swapped with its neighbor; the selection stays on it
@@ -1067,7 +1326,10 @@ export class DocEditStructStore {
 
 // the caret where two joined texts meet
 function offsetSelectionGet(result: EditResult): EditSelectionInitial {
-  return result.code === 0 && Number.isInteger(result.data?.offset) ? { type: 'offset', offset: result.data.offset } : 'end';
+  if (result.code !== 0 || !Number.isInteger(result.data?.offset)) return 'end';
+  return result.data.isOffsetSource === true
+    ? { type: 'offset', offset: result.data.offset, isSource: true }
+    : { type: 'offset', offset: result.data.offset };
 }
 
 function refIsSame(refA: StructItemRef | undefined, refB: StructItemRef | undefined): boolean {

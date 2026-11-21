@@ -458,6 +458,11 @@ Both flags default to `true`. `isEnabled: false` leaves declarations intact but 
 
 ## Search
 
+The page has two searches, each finding one kind of thing, until a unified search of the page replaces both ([TODO](doc_page_impl_TODO.md#unified-search)):
+
+- **The side panel's items, by their names**: the field at the top of the side panel, above the first doc page, marking the matched words in each result and revealing the item chosen in the tree ([Searching the items](doc_page_impl_side_panel.md#searching-the-items)). It takes the place of the search button of fumadocs, which the page hides in the sidebar, the header of a narrow page and the panel of a collapsed sidebar (`searchToggle: { enabled: false }`, one css rule).
+- **The text of the documents**: the search dialog of fumadocs, below, opened by its key (⌘K / Ctrl+K) only, since its buttons are hidden.
+
 The search dialog UI comes from fumadocs-ui (composable `SearchDialog` parts plugged into `RootProvider`). The engine is a small client-side matcher over per-doc structured data (headings + paragraphs, extracted with fumadocs' `remarkStructure`), computed lazily on first search and cached. Custom components can contribute semantic index entries through Fumadocs structured-data node metadata; multilingual extraction is specified in [doc_page_impl_multi-lang.md](doc_page_impl_multi-lang.md). Search results are grouped below a contextual page row whose label and route are normalized through the configured side-panel tree. Manifest title extraction ignores heading-looking lines inside fenced code blocks. No server, works embedded.
 
 ## Project Folder Structure

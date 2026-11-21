@@ -1,6 +1,12 @@
 import { createElement, Fragment, useEffect, useLayoutEffect, useRef } from 'react';
 import { caretPlaceAtEdge, caretPlaceInitial, caretRectGet } from './caret-place.js';
 import { useEditSlash } from '../slash/use-edit-slash.js';
+import { itemAtomCharStrip, itemAtomTextSourceGet } from '../../frontend/src/lib/doc-edit-item-atom.js';
+import {
+  surfaceAtomCaretIsAtEdgeLine, surfaceAtomCaretNormalize, surfaceAtomContentWrite, surfaceAtomDoubleClick, surfaceAtomKeyDown, surfaceAtomPointerDown,
+  surfaceAtomSelectionGet, surfaceAtomSelectionMark, surfaceAtomSelectionSet, surfaceAtomShapeKeep, surfaceAtomTextRead,
+  ATOM_LINES_EVENT, surfaceAtomBlockLineGet,
+} from './surface-atom.js';
 import './DocEdit.css';
 
 // The editing surface of a block's source: the block's own element made
@@ -61,13 +67,23 @@ import './DocEdit.css';
 //                       Tab changes its level); true when it took the key. the
 //                       offsets say where the caret or the selection is in the
 //                       text, textLength how long the text is
+//   atomModel           optional: the atoms of the text (lib/doc-edit-item-atom.js,
+//                       the code blocks of a list item drawn as icons). each is
+//                       one character of the text, drawn as a chip
+//                       (surface-atom.js): the caret moves over it, Backspace
+//                       selects it and then deletes it, a copy carries its
+//                       source, a double click on it is ATOM_OPEN_EVENT of the
+//                       DOM. the offsets above count a chip as one character
 //   onSubmitRequest()   Ctrl/Cmd + Enter
 //   onCancelRequest()   Escape
-//   onFocusShiftRequest(direction, { point })
+//   onFocusShiftRequest(direction, { point, rectSurface })
 //                       ArrowDown on the last line ('next') / ArrowUp on the
 //                       first line ('previous'): the author wants to go on
 //                       to the neighbor block. point is where the caret is
-//                       (viewport coordinates), so the neighbor can keep its x.
+//                       (viewport coordinates), so the neighbor can keep its x;
+//                       rectSurface the box of the surface. with atoms, ↑ / ↓
+//                       onto the line of a block among the text is
+//                       ATOM_LINES_EVENT of the DOM instead (its lines entered)
 export function EditSourceSurface({
   tag = 'div',
   kind,
@@ -75,6 +91,7 @@ export function EditSourceSurface({
   textVersion = 0,
   selectionInitial = 'end',
   lineSpaceListGet,
+  atomModel,
   slash,
   isLocked = false,
   isFocusedInitial = true,
@@ -93,6 +110,9 @@ export function EditSourceSurface({
   const onSelectionChangeRef = useRef(onSelectionChange);
   onSelectionChangeRef.current = onSelectionChange;
   const isSelectionReported = Boolean(onSelectionChange);
+  const isAtom = Boolean(atomModel);
+  const atomModelRef = useRef(atomModel);
+  atomModelRef.current = atomModel;
 
   // the selection inside the surface, told to whoever asked for it
   useEffect(() => {
@@ -106,10 +126,20 @@ export function EditSourceSurface({
     return () => document.removeEventListener('selectionchange', selectionHandle);
   }, [isSelectionReported]);
 
+  // the chips inside the selection show it
+  useEffect(() => {
+    if (!isAtom) return undefined;
+    const markHandle = () => {
+      if (elementRef.current) surfaceAtomSelectionMark(elementRef.current);
+    };
+    document.addEventListener('selectionchange', markHandle);
+    return () => document.removeEventListener('selectionchange', markHandle);
+  }, [isAtom]);
+
   useLayoutEffect(() => {
     const element = elementRef.current;
     if (!element) return;
-    surfaceContentWrite(element, text, lineSpaceListGet);
+    surfaceContentWrite(element, text, lineSpaceListGet, atomModelRef.current);
     // text set by code happens when the author is already working here
     if (textVersion > 0 && document.activeElement !== element) element.focus();
     caretPlaceAtEdge(element, 'end');
@@ -120,7 +150,13 @@ export function EditSourceSurface({
     const element = elementRef.current;
     if (!element || isLocked || !isFocusedInitial) return;
     element.focus({ preventScroll: true });
-    caretPlaceInitial(element, selectionInitial);
+    if (isAtom && selectionInitial?.type === 'offset') {
+      surfaceAtomSelectionSet(element, selectionInitial.offset);
+    } else {
+      caretPlaceInitial(element, selectionInitial);
+      // a place on a chip goes to its side nearer to the point (or the x the caret keeps on a line)
+      if (isAtom) surfaceAtomCaretNormalize(element, ['point', 'line'].includes(selectionInitial?.type) ? selectionInitial : undefined);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -138,6 +174,7 @@ export function EditSourceSurface({
       });
       if (isTaken) return;
     }
+    if (isAtom && surfaceAtomKeyDown(event, event.currentTarget)) return;
     if (event.key === 'Escape') {
       event.preventDefault();
       onCancelRequest?.();
@@ -157,10 +194,23 @@ export function EditSourceSurface({
       if (event.shiftKey || event.altKey || event.metaKey || event.ctrlKey) return;
       const direction = event.key === 'ArrowDown' ? 'next' : 'previous';
       const rectCaret = caretRectGet(event.currentTarget);
-      if (!caretIsAtEdgeLine(event.currentTarget, direction, rectCaret)) return;
+      // the line there is a block among the text: the caret goes into its lines
+      const blockLine = isAtom ? surfaceAtomBlockLineGet(event.currentTarget, direction, rectCaret) : undefined;
+      if (blockLine && rectCaret) {
+        event.preventDefault();
+        event.currentTarget.dispatchEvent(new CustomEvent(ATOM_LINES_EVENT, {
+          bubbles: true,
+          detail: { index: blockLine.index, line: direction === 'next' ? 'first' : 'last', clientX: rectCaret.left },
+        }));
+        return;
+      }
+      const isAtEdge = isAtom
+        ? surfaceAtomCaretIsAtEdgeLine(event.currentTarget, direction, rectCaret)
+        : caretIsAtEdgeLine(event.currentTarget, direction, rectCaret);
+      if (!isAtEdge) return;
       event.preventDefault();
       const point = rectCaret ? { clientX: rectCaret.left, clientY: rectCaret.top + rectCaret.height / 2 } : undefined;
-      onFocusShiftRequest(direction, { point });
+      onFocusShiftRequest(direction, { point, rectSurface: event.currentTarget.getBoundingClientRect() });
     }
   };
 
@@ -168,7 +218,19 @@ export function EditSourceSurface({
     // keep the surface plain text in browsers without plaintext-only
     event.preventDefault();
     const textPasted = event.clipboardData?.getData('text/plain') ?? '';
-    document.execCommand('insertText', false, textPasted);
+    // the characters of atoms are typed by the chips alone
+    document.execCommand('insertText', false, isAtom ? itemAtomCharStrip(textPasted) : textPasted);
+  };
+
+  // a copy of text with chips carries the blocks they stand for
+  const copyHandle = (event, isCut) => {
+    if (!isAtom) return;
+    const range = surfaceAtomSelectionGet(event.currentTarget);
+    if (!range || range.start === range.end) return;
+    event.preventDefault();
+    const textSelected = surfaceTextGet(event.currentTarget).slice(range.start, range.end);
+    event.clipboardData?.setData('text/plain', itemAtomTextSourceGet(textSelected, atomModelRef.current));
+    if (isCut && !isLocked) document.execCommand('delete');
   };
 
   // in line mode the lines are checked after every change: their spaces
@@ -176,6 +238,7 @@ export function EditSourceSurface({
   // during an IME composition, which owns the DOM until it ends
   const textReport = (element, isComposing) => {
     if (lineSpaceListGet && !isComposing) surfaceLineShapeKeep(element, lineSpaceListGet);
+    if (isAtom && !isComposing) surfaceAtomShapeKeep(element);
     onTextChange?.(surfaceTextGet(element));
   };
 
@@ -191,6 +254,7 @@ export function EditSourceSurface({
     spellCheck: false,
     'data-kind': kind,
     'data-lines': lineSpaceListGet ? '' : undefined,
+    'data-atoms': isAtom ? '' : undefined,
     'data-locked': isLocked ? '' : undefined,
     onInput: (event) => {
       textReport(event.currentTarget, event.nativeEvent?.isComposing === true);
@@ -199,6 +263,10 @@ export function EditSourceSurface({
     onCompositionEnd: (event) => textReport(event.currentTarget, false),
     onKeyDown: keyDownHandle,
     onPaste: pasteHandle,
+    onCopy: isAtom ? (event) => copyHandle(event, false) : undefined,
+    onCut: isAtom ? (event) => copyHandle(event, true) : undefined,
+    onPointerDown: isAtom ? (event) => surfaceAtomPointerDown(event, event.currentTarget) : undefined,
+    onDoubleClick: isAtom ? (event) => surfaceAtomDoubleClick(event, event.currentTarget) : undefined,
   });
   // the menu of the slash mode is a portal: nothing is added to the flow
   return slashBinding.menu ? createElement(Fragment, null, surface, slashBinding.menu) : surface;
@@ -210,6 +278,7 @@ export function EditSourceSurface({
 // line by line instead (innerText would count an empty line twice).
 function surfaceTextGet(element) {
   if (element.hasAttribute('data-lines')) return surfaceLineListRead(element).join('\n');
+  if (element.hasAttribute('data-atoms')) return surfaceAtomTextRead(element).replace(/\n$/, '');
   return element.innerText.replace(/\n$/, '');
 }
 
@@ -224,7 +293,11 @@ function surfaceTextGet(element) {
 // are the lines built again, with the caret put back at the same place of
 // the text.
 
-function surfaceContentWrite(element, text, lineSpaceListGet) {
+function surfaceContentWrite(element, text, lineSpaceListGet, atomModel) {
+  if (atomModel) {
+    surfaceAtomContentWrite(element, text, atomModel);
+    return;
+  }
   if (!lineSpaceListGet) {
     // a text that ends with a line break gets one more: the browser draws no
     // line after a last line break, and the caret could not stand there.
@@ -295,6 +368,10 @@ function surfaceLineShapeKeep(element, lineSpaceListGet) {
 // the selection inside the surface as offsets into its text: { start, end, text };
 // undefined when it is not inside the surface
 function selectionRangeGet(element) {
+  if (element.hasAttribute('data-atoms')) {
+    const range = surfaceAtomSelectionGet(element);
+    return range ? { start: range.start, end: range.end, text: surfaceTextGet(element).slice(range.start, range.end) } : undefined;
+  }
   const selection = window.getSelection?.();
   if (!selection || selection.rangeCount === 0) return undefined;
   const range = selection.getRangeAt(0);
@@ -325,6 +402,7 @@ function textBeforeCaretGet(element) {
   const rangeBefore = document.createRange();
   rangeBefore.selectNodeContents(element);
   rangeBefore.setEnd(range.endContainer, range.endOffset);
+  if (element.hasAttribute('data-atoms')) return surfaceAtomTextRead(rangeBefore.cloneContents());
   if (!element.hasAttribute('data-lines')) return rangeBefore.toString();
   return surfaceLineListRead(rangeBefore.cloneContents()).join('\n');
 }

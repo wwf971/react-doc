@@ -7,7 +7,7 @@ import { DocEditBlockContext, DocEditBlockFloatContext, useDocEditDoc } from './
 import { DocEditBlockToolbar } from './DocEditBlockToolbar.jsx';
 import { DocEditBlockEditor, blockLabelInfoGet } from './DocEditBlockEditor.jsx';
 import { DocBlockSelectBlock } from '../block-select/DocBlockSelectBlock.jsx';
-import { itemPathAtPoint } from '../edit-structure/struct-geometry.js';
+import { itemCodeElementListGet, itemPathAtPoint } from '../edit-structure/struct-geometry.js';
 import {
   EDIT_CLICK_OWN_SELECTOR,
   clickAfterPointerDownSuppress,
@@ -137,7 +137,13 @@ const DocEditBlockEditable = observer(function DocEditBlockEditable({ blockIndex
         ? String(itemElement.dataset.editItem)
         : itemPathAtPoint(event.currentTarget, event.clientY);
       if (itemPath) {
-        itemEnterRequest(itemPath, event);
+        // a click on the lines of a code block among the text of the item
+        // (not on a tile, which opens its dialog): that part of the item
+        const codeElement = event.target.closest?.('[data-code-key]');
+        const partIndex = itemElement && codeElement && codeElement.closest('li') === itemElement && !codeElement.classList.contains('doc-code-icon')
+          ? itemCodeElementListGet(itemElement).indexOf(codeElement)
+          : -1;
+        itemEnterRequest(itemPath, event, partIndex);
         return;
       }
     }
@@ -145,9 +151,10 @@ const DocEditBlockEditable = observer(function DocEditBlockEditable({ blockIndex
   };
 
   // a list block is entered item by item: the item under the pointer
-  const itemEnterRequest = (itemPath, point) => {
+  const itemEnterRequest = (itemPath, point, partIndex = -1) => {
     const event = eventRouter.eventBuild({
       type: 'editItemEnterRequest',
+      data: partIndex >= 0 ? { partIndex } : {},
       source: { placement: 'editBlock', sourcePath: path, blockIndex: index, itemPath },
       point,
     });

@@ -1,11 +1,13 @@
 import { useRef } from 'react';
 import { observer } from 'mobx-react-lite';
 import {
-  ArrowDown, ArrowUp, Check, ChevronDown, ChevronUp, CornerDownRight, GripVertical, ListIcon, ListIndentDecrease,
-  ListIndentIncrease, ListOrdered, ListTree, LoaderCircle, MousePointer2, Pencil, Plus, Trash2, X,
+  ArrowDown, ArrowUp, Check, ChevronDown, ChevronUp, CornerDownRight, GripVertical, History, ListIcon, ListIndentDecrease,
+  ListIndentIncrease, ListOrdered, ListTree, LoaderCircle, MousePointer2, Pencil, Plus, Trash2, Upload, X,
 } from '../../frontend/UICommon.js';
 import { useDocStores } from '../../frontend/src/store/context.js';
 import { useDocEditDoc } from '../edit/DocEditDocContext.js';
+import { codeTextEntry, codeViewEntryListBuild } from '../edit/code-view-entry.js';
+import { useAssetPanelIsAvailable } from '../asset/AssetPanelPopup.jsx';
 import '../edit/DocEdit.css';
 import './DocEditStruct.css';
 
@@ -16,13 +18,25 @@ import './DocEditStruct.css';
 // item, where its buttons act on what is selected (the item alone, or the
 // item with what is under it).
 //
-//   hover    [grip] [edit] [item above] [item below] [list ▾] [delete]
+//   hover    [grip] [edit] [to asset | asset] [item above] [item below] [list ▾] [delete]
 //   pinned   [what is selected] [grip] [edit] [item above] [item below]
 //            [level up] [level deeper] [move up] [move down] [list ▾] [delete]
 //
+// an item that is a fenced code block has the to asset button, as a code
+// block between paragraphs has in its toolbar: asked in the toolbar first
+// (itemCodeAssetConfirm), its lines go into an item of the asset service
+// layer and the item becomes a block of Code reading them. that item then has
+// the asset button in its place: the asset panel of the item it reads. both
+// are buttons, never entries of the menu. (a code block standing in the text
+// of an item among other things has them in the dialog of its icon.)
+//
 // the list menu holds the operations of the list: the level of the item (an
 // item with sub-items can go deeper alone or with them), moving it among its
-// siblings, a sub-item, bullets or numbers for its list, selecting it. the
+// siblings, a sub-item, bullets or numbers for its list, selecting it. an
+// item that is a code block has its own group first: its view, written into
+// it (doc_page_impl_mdx_code.md#changing-the-view-from-the-page;
+// editItemCodeViewRequest). moving its lines into the asset service layer is
+// a button of the toolbar. the
 // pinned toolbar shows the level and move operations as buttons, since what
 // they act on is the selection.
 //
@@ -41,7 +55,7 @@ import './DocEditStruct.css';
 const ICON_SIZE = 14;
 
 export const DocEditItemToolbar = observer(function DocEditItemToolbar({ blockIndex, itemPath, isPinned }) {
-  const { componentConfig, editStore, eventRouter, onEvent: onEventPage, structStore } = useDocStores();
+  const { assetStore, componentConfig, configStore, editStore, eventRouter, onEvent: onEventPage, structStore } = useDocStores();
   const { path } = useDocEditDoc();
   const menuButtonRef = useRef(null);
   const isMenuClosedByPointerDownRef = useRef(false);
@@ -57,6 +71,12 @@ export const DocEditItemToolbar = observer(function DocEditItemToolbar({ blockIn
   const confirm = structStore.itemConfirmIs(itemRef) ? structStore.itemConfirm : undefined;
   const write = structStore.itemWriteIs(itemRef) ? structStore.itemWrite : undefined;
   const reasonGet = (action, scope) => structStore.itemEditReasonGet(itemRef, action, scope);
+  const codeView = structStore.itemCodeViewGet(itemRef);
+  const isCodeAssetOffered = codeView?.form === 'fence';
+  const reasonCodeAsset = isCodeAssetOffered ? structStore.itemCodeAssetMoveReasonGet(itemRef) : '';
+  const isCodeAssetConfirm = structStore.itemCodeAssetConfirmIs(itemRef);
+  const isAssetPanelAvailable = useAssetPanelIsAvailable();
+  const codeAssetRef = codeView?.form === 'component' && isAssetPanelAvailable ? structStore.itemCodeAssetRefGet(itemRef) : undefined;
 
   const itemEventDispatch = (type, data = {}) => {
     const event = eventRouter.eventBuild({
@@ -71,7 +91,14 @@ export const DocEditItemToolbar = observer(function DocEditItemToolbar({ blockIn
   const moveRequest = (direction) => void itemEventDispatch('editItemMoveRequest', { direction });
 
   const menuItemList = isMenuOpen
-    ? menuItemListBuild({ structStore, itemRef, childCount, isPinned, isSubmitting })
+    ? menuItemListBuild({
+      structStore,
+      itemRef,
+      childCount,
+      isPinned,
+      isSubmitting,
+      codeViewConfig: configStore?.valueDocGet(path, 'CodeBlockViewAsListItem') ?? '',
+    })
     : [];
   const menuItemChoose = (entryId) => {
     structStore.itemMenuClose();
@@ -83,6 +110,8 @@ export const DocEditItemToolbar = observer(function DocEditItemToolbar({ blockIn
     else if (entryId === 'child') void itemEventDispatch('editItemInsertRequest', { position: 'child' });
     else if (entryId === 'unordered' || entryId === 'ordered') void itemEventDispatch('editItemListTypeRequest', { type: entryId });
     else if (entryId === 'select') void structStore.selectionSet(path, blockIndex, itemPath);
+    else if (String(entryId).startsWith('codeView:')) void itemEventDispatch('editItemCodeViewRequest', { view: String(entryId).slice('codeView:'.length) });
+    else if (entryId === 'codeText') void itemEventDispatch('editItemCodeTextRequest');
     else if (entryId === 'grow') structStore.selectionGrowStep();
   };
 
@@ -114,6 +143,21 @@ export const DocEditItemToolbar = observer(function DocEditItemToolbar({ blockIn
           onCancel={() => structStore.itemConfirmClear()}
         />
       ) : null}
+      {isCodeAssetConfirm ? (
+        <div className="doc-edit-confirm is-neutral" role="alertdialog" aria-label="Move the lines of this item into the asset service layer?">
+          <span>Move the lines of this item into the asset service layer?</span>
+          <button type="button" disabled={isSubmitting} onClick={() => void itemEventDispatch('editItemCodeAssetRequest')}>
+            {write?.status === 'submitting'
+              ? <LoaderCircle aria-hidden="true" size={11} strokeWidth={2.2} className="doc-spin" />
+              : <Upload aria-hidden="true" size={11} strokeWidth={2.2} />}
+            <span>Move</span>
+          </button>
+          <button type="button" disabled={isSubmitting} onClick={() => structStore.itemCodeAssetConfirmClear()}>
+            <X aria-hidden="true" size={11} strokeWidth={2.2} />
+            <span>Keep</span>
+          </button>
+        </div>
+      ) : null}
       {isPinned ? <span className="doc-edit-toolbar-label">{label}</span> : null}
       <div className="doc-edit-toolbar-actions doc-button-group" role="group" aria-label="Item actions">
         <button
@@ -134,6 +178,20 @@ export const DocEditItemToolbar = observer(function DocEditItemToolbar({ blockIn
           onClick={() => void itemEventDispatch('editItemEnterRequest')}>
           <Pencil aria-hidden="true" size={ICON_SIZE} strokeWidth={2} />
         </button>
+        {isCodeAssetOffered ? (
+          <button type="button" disabled={isSubmitting || reasonCodeAsset !== ''} aria-pressed={isCodeAssetConfirm}
+            title={reasonCodeAsset || 'Move the lines into the asset service layer: the item becomes a block of Code reading them'}
+            aria-label="Move the lines into the asset service layer"
+            onClick={() => (isCodeAssetConfirm ? structStore.itemCodeAssetConfirmClear() : structStore.itemCodeAssetConfirmSet(itemRef))}>
+            <Upload aria-hidden="true" size={ICON_SIZE} strokeWidth={2} />
+          </button>
+        ) : null}
+        {codeAssetRef ? (
+          <button type="button" disabled={isSubmitting} title="Asset: the item the lines are, its versions and history" aria-label="Asset: versions and history"
+            onClick={() => assetStore.panelOpen(codeAssetRef.store, codeAssetRef.itemId, codeAssetRef.versionIdRef, { compName: 'Code', propsAuthored: {}, sourcePath: path })}>
+            <History aria-hidden="true" size={ICON_SIZE} strokeWidth={2} />
+          </button>
+        ) : null}
         <button type="button" disabled={isSubmitting} title="New item above" aria-label="New item above"
           onClick={() => void itemEventDispatch('editItemInsertRequest', { position: 'before' })}>
           <Plus aria-hidden="true" size={ICON_SIZE} strokeWidth={2.2} />
@@ -223,7 +281,7 @@ export const DocEditItemToolbar = observer(function DocEditItemToolbar({ blockIn
 
 // the entries of the list menu; an entry that cannot be chosen now is greyed
 // out and says why on hover
-function menuItemListBuild({ structStore, itemRef, childCount, isPinned, isSubmitting }) {
+function menuItemListBuild({ structStore, itemRef, childCount, isPinned, isSubmitting, codeViewConfig }) {
   const reasonGet = (action, scope) => structStore.itemEditReasonGet(itemRef, action, scope);
   const listType = structStore.itemListTypeGet(itemRef);
   const itemBuild = (id, Icon, text, title, reason = '', mark = '') => ({
@@ -234,6 +292,21 @@ function menuItemListBuild({ structStore, itemRef, childCount, isPinned, isSubmi
   });
   const headBuild = (id, text) => ({ id, isContainer: true, comp: ItemMenuHead, compProps: { text } });
   const itemList = [];
+  const codeView = structStore.itemCodeViewGet(itemRef);
+  if (codeView) {
+    itemList.push(
+      headBuild('head:code', 'Code block'),
+      ...codeViewEntryListBuild(codeViewConfig).map((entry) => itemBuild(
+        `codeView:${entry.id}`,
+        entry.icon,
+        entry.label,
+        entry.description,
+        '',
+        entry.id === codeView.view ? 'current' : '',
+      )),
+      itemBuild('codeText', codeTextEntry.icon, codeTextEntry.label, codeTextEntry.description, structStore.itemCodeTextReasonGet(itemRef)),
+    );
+  }
   if (!isPinned) {
     itemList.push(headBuild('head:level', 'Level'));
     if (childCount > 0) {

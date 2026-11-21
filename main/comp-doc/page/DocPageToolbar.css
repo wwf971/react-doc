@@ -20,3 +20,29 @@
   flex-wrap: wrap;
   margin-bottom: 0.25rem;
 }
+
+/* ---------- the head of the page (DocPageHead) ----------
+   the toolbar and the path bar, sticking below the sticky rows of fumadocs
+   while the document scrolls under them. the gap between the two is the gap
+   of the page column (gap-4 of the fumadocs article), so nothing moves at
+   rest; the padding lies over negative margins for the same reason, and
+   gives the stuck head a little room above the toolbar and below the path.
+   above the floating controls of the blocks in edit mode (z-index 10, 24 for
+   an open menu), below the header of fumadocs (30). */
+.doc-page-head {
+  position: sticky;
+  top: var(--fd-docs-row-3, 0px);
+  z-index: 26;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  min-width: 0;
+  margin-block: -0.5rem;
+  padding-block: 0.5rem;
+  background: var(--color-fd-background);
+  transition: box-shadow 0.15s;
+}
+
+.doc-page-head[data-stuck] {
+  box-shadow: 0 1px 0 0 var(--color-fd-border);
+}

@@ -3,7 +3,7 @@ import { observer } from 'mobx-react-lite';
 import { ArrowLeft, ClipboardPaste, LoaderCircle, Plus, Search } from '../../frontend/UICommon.js';
 import { useDocStores } from '../../frontend/src/store/context.js';
 import { useDocEditDoc } from './DocEditDocContext.js';
-import { editTemplateListBuild } from './edit-template.js';
+import { editTemplateListBuild, editTemplateSearch } from './edit-template.js';
 import { ObjectSearchPanel } from '../object/ObjectSearchPanel.jsx';
 import './DocEdit.css';
 
@@ -19,8 +19,11 @@ import './DocEdit.css';
 //
 // the rows list the basic blocks, the components marked isInsertCommon and
 // the dashboards of the service templates the backend knows
-// (doc_page_impl_service_dashboard.md#creating-a-dashboard);
-// the search finds every entry by tag name, label and description, and
+// (doc_page_impl_service_dashboard.md#creating-a-dashboard), each row in
+// the order of edit-template.js: the ranked entries first, by rank
+// (EditInsertRankByEntry of the document, doc_page_impl_edit.md#the-order-of-the-insert-menu);
+// the search finds every entry by tag name, label and description, the
+// ranked matches first by rank, then the others by where they match, and
 // after them the objects an entry naming an object would be asked for (a
 // frontend object by its name or the label of its type: "cv" finds the CVs
 // of the page, though no component is named so), each written at once as
@@ -64,6 +67,7 @@ const DocEditInsertMenuOpen = observer(function DocEditInsertMenuOpen({ menu }) 
   const [query, querySet] = useState('');
   const [indexActive, indexActiveSet] = useState(-1);
   const serviceDashboardList = serviceStore.dashboardInsertList;
+  const rankByEntry = configStore.valueDocGet(path, 'EditInsertRankByEntry');
   const templateList = useMemo(
     () => editTemplateListBuild({
       configDoc: sourceStore.configDoc,
@@ -72,10 +76,11 @@ const DocEditInsertMenuOpen = observer(function DocEditInsertMenuOpen({ menu }) 
       docFormat: format,
       compConfigGet: (compId) => configStore.compConfigGet(compId, path),
       serviceDashboardList,
+      rankByEntry,
     }),
-    [compById, configStore, format, path, serviceDashboardList, sourceStore.configDoc],
+    [compById, configStore, format, path, rankByEntry, serviceDashboardList, sourceStore.configDoc],
   );
-  const resultTemplateList = useMemo(() => templateSearch(templateList, query), [templateList, query]);
+  const resultTemplateList = useMemo(() => editTemplateSearch(templateList, query), [templateList, query]);
   const isSubmitting = menu.status === 'submitting';
   const isQuery = query.trim() !== '';
   // the objects of the entries that name one, found by the same words: asked of the registry
@@ -335,27 +340,6 @@ const DocEditInsertPick = observer(function DocEditInsertPick({ menu, template, 
     </>
   );
 });
-
-// the entries matching the query, case-insensitive, by where they match:
-// the name (tag name of a component or a dashboard, label of a text block)
-// first, then the label of a component, then the description
-function templateSearch(templateList, query) {
-  const queryLower = query.trim().toLowerCase();
-  if (queryLower === '') return [];
-  const resultList = [];
-  for (const template of templateList) {
-    const name = template.group === 'text' ? template.label : template.compName;
-    const label = template.group !== 'text' && template.label !== template.compName ? template.label : '';
-    let rank;
-    if (name.toLowerCase().includes(queryLower)) rank = 0;
-    else if (label.toLowerCase().includes(queryLower)) rank = 1;
-    else if (template.description.toLowerCase().includes(queryLower)) rank = 2;
-    else continue;
-    resultList.push({ template, name, label, description: template.description, rank, queryLower });
-  }
-  resultList.sort((a, b) => a.rank - b.rank || a.name.localeCompare(b.name));
-  return resultList;
-}
 
 // the objects an entry naming an object (objectPick) would be asked for, matching the
 // query by their name, the label of their type or their description; each is written as

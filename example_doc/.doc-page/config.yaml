@@ -30,6 +30,13 @@ config:
   # opening the overview, is a choice of the deployment: the workspace file at
   # the project root sets it in its own "config", the workspace layer)
   TagsDisplayAtLinkPosition: before         # replaced by the declaration after this file in entry.yaml
+  # document level. the ranks of the insert menu, merged entry by entry with
+  # those of the package (config.yaml configDefault ranks the basic blocks
+  # c to w): the counter of this doc page comes after them and before every
+  # unranked component, so "demo" in the search of the menu offers it first.
+  # design: doc_page_impl_edit.md#the-order-of-the-insert-menu
+  EditInsertRankByEntry:
+    component:DemoCounter: x
   # component-level keys, by the component's tag name
   # (doc_page_impl_config.md#component-level-config)
   compConfig:

@@ -23,10 +23,24 @@
   --fd-docs-height: 100cqh;
 }
 
+/* what the browser scrolls into view (scrollIntoView, a focused control)
+   stops below the sticky head of the page, not under it (DocPageHead sets
+   --doc-page-head-inset) */
+.doc-page-mdx {
+  scroll-padding-top: calc(var(--doc-page-head-inset, 0px) + 8px);
+}
+
 /* trailing room so the last side-panel row scrolls above the floating
    theme switch instead of staying under it */
 .doc-page-mdx #nd-sidebar [data-radix-scroll-area-viewport] {
   padding-bottom: 4rem;
+}
+
+/* the search button of fumadocs on the floating panel of a collapsed
+   sidebar, which searchToggle does not reach: the search of the side panel
+   takes its place (doc_page_impl_side_panel.md#searching-the-items) */
+.doc-page-mdx [data-sidebar-panel] button[data-search] {
+  display: none;
 }
 
 .doc-page-mdx :is(h1, h2, h3, h4, h5, h6),

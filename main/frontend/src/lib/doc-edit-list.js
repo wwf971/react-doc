@@ -440,11 +440,14 @@ export function listItemMergeUp(model, itemPath, { textItem, textReceiver } = {}
   const { item, list, index, itemParent } = located;
   const receiver = locatedReceiver.item;
   // the two texts as they are typed: a text block is its lines (itemTextParse)
-  const up = itemTextParse(textReceiver ?? itemTextOf(receiver));
-  const own = itemTextParse(textItem ?? itemTextOf(item));
-  // an item without text has nothing to join: it is simply gone
-  const reason = own.text === '' ? '' : itemJoinReasonGet(up, own);
-  if (reason) return editRefuse(reason);
+  const upRaw = textReceiver ?? itemTextOf(receiver);
+  const ownRaw = textItem ?? itemTextOf(item);
+  const up = itemTextParse(upRaw);
+  const own = itemTextParse(ownRaw);
+  // texts that meet at a code block join as they are written, a line apart
+  // (an item has no kind of block that must be its whole text); an item
+  // without text has nothing to join: it is simply gone
+  const isJoinedAsSource = own.text !== '' && itemJoinIsSource(up, own);
   if (itemHasContentAfterList(item)) return editRefuse(messageContentAfterList);
   if (receiver === itemParent) {
     // the row above is the item it is under: what is under it takes its place
@@ -471,10 +474,20 @@ export function listItemMergeUp(model, itemPath, { textItem, textReceiver } = {}
   // the joined text is written as its lines ask: a text block when it holds
   // a line break (with the info of the block that took part), else a line
   const isTextChanged = own.text !== '' || textReceiver !== undefined;
-  if (isTextChanged) itemTextApply(receiver, itemTextWrite(`${up.text}${own.text}`, up.info ?? own.info));
+  if (isTextChanged) {
+    const textJoined = isJoinedAsSource
+      ? [upRaw, ownRaw].filter((text) => text !== '').join('\n')
+      : itemTextWrite(`${up.text}${own.text}`, up.info ?? own.info);
+    itemTextApply(receiver, textJoined);
+  }
   const result = editFinish(edit, { itemFocus: receiver, itemLenientList: isTextChanged ? [receiver] : [] });
   if (result.code !== 0) return result;
-  return { ...result, data: { ...result.data, offset: up.text.length } };
+  // offset: where the texts meet, in the text as typed (the lines of a text
+  // block); in the text as written when they joined as written (isOffsetSource)
+  return {
+    ...result,
+    data: { ...result.data, offset: isJoinedAsSource ? upRaw.length : up.text.length, isOffsetSource: isJoinedAsSource },
+  };
 }
 
 // one edit after another, as one result: the second is computed on the list
@@ -496,19 +509,26 @@ function itemTextOf(item) {
   return segmentFirst?.type === 'content' ? segmentFirst.lineList.join('\n') : '';
 }
 
-// why two texts (itemTextParse) do not join into one, '' when they do. the
-// lines of a text block of text join like lines of text. code is not a line
-// to join to: a block of code, and a text that ends or starts with a fenced
-// block (a component with its data).
+// whether two texts (itemTextParse) meet at a code block, and are joined as
+// they are written, a line apart, instead of as text. the lines of a text
+// block of text join like lines of text; a block of code, and a fenced block
+// where the texts meet (a component with its data, a code block drawn as an
+// icon), are not a line to join to, but they join the item: the row above
+// ends with the block, the text follows it. a text block meeting a text that
+// holds a block is joined as written too, since a fence holds no fence.
 const REGEX_FENCE_LINE = /^\s*(`{3,}|~{3,})/;
-function itemJoinReasonGet(up, own) {
-  const messageUp = 'the item above ends with a code block, which no text joins';
-  const messageOwn = 'a code block does not join the text above it';
-  if (up.info !== undefined && !itemBlockInfoIsText(up.info)) return messageUp;
-  if (own.info !== undefined && !itemBlockInfoIsText(own.info)) return messageOwn;
-  if (up.info === undefined && REGEX_FENCE_LINE.test(up.text.split('\n').pop() ?? '')) return messageUp;
-  if (own.info === undefined && REGEX_FENCE_LINE.test(own.text.split('\n')[0] ?? '')) return messageOwn;
-  return '';
+const REGEX_MARKER_LINE = /^\s*<!--\s*renderComp=/;
+function itemJoinIsSource(up, own) {
+  const isCode = (info) => info !== undefined && !itemBlockInfoIsText(info);
+  if (isCode(up.info) || isCode(own.info)) return true;
+  const upLineList = up.text.split('\n');
+  const ownLineList = own.text.split('\n');
+  const hasBlock = (lineList) => lineList.some((line) => REGEX_FENCE_LINE.test(line) || REGEX_MARKER_LINE.test(line));
+  if (up.info !== undefined) return hasBlock(ownLineList);
+  if (own.info !== undefined) return hasBlock(upLineList);
+  return REGEX_FENCE_LINE.test(upLineList[upLineList.length - 1] ?? '')
+    || REGEX_FENCE_LINE.test(ownLineList[0] ?? '')
+    || REGEX_MARKER_LINE.test(ownLineList[0] ?? '');
 }
 
 // ---------- an item written as a text block ----------

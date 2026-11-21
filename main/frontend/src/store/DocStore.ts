@@ -13,12 +13,19 @@ export type RouteMode = 'query' | 'memory';
 type NavigationHistoryMode = 'push' | 'replace' | 'skip';
 // text: display text in the current language; textLocalized: the item label
 // as authored, kept so the entry follows later language changes.
+// place: where the reader was in the document when the entry was left, by
+// its structure (doc_page_impl_nav.md#reading-places); brought back when the
+// history returns to the entry
 type NavigationHistoryEntry = {
   hash: string;
   route: string;
   text: string;
   textLocalized: unknown;
+  place?: ReadingPlace;
 };
+// a reading place (lib/doc-reading-place.js): the section, the block at the
+// reading line and the offset into it, the scroll offset as a last resort
+export type ReadingPlace = Record<string, any>;
 type NavigationSnapshot = {
   requestVersion: number;
   route: string;
@@ -81,6 +88,20 @@ export class DocStore {
   // the place inside the document the last navigation asked for beyond its
   // fragment; undefined after every navigation that did not ask for one
   docCurrentFocus: NavigationFocus | undefined = undefined;
+  // the reading place the last navigation brings back
+  // (doc_page_impl_nav.md#reading-places): the place of the history entry
+  // returned to, or the latest place of a document opened again by a link;
+  // undefined when it brings none back (then its fragment, its focus or the top)
+  docCurrentPlace: ReadingPlace | undefined = undefined;
+  // content path -> the place the reader left that document at, the latest
+  // one: what a link to it brings back
+  readingPlaceByContentPath: Record<string, ReadingPlace> = {};
+  // reads the place of the body shown, given by the view (DocPageView): the
+  // store records it on the history entry being left, before the page changes
+  readingPlaceReader: (() => { pathContent: string; place: ReadingPlace } | undefined) | undefined = undefined;
+  // the sticky head of the page (toolbar and path bar, DocPageHead) stands at
+  // the top of the page while the document scrolls under it
+  pageHeadIsStuck = false;
   // Path/hash values do not change when the user selects the current index
   // destination again. Keep a separate request signal so the view can repeat
   // the requested top reset or fragment alignment and highlight.
@@ -136,11 +157,20 @@ export class DocStore {
       navigationRuntime: false,
       navigationSnapshotCurrent: false,
       onInvalidBrowserRoute: false,
+      readingPlaceReader: false,
     });
   }
 
   docBodyPathMountedSet(path: string) {
     this.docBodyPathMounted = path;
+  }
+
+  readingPlaceReaderSet(reader: (() => { pathContent: string; place: ReadingPlace } | undefined) | undefined) {
+    this.readingPlaceReader = reader;
+  }
+
+  pageHeadIsStuckSet(isStuck: boolean) {
+    if (this.pageHeadIsStuck !== isStuck) this.pageHeadIsStuck = isStuck;
   }
 
   get contentCurrentPath(): string {
@@ -540,6 +570,8 @@ export class DocStore {
     const param = new URLSearchParams(window.location.search).get('doc');
     const hash = window.location.hash.slice(1);
     if (!param) return;
+    // the page still shows the entry being left: its place is recorded first
+    this.readingPlaceRecord();
     if (!this.routeResolve(param)) {
       this.navigate(this.routeHome, '', { historyMode: 'replace', isFromHistory: true });
       this.onInvalidBrowserRoute?.({ routeFallback: this.routeHome, routeInvalid: param });
@@ -558,7 +590,11 @@ export class DocStore {
         ...this.navigationHistoryEntryList[indexHistory],
         hash,
       };
-      this.navigate(param, hash, { historyMode: 'skip', isFromHistory: true });
+      this.navigate(param, hash, {
+        historyMode: 'skip',
+        isFromHistory: true,
+        place: this.navigationHistoryEntryList[indexHistory].place,
+      });
       return;
     }
 
@@ -581,6 +617,10 @@ export class DocStore {
     // a place finer than the fragment to go to once the body is rendered
     // (doc_page_impl_nav_backlink.md#going-to-a-backlink)
     focus?: NavigationFocus;
+    // the reading place to bring back (a history entry's); without it, a
+    // navigation to another document with neither fragment nor focus brings
+    // back the latest place of that document (doc_page_impl_nav.md#reading-places)
+    place?: ReadingPlace;
   }) {
     const indexHash = target.indexOf('#');
     const path = indexHash >= 0 ? target.slice(0, indexHash) : target;
@@ -594,11 +634,22 @@ export class DocStore {
       return false;
     }
 
+    // the place of the document being left, while the page still shows it (a
+    // move in the history records it itself, before the history index moves)
+    if (!options?.isFromHistory) this.readingPlaceRecord();
+    const contentPathNext = item.type === 'inline' ? item.route : (item.docPath ?? '');
+    const isContentChanged = contentPathNext !== this.contentCurrentPath;
+
     this.routeCurrentPath = item.route;
     this.itemCurrentId = item.id;
     this.docCurrentPath = item.docPath ?? '';
     this.docCurrentHash = hash;
     this.docCurrentFocus = options?.focus;
+    this.docCurrentPlace = options?.place ?? (
+      !options?.isFromHistory && !hash && !options?.focus && isContentChanged
+        ? this.readingPlaceByContentPath[contentPathNext]
+        : undefined
+    );
     if (!options?.isRequestVersionKept) this.navigationRequestVersion += 1;
     this.navigationError = '';
     this.linkDropdownOpenId = '';
@@ -821,14 +872,29 @@ export class DocStore {
     }
   }
 
+  // the place the reader is at in the document shown, recorded on the current
+  // history entry and as the latest place of that document; nothing when the
+  // view has no body of that document to read it from
+  private readingPlaceRecord() {
+    const read = this.readingPlaceReader?.();
+    if (!read || read.pathContent !== this.contentCurrentPath) return;
+    const entry = this.navigationHistoryEntryList[this.navigationHistoryIndex];
+    if (entry && entry.route === this.routeCurrentPath) {
+      this.navigationHistoryEntryList[this.navigationHistoryIndex] = { ...entry, place: read.place };
+    }
+    this.readingPlaceByContentPath[read.pathContent] = read.place;
+  }
+
   private navigationHistoryMove(index: number): boolean {
     const indexPrevious = this.navigationHistoryIndex;
     const entry = this.navigationHistoryEntryList[index];
     if (!entry) return false;
+    this.readingPlaceRecord();
     this.navigationHistoryIndex = index;
     const isNavigated = this.navigate(entry.route, entry.hash, {
       historyMode: 'skip',
       isFromHistory: true,
+      place: entry.place,
     });
     if (!isNavigated) this.navigationHistoryIndex = indexPrevious;
     return isNavigated;

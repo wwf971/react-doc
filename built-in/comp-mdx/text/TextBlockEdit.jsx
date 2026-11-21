@@ -31,10 +31,15 @@ import './text-block.css';
 //   config.edit.kindSurface        the kind of the surface when it is not the
 //                                  kind of the block ('listItem': one item of a
 //                                  list block, in the type of the list)
-//   surfaceKeyDown, surfaceSelectionChange
+//   surfaceKeyDown, surfaceSelectionChange, atomModel
 //                                  optional: what the editor around this one
 //                                  hands to the surface (onKeyDownFirst,
-//                                  onSelectionChange of EditSourceSurface)
+//                                  onSelectionChange, atomModel of
+//                                  EditSourceSurface)
+//   focusShift(direction, point, rectSurface)   optional: what ↑ on the first line and ↓ on
+//                                  the last do instead of editFocusShiftRequest
+//                                  (the lines of a part of a list item lead back
+//                                  into the text of the item)
 //
 // events (handled by the edit layer):
 //   editDraftChange { text }      typed text; what a leave saves
@@ -47,7 +52,7 @@ import './text-block.css';
 //                                 reported with the caret position as the
 //                                 event point, so the neighbor keeps the x
 export const TextBlockEdit = observer(function TextBlockEdit({
-  data = {}, config = {}, onEvent, children, surfaceKeyDown, surfaceSelectionChange,
+  data = {}, config = {}, onEvent, children, surfaceKeyDown, surfaceSelectionChange, atomModel, focusShift,
 }) {
   const edit = config.edit ?? {};
   const session = edit.session ?? {};
@@ -79,6 +84,7 @@ export const TextBlockEdit = observer(function TextBlockEdit({
       selectionInitial={session.selectionInitial ?? 'end'}
       // a list keeps the gaps between its items while its source is edited
       lineSpaceListGet={kind === 'list' && !edit.isSurfaceFloating ? listLineSpaceListGet : undefined}
+      atomModel={atomModel}
       slash={edit.slash}
       isLocked={isLocked}
       ariaLabel={`${label} source`}
@@ -89,7 +95,7 @@ export const TextBlockEdit = observer(function TextBlockEdit({
       onCancelRequest={cancelRequest}
       onFocusShiftRequest={edit.isSurfaceFloating
         ? undefined
-        : (direction, { point } = {}) => void onEvent?.('editFocusShiftRequest', { direction }, { point })}
+        : (direction, { point, rectSurface } = {}) => (focusShift ? focusShift(direction, point, rectSurface) : void onEvent?.('editFocusShiftRequest', { direction }, { point }))}
     />
   );
   // the controls of the kind (children) and the switch of the slash mode

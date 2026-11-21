@@ -58,8 +58,36 @@ In a text block **Shift + Enter** is one more line, and **Enter** splits the blo
     the same kind of item, drawn as a card:
     view=card in the info of its fence
     ```
+  - ```text view=icon title="delivery notes"
+    Leave the parcel at the side door.
+    Ring twice; the bell is quiet.
+    Signature not needed.
+    ```
+  - run the weekly query
+    ```sql view=icon title="weekly query"
+    select customer, sum(amount) as total
+    from orders
+    group by customer
+    ```
+    then send the result with
+    ```sh view=icon
+    mail -s "weekly" team@example.com < result.csv
+    ```
+  - a card among text: the lines of the query
+    ```sql view=card
+    select customer from orders
+    ```
+    stand on lines of their own, between the text before and after them
 
-A code block that is a list item is drawn in the view **plain**: a quiet frame around lines that stand where the lines of plain text would, so the list keeps its rhythm. A block of language `text` is set in the font of the text around it and wraps like text; code keeps the code font. The other view, **card**, is the code block as it stands between paragraphs. An author chooses per block with `view=plain` or `view=card` in the info of the fence; the defaults are the config keys `CodeBlockViewAsListItem` (a block that is a list item) and `CodeBlockView` (any other block). A block under the text of an item, like the command of a step, is a block of its own and stays a card:
+A code block that is a list item is drawn in the view **plain**: a quiet frame around lines that stand where the lines of plain text would, so the list keeps its rhythm. A block of language `text` is set in the font of the text around it and wraps like text; code keeps the code font. The other view, **card**, is the code block as it stands between paragraphs. The third view, **icon**, keeps the lines out of the way: the block is a square tile with its title (or its language), and a click on it opens the lines in a code editor in a dialog, with line numbers and the words colored by their language; try *delivery notes* above. The dialog shows the lines in **View**, and in **Edit** they can be changed, and their language chosen from a list or typed, then saved (Save in its header, or Ctrl/⌘ + S) wherever the page can write, from reading mode too; it opens in Edit when the document is in edit mode, and a save goes back to View. An author chooses per block with `view=plain`, `view=card` or `view=icon` in the info of the fence; the defaults are the config keys `CodeBlockViewAsListItem` (a block that is a list item) and `CodeBlockView` (any other block).
+
+No block has to be a list item of its own: *run the weekly query* holds text and two icons, which stand in the line of the item, their bottom edge on the bottom edge of the line (the doc-scope key `CodeBlockIconAlign` puts their top edge at the top instead). A code block of another view takes a line of its own, as in the item after it, without being the whole item. In edit mode a click on the text opens the item, and each code block is one thing of its text, a chip where the block was: type before, between and after the chips; ← and → step over a chip; Backspace next to one selects it, and deletes it when pressed again (Ctrl/⌘ + Z brings it back); Enter splits the item between them, and Backspace at the start of the next item joins it back. A double click on the chip of an icon opens its lines in its dialog; the lines of a block of another view are edited where they are drawn, after a click on them (or a double click on the chip). Shift + Enter in the text among chips makes the text at the caret a text block of its own, and you go on typing its lines. On save every chip is written as its fenced block again, on lines of its own.
+
+Any code block can be turned into text, its lines joined into one line with the line breaks removed: **To text** in the mode menu of a code block (the sliders button of its toolbar), in the list menu of an item that is a code block, and in the bar while an item is edited, for the lines being edited or a chip selected with a click. The bar also has the buttons of a new item above and below the item being edited.
+
+In edit mode the view is also chosen from the page: the list menu of an item that is a code block starts with a **Code block** group (**Card**, **Plain**, **Icon**, **By config**), and a code block between paragraphs has the same views in the mode menu of its toolbar (the sliders button). The choice is written into the info of the fence, as if typed. The toolbar of a code block, between paragraphs or a list item, has its `to asset` button, and the dialog of an icon has **To asset** in its header, which is how an icon in the text of an item gets there: the lines move into an item of the asset service layer, and the block becomes a block of `Code` that reads them from there and looks as it did. In the same place it then has the **asset** button (**Asset** in the dialog), which opens the item's asset panel with its versions. Try the views on a copy in the [Playground](playground/playground.md), which git ignores, rather than here.
+
+A block under the text of an item, like the command of a step, is a block of its own and stays a card:
 
 1. run the tests:
    ```bash

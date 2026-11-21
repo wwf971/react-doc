@@ -1811,8 +1811,19 @@ export function saveModeGet(meta: Pick<AssetItemMeta, 'saveMode'>): AssetSaveMod
   return meta.saveMode === 'newVersion' ? 'newVersion' : 'inPlace';
 }
 
-// the file extension and the media type the data files of a language get
+// the file extension and the media type the data files of a language get.
+// the languages of code are listed too: the lines of a code block moved into
+// the store (the component Code, doc_page_impl_mdx_code.md#the-lines-in-the-asset-service-layer)
+// are text, kept as a file of their language
+const fileExtByLangCode: Record<string, string> = {
+  text: 'txt', txt: 'txt', plaintext: 'txt', plain: 'txt',
+  python: 'py', py: 'py', bash: 'sh', sh: 'sh', shell: 'sh', zsh: 'sh', powershell: 'ps1', ps1: 'ps1',
+  javascript: 'js', jsx: 'jsx', typescript: 'ts', tsx: 'tsx', sql: 'sql', go: 'go', rust: 'rs', java: 'java',
+  c: 'c', cpp: 'cpp', csharp: 'cs', cs: 'cs', kotlin: 'kt', swift: 'swift', ruby: 'rb', php: 'php',
+  xml: 'xml', toml: 'toml', ini: 'ini', diff: 'diff', dockerfile: 'dockerfile',
+};
 const fileExtByLang: Record<string, string> = {
+  ...fileExtByLangCode,
   '': 'txt',
   yaml: 'yaml',
   yml: 'yaml',
@@ -1829,6 +1840,8 @@ const fileExtByLang: Record<string, string> = {
 };
 
 const contentTypeByLang: Record<string, string> = {
+  ...Object.fromEntries(Object.keys(fileExtByLangCode).map((lang) => [lang, 'text/plain'])),
+  xml: 'application/xml',
   '': 'text/plain',
   yaml: 'text/yaml',
   yml: 'text/yaml',

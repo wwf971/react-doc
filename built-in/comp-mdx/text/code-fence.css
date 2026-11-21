@@ -72,6 +72,17 @@ figure.shiki[data-view='plain']:is([data-language='text'], [data-language='txt']
   white-space: inherit;
 }
 
+/* next to a tile in a list item, the frame keeps its room: the tile reaches
+   the bottom (or the top) of its line, where a line of text leaves room the
+   frame could take. the frame stands the margin of the tile away from it */
+li .doc-code-icon + figure.shiki[data-view='plain'] {
+  margin-top: 2px;
+}
+
+li figure.shiki[data-view='plain']:has(+ .doc-code-icon) {
+  margin-bottom: 0;
+}
+
 /* outside a list the block is a block of the document: the distance of a
    block above and below it, less the room of the frame */
 :where(.prose) > figure.shiki[data-view='plain'],
@@ -98,4 +109,299 @@ figure.shiki[data-view='plain'] > div:not([role='region']) > button {
   width: 1.4rem;
   height: 1.4rem;
   padding: 0.2rem;
+}
+
+/* ---------- the icon view (CodeIconView) ----------
+   a square tile in place of the lines: a code icon over the title (or the
+   language), as a file stands in a folder; a click opens the lines in a
+   code editor. the frame is as quiet as the plain view's (a soft line, the
+   faintest tint); the caption is cut to the width of the tile. a block of
+   the document stands with the distance of a block, a tile in a list item
+   at the top of its line, beside its text. */
+.doc-code-icon {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  width: 4.25rem;
+  height: 4.25rem;
+  margin: 0.5rem 0;
+  padding: 6px 4px 4px;
+  border: 1px solid color-mix(in srgb, var(--color-fd-foreground) 15%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--color-fd-foreground) 2.5%, transparent);
+  color: var(--color-fd-foreground);
+  font: inherit;
+  vertical-align: top;
+  cursor: pointer;
+  transition: background-color 0.12s, border-color 0.12s;
+}
+
+.doc-code-icon:hover,
+.doc-code-icon:focus-visible,
+.doc-code-icon[aria-expanded='true'] {
+  border-color: color-mix(in srgb, var(--color-fd-primary) 45%, transparent);
+  background: color-mix(in srgb, var(--color-fd-primary) 7%, transparent);
+  outline: none;
+}
+
+.doc-code-icon-glyph {
+  display: inline-flex;
+  color: var(--color-fd-muted-foreground);
+}
+
+.doc-code-icon:hover .doc-code-icon-glyph,
+.doc-code-icon[aria-expanded='true'] .doc-code-icon-glyph {
+  color: var(--color-fd-primary);
+}
+
+.doc-code-icon-label {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 0.7rem;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* in a list item, whether it is the whole item or stands in its text among
+   other things, the tile stands in the line of the text, never pushed away
+   by the distance of a block (CodeBlockIconAlign): by default its bottom edge
+   on the bottom edge of the line, the text beside its lower part and the line
+   below at the gap of the list; or its top edge at the top of the line. the
+   chip of the editor of an item (below) is the tile in the same place. */
+li .doc-code-icon,
+.doc-code-icon.doc-edit-atom {
+  margin-top: 2px;
+  margin-bottom: 0;
+  vertical-align: bottom;
+}
+
+li .doc-code-icon[data-align='top'],
+.doc-code-icon.doc-edit-atom[data-align='top'] {
+  margin-bottom: 2px;
+  vertical-align: top;
+}
+
+/* the tile as a chip of the text, in the editor of a list item
+   (main/comp-doc/edit/surface-atom.js): the same box, so nothing moves when
+   the item is entered. a chip holds no text (the text of the editor never
+   meets its words): its icon and its label are drawn here. it keeps the
+   width of a space from what stands beside it, as the rendered item does
+   (the line breaks around the block are a space between the text and the
+   icon). selected, it is marked like a selected text. */
+.doc-edit-atom {
+  cursor: default;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.doc-edit-atom-icon::before {
+  content: '';
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  background-color: var(--color-fd-muted-foreground);
+  -webkit-mask: var(--doc-code-icon-glyph) center / contain no-repeat;
+  mask: var(--doc-code-icon-glyph) center / contain no-repeat;
+}
+
+.doc-edit-atom-icon::after {
+  content: attr(data-label);
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 0.7rem;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.doc-edit-atom-icon {
+  /* lucide file-code, the glyph of the tile, stroke 1.7 */
+  --doc-code-icon-glyph: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z'/%3E%3Cpath d='M14 2v5a1 1 0 0 0 1 1h5'/%3E%3Cpath d='M10 12.5 8 15l2 2.5'/%3E%3Cpath d='m14 12.5 2 2.5-2 2.5'/%3E%3C/svg%3E");
+}
+
+.doc-edit-atom[data-gap-before] {
+  margin-left: var(--doc-edit-atom-gap, 0.28em);
+}
+
+.doc-edit-atom[data-gap-after] {
+  margin-right: var(--doc-edit-atom-gap, 0.28em);
+}
+
+.doc-edit-atom-icon[data-selected] {
+  border-color: color-mix(in srgb, var(--color-fd-primary) 70%, transparent);
+  background: color-mix(in srgb, var(--color-fd-primary) 14%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-fd-primary) 25%, transparent);
+}
+
+.doc-edit-atom-icon[data-selected]::before {
+  background-color: var(--color-fd-primary);
+}
+
+/* the chip of a code block of another view (card, plain): as wide as the
+   item, so the text before it ends a line and the text after it starts one;
+   a line of the item, not the item. it shows the rendered block (a copy,
+   data-filled), inert, at the height it has in the item; before that, a
+   quiet frame with its label. selected, a ring around it. */
+.doc-edit-atom-block {
+  display: inline-block;
+  box-sizing: border-box;
+  width: 100%;
+  vertical-align: top;
+  white-space: normal;
+}
+
+.doc-edit-atom-block > * {
+  pointer-events: none;
+}
+
+.doc-edit-atom-block:not([data-filled]) {
+  min-height: 1lh;
+  padding: 0 10px;
+  border: 1px solid color-mix(in srgb, var(--color-fd-foreground) 15%, transparent);
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--color-fd-foreground) 2.5%, transparent);
+  color: var(--color-fd-muted-foreground);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.85em;
+}
+
+.doc-edit-atom-block:not([data-filled])::after {
+  content: attr(data-label);
+}
+
+.doc-edit-atom-block[data-selected] {
+  border-radius: 6px;
+  outline: 2px solid color-mix(in srgb, var(--color-fd-primary) 45%, transparent);
+  outline-offset: 2px;
+}
+
+/* the caret right beside a block (data-caret: the side, surface-atom.js) is
+   drawn as tall as the block: a bar in the color of the caret, blinking as
+   the caret does, while the caret of the browser, as high as a line of text,
+   is hidden. only while the surface has the focus. */
+.doc-edit-atom-block {
+  position: relative;
+}
+
+.doc-edit-surface:focus .doc-edit-atom-block[data-caret]::before {
+  content: '';
+  position: absolute;
+  z-index: 1;
+  /* the frame of the block, not the room around it */
+  top: var(--doc-edit-atom-inset-top, 0px);
+  bottom: var(--doc-edit-atom-inset-bottom, 0px);
+  width: 2px;
+  border-radius: 1px;
+  background: var(--color-fd-primary);
+  animation: doc-edit-caret-blink 1.06s steps(1, end) infinite;
+  pointer-events: none;
+}
+
+.doc-edit-surface:focus .doc-edit-atom-block[data-caret='after']::before {
+  right: -5px;
+}
+
+.doc-edit-surface:focus .doc-edit-atom-block[data-caret='before']::before {
+  left: -5px;
+}
+
+.doc-edit-surface:focus:has(.doc-edit-atom-block[data-caret]) {
+  caret-color: transparent;
+}
+
+@keyframes doc-edit-caret-blink {
+  0% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+/* the dialog: a code editor filling it */
+.doc-code-lines-popup {
+  width: min(56rem, 92vw);
+  height: min(32rem, 78vh);
+}
+
+.doc-code-lines-body {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.doc-code-lines-head {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* the question of a move into the asset store, in the header where its
+   button was; a failure beside the buttons, cut to a line */
+.doc-code-lines-confirm {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--color-fd-muted-foreground);
+  white-space: nowrap;
+}
+
+.doc-code-lines-message {
+  max-width: 16rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* the language: in View said beside the actions, in Edit a field with the
+   languages met most in a list below it, floating over the editor */
+.doc-code-lines-lang {
+  color: var(--color-fd-muted-foreground);
+  font-family: var(--font-mono, ui-monospace, monospace);
+}
+
+.doc-code-lang-field {
+  position: relative;
+  display: inline-flex;
+}
+
+.doc-code-lang-input {
+  width: 8.5rem;
+  height: 1.55rem;
+  padding: 0 0.45rem;
+  border: 1px solid var(--color-fd-border);
+  border-radius: 2px;
+  background: var(--color-fd-background);
+  color: var(--color-fd-foreground);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.75rem;
+  outline: none;
+}
+
+.doc-code-lang-input:focus {
+  border-color: color-mix(in srgb, var(--color-fd-primary) 60%, var(--color-fd-border));
+}
+
+.doc-code-lang-list.doc-search-result-list {
+  position: absolute;
+  z-index: 60;
+  top: calc(100% + 3px);
+  left: 0;
+  width: 15rem;
+  max-height: 18rem;
+  overscroll-behavior: contain;
+  box-shadow: 0 6px 20px rgb(0 0 0 / 0.12);
+  font-size: 0.78rem;
+}
+
+.doc-code-lang-option.doc-search-result {
+  flex: 0 0 auto;
+}
+
+.doc-code-lang-option .doc-search-result-label {
+  font-family: var(--font-mono, ui-monospace, monospace);
+}
+
+.doc-code-lang-current {
+  margin-left: auto;
+  color: var(--color-fd-primary);
 }

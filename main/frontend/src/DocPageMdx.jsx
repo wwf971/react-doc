@@ -40,6 +40,7 @@ import { DocPageView } from './DocPageView.jsx';
 import { DocNavigationButtons } from '../../comp-doc/page/DocNavigationButtons.jsx';
 import { DocSearchDialog } from '../../comp-doc/page/DocSearchDialog.jsx';
 import { DocSidebarFolder } from '../../comp-doc/side-panel/DocSidebarFolder.jsx';
+import { DocSidePanelSearch } from '../../comp-doc/side-panel/DocSidePanelSearch.jsx';
 import { TagOverviewPopup } from '../../comp-doc/tag/TagOverviewPopup.jsx';
 import { AssetPanelPopup } from '../../comp-doc/asset/AssetPanelPopup.jsx';
 import { DocAuthPopup } from '../../comp-doc/auth/DocAuthPopup.jsx';
@@ -549,8 +550,11 @@ const DocsShell = observer(function DocsShell() {
     }
     return () => Object.keys(variableByName).forEach((name) => style.removeProperty(name));
   }, [listItemGap, listMarkerGap]);
+  // the search of the side panel stands at its top, above the first doc page,
+  // after a banner the host gives (doc_page_impl_side_panel.md#searching-the-items)
   const sidePanelProps = useMemo(() => ({
     ...sidePanelConfig,
+    banner: <>{sidePanelConfig.banner}<DocSidePanelSearch /></>,
     components: {
       Folder: DocSidebarFolder,
       ...(sidePanelConfig.components ?? {}),
@@ -562,6 +566,7 @@ const DocsShell = observer(function DocsShell() {
       nav={{ title: sourceStore.configDoc.siteTitle ?? 'Docs', children: <><DocPaletteButton /><DocSettingsButton /></> }}
       sidebar={sidePanelProps}
       slots={docsLayoutSlots}
+      searchToggle={searchToggleHidden}
       themeSwitch={themeSwitchSidebarDisabled}
     >
       <DocPageView />
@@ -574,6 +579,13 @@ const docsLayoutSlots = { container: DocPageLayoutContainer };
 // the sidebar-footer theme toggle can end up below the window's bottom edge
 // when the side panel is tall; the floating toggle below replaces it.
 const themeSwitchSidebarDisabled = { enabled: false };
+
+// the search button of fumadocs (sidebar and header) is not shown: the
+// search of the side panel takes its place, and a unified search of the page
+// is to replace its dialog (doc_page_impl_TODO.md#unified-search). the dialog
+// stays reachable by its key (mod+k); the button of the floating panel of a
+// collapsed sidebar is hidden by css (DocPageMdx.css)
+const searchToggleHidden = { enabled: false };
 
 function DocPageLayoutContainer({ children, ...props }) {
   return (

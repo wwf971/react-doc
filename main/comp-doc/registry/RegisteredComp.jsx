@@ -229,7 +229,7 @@ const RegisteredCompInner = observer(function RegisteredComp(props) {
   // picked for this block through the mode menu, else the component's
   // default; absent for a component without view modes
   const viewMode = compViewModeListGet(definition).length > 0
-    ? (blockIndex !== undefined ? editStore?.blockViewModeGet(sourcePath, blockIndex) : undefined) ?? compViewModeDefaultIdGet(definition)
+    ? (blockIndex !== undefined ? editStore?.blockViewModeGet(sourcePath, blockIndex) : undefined) ?? compViewModeDefaultIdGet(definition, configRuntime.place)
     : undefined;
   // the key of the component's state object in the component state service
   // layer (doc_page_impl_mdx_comp_state.md): the asset item its data comes

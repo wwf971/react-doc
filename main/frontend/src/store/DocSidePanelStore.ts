@@ -12,10 +12,18 @@ import {
   sidePanelRemoveResolve,
 } from '../lib/side-panel-node.js';
 import { sourcePathBuild, sourcePathDirGet, sourcePathDocPageAliasGet, sourcePathIsInside } from '../lib/doc-source-path.js';
+import { sidePanelSearchEntryListBuild, sidePanelSearchMatch } from '../lib/side-panel-search.js';
 
 // The state of the side panel the page owns beyond what fumadocs keeps
 // (design: doc_page_impl_side_panel.md#moving-an-item):
 //
+//   search           the search of the items by their names, above the
+//                    side panel (doc_page_impl_side_panel.md#searching-the-items):
+//                    searchQuery, whether its results are shown
+//                    (searchIsOpen), the result the keys are on
+//                    (searchIndexActive), and the item just chosen, which
+//                    its row scrolls into view and marks for a moment
+//                    (searchRevealItemId)
 //   folderOpenById   item id -> whether the folder is open, as the reader
 //                    left it. fumadocs keeps the open state inside each
 //                    folder row, by position; a side panel rendered again
@@ -161,6 +169,10 @@ export class DocSidePanelStore {
   docStore: DocStore;
   editStore: DocEditStore;
   folderOpenById: Record<string, boolean> = {};
+  searchQuery = '';
+  searchIsOpen = false;
+  searchIndexActive = -1;
+  searchRevealItemId = '';
   drag: SidePanelDrag | undefined = undefined;
   picker: SidePanelMovePicker | undefined = undefined;
   move: SidePanelMove | undefined = undefined;
@@ -218,6 +230,64 @@ export class DocSidePanelStore {
 
   sectionOpenAllSet(isOpen: boolean) {
     for (const itemId of this.sectionItemIdList) this.folderOpenSet(itemId, isOpen);
+  }
+
+  // ---------- search (doc_page_impl_side_panel.md#searching-the-items) ----------
+  // the items by their names, as displayed in the page language; the
+  // search stops at an item mirroring a source folder (side-panel-search.js)
+
+  get searchEntryList(): any[] {
+    const { treeModel } = this.docStore;
+    return sidePanelSearchEntryListBuild(treeModel.treePage, {
+      outlineGet: (itemId: string) => treeModel.itemOutlineById.get(itemId),
+      textGet: (outline: any) => (outline ? this.docStore.textDisplayGet(outline.textLocalized).text : ''),
+    });
+  }
+
+  get searchResult(): { wordList: string[]; resultList: { entry: any; matchOrder: number }[]; countMatched: number } {
+    return sidePanelSearchMatch(this.searchEntryList, this.searchQuery);
+  }
+
+  searchQuerySet(text: string) {
+    this.searchQuery = text;
+    this.searchIsOpen = text.trim() !== '';
+    this.searchIndexActive = -1;
+  }
+
+  // the results shown again (the field focused) or put away (a click
+  // outside, a choice); there is nothing to show without a query
+  searchOpenSet(isOpen: boolean) {
+    this.searchIsOpen = isOpen && this.searchQuery.trim() !== '';
+  }
+
+  searchIndexActiveMove(step: number) {
+    const count = this.searchResult.resultList.length;
+    if (count === 0) return;
+    this.searchIndexActive = (this.searchIndexActive + step + count) % count;
+  }
+
+  // goes to a result: the one of itemId, else the one the keys are on, else
+  // the first. its section and folders are opened (a folder found is opened
+  // too), an item with a route is navigated to, and the row is revealed.
+  // false when there is no such result
+  searchChoose(itemId = ''): boolean {
+    const { resultList } = this.searchResult;
+    const result = itemId
+      ? resultList.find((one) => one.entry.itemId === itemId)
+      : resultList[this.searchIndexActive] ?? resultList[0];
+    if (!result) return false;
+    const { entry } = result;
+    this.searchIsOpen = false;
+    for (const ancestorId of entry.ancestorIdList) this.folderOpenSet(ancestorId, true);
+    if (entry.kind === 'folder' || entry.kind === 'sourceFolder' || entry.kind === 'folderDoc') this.folderOpenSet(entry.itemId, true);
+    if (entry.route) this.docStore.navigate(entry.route);
+    this.searchRevealItemId = entry.itemId;
+    return true;
+  }
+
+  // the row has been revealed: the mark goes
+  searchRevealClear(itemId: string) {
+    if (this.searchRevealItemId === itemId) this.searchRevealItemId = '';
   }
 
   // ---------- what can move where ----------

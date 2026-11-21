@@ -65,9 +65,13 @@ import './DocSettings.css';
 //              same way; applied over the main doc page's
 //   Client     the keys kept in this browser, each removable, and a list to
 //              add one; "Clear cache" drops them all with the storage entry
-// Result lists every key with the value in effect and the level that
-// decided it. The layer shown is DocConfigStore.settingsLayerId, shared by
-// the two tabs; the edit view DocConfigStore.settingsIsDeclarationView.
+// A key of type stringMap (EditInsertRankByEntry) is shown as its entries, one
+// row each (StringMapSettingsItem); a layer the page writes itself (Client)
+// edits an entry in place and adds one, a yaml layer shows them (a mapping is
+// changed in its file). Result lists every key with the value in effect and
+// the level that decided it. The layer shown is
+// DocConfigStore.settingsLayerId, shared by the two tabs; the edit view
+// DocConfigStore.settingsIsDeclarationView.
 //
 // the tab shown is DocConfigStore.settingsTabId. the panel is rendered once
 // at page level while DocConfigStore.isSettingsOpen: a popup centered in
@@ -356,8 +360,7 @@ function displayItemBuild(itemId, item) {
   return {
     id: itemId,
     type: 'custom',
-    comp: ValueText,
-    compProps: { valueText: valueTextGet(item.valueDeclared !== undefined ? item.valueDeclared : item.value) },
+    ...valueShowBuild(item.define, item.valueDeclared !== undefined ? item.valueDeclared : item.value),
     label: (
       <ItemLabel
         keyText={item.key}
@@ -405,8 +408,7 @@ function resultItemBuild(itemId, define, value, level) {
   return {
     id: itemId,
     type: 'custom',
-    comp: ValueText,
-    compProps: { valueText: valueTextGet(value) },
+    ...valueShowBuild(define, value),
     label: <ItemLabel keyText={define.key} badgeText={level ?? ''} badgeTitle={`decided by the ${level} level`} />,
     description: define.description,
   };
@@ -465,6 +467,9 @@ function configItemBuild(itemId, item, write, context) {
     panelItem.type = 'custom';
     panelItem.comp = SourcePathSettingsItem;
     panelItem.compProps = { pathSpec: define.pathSpec ?? { kind: 'dir' } };
+  } else if (define.type === 'stringMap') {
+    panelItem.type = 'custom';
+    panelItem.comp = StringMapSettingsItem;
   }
   // a key of type any has no control; it stays settable from YAML only
   else panelItem.isHidden = true;
@@ -506,6 +511,64 @@ function ItemLabel({ keyText, badgeText, badgeTitle, isBadgeError = false, onRem
 function ValueText({ valueText }) {
   return <span className="doc-settings-value-text">{valueText}</span>;
 }
+
+// how a value is shown where it is not edited: a stringMap as its entries,
+// anything else as one text
+function valueShowBuild(define, value) {
+  if (define?.type === 'stringMap' && value && typeof value === 'object' && !Array.isArray(value)) {
+    return { comp: StringMapText, compProps: { valueMap: value } };
+  }
+  return { comp: ValueText, compProps: { valueText: valueTextGet(value) } };
+}
+
+// the entries of a stringMap shown: one row each, its name and its value
+// (none for an entry written null, which removes the one below). its own
+// prop name: the panel hands a custom item its value and state over compProps
+function StringMapText({ valueMap }) {
+  const entryList = Object.entries(valueMap && typeof valueMap === 'object' ? valueMap : {});
+  if (entryList.length === 0) return <span className="doc-settings-value-text">no entry</span>;
+  return (
+    <span className="doc-settings-map">
+      {entryList.map(([name, valueEntry]) => (
+        <span key={name} className="doc-settings-map-row">
+          <span className="doc-settings-map-name">{name}</span>
+          <span className={`doc-settings-map-value${valueEntry === null ? ' is-none' : ''}`}>{valueEntry ?? 'none'}</span>
+        </span>
+      ))}
+    </span>
+  );
+}
+
+// the value of a stringMap key as a panel item: shown (StringMapText) where
+// it cannot be written; where it can, a value is edited in place (emptied:
+// null) and the last row adds an entry, typed as "name value"; the whole
+// mapping is then written into the layer
+const StringMapSettingsItem = observer(function StringMapSettingsItem({ value, isDisabled, onValueChange }) {
+  if (isDisabled || !onValueChange) return <StringMapText valueMap={value} />;
+  const entryList = Object.entries(value && typeof value === 'object' ? value : {});
+  const entrySet = (name, text) => {
+    const textValue = text.trim();
+    onValueChange({ ...value, [name]: textValue === '' ? null : textValue });
+  };
+  const entryAdd = (text) => {
+    const [name, valueEntry = ''] = text.trim().split(/\s+/);
+    if (name) entrySet(name, valueEntry);
+  };
+  return (
+    <span className="doc-settings-map">
+      {entryList.map(([name, valueEntry]) => (
+        <span key={name} className="doc-settings-map-row">
+          <span className="doc-settings-map-name">{name}</span>
+          <EditValueInline className="doc-settings-map-value" value={valueEntry ?? ''} placeholder="none" onCommit={(text) => entrySet(name, text)} />
+        </span>
+      ))}
+      <span className="doc-settings-map-row">
+        {/* keyed by the mapping: an entry added, the field starts empty again */}
+        <EditValueInline key={valueTextGet(value)} className="doc-settings-map-add" value="" placeholder="add: name value" onCommit={entryAdd} />
+      </span>
+    </span>
+  );
+});
 
 function NoteItem({ noteText }) {
   return <span className="doc-settings-note">{noteText}</span>;
@@ -562,7 +625,7 @@ const DeclarationGrid = observer(function DeclarationGrid({ layerId, isComp }) {
   return (
     <div className="doc-settings-grid" style={{ '--doc-settings-grid-col-count': columnList.length }}>
       <span className="doc-settings-note">
-        Applied left to right: where several declarations set a key, the layer takes the last one (marked).
+        Applied left to right: where several declarations set a key, the layer takes the last one (marked); a mapping takes them all, merged entry by entry.
         {layer.isWritable ? '' : ` ${layer.disabledReason}`}
       </span>
       <div className="doc-settings-grid-scroll">
@@ -590,8 +653,8 @@ const DeclarationGrid = observer(function DeclarationGrid({ layerId, isComp }) {
               {row.cellList.map((cell) => (
                 <div
                   key={cell.declarationId}
-                  className={`doc-settings-grid-cell${cell.declarationId === row.declarationIdDeciding ? ' is-deciding' : ''}`}
-                  title={cell.declarationId === row.declarationIdDeciding ? 'the value the layer takes' : undefined}
+                  className={`doc-settings-grid-cell${gridCellIsDeciding(row, cell) ? ' is-deciding' : ''}`}
+                  title={gridCellIsDeciding(row, cell) ? (row.isMerged ? 'merged into the value the layer takes' : 'the value the layer takes') : undefined}
                 >
                   <GridCellEditor
                     layer={layer}
@@ -611,6 +674,13 @@ const DeclarationGrid = observer(function DeclarationGrid({ layerId, isComp }) {
   );
 });
 
+// whether a cell is marked as making the value of the layer: the last
+// valid one, or every valid one of a mapping merged entry by entry
+function gridCellIsDeciding(row, cell) {
+  if (row.isMerged) return Boolean(cell.item?.isValid);
+  return cell.declarationId === row.declarationIdDeciding;
+}
+
 // the value of one declaration for one key: a dash when not declared, the
 // text as written when it cannot be used or written, else a control for
 // its type (on / off and enums segmented, text in place, a source path with
@@ -628,6 +698,14 @@ const GridCellEditor = observer(function GridCellEditor({ layer, row, cell, onCo
         title={item.isValid ? (layer.disabledReason || undefined) : item.message}
       >
         {valueText}
+      </span>
+    );
+  }
+  // a mapping is written in its file: the in-place yaml write sets one scalar or list
+  if (define.type === 'stringMap') {
+    return (
+      <span title="a mapping is changed in its file">
+        <StringMapText valueMap={item.valueDeclared} />
       </span>
     );
   }
@@ -755,7 +833,7 @@ function valueTextGet(value) {
   if (value === undefined) return '';
   if (value === null) return 'not set';
   if (Array.isArray(value)) return value.join(', ');
-  if (typeof value === 'object') return JSON.stringify(value);
+  if (typeof value === 'object') return Object.entries(value).map(([name, valueEntry]) => `${name}: ${valueEntry ?? 'none'}`).join(', ');
   return String(value);
 }
 
