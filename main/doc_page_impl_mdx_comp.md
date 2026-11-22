@@ -540,6 +540,14 @@ The rules of such a handler:
 
 `BlockQA` unfolds the item whose question or answer holds the target; `SwitchView` selects the view whose data holds it. `BlockSimple` and `Block` show everything and subscribe to nothing.
 
+## Undo and redo
+
+A component takes part in undo and redo by where its changes go, never by calling the history or binding the page's keys ([A component and the history](doc_page_impl_edit_history.md#a-component-and-the-history)):
+
+- **Changes written to its block** (`dataReplaceRequest`, `blockPropSetRequest`, a draft its session saves) are entries of the history of the document by the write itself; nothing is needed.
+- **Steps of a draft while it is edited** (a canvas, a sheet) are the editor's own, for the session, with the keys taken while it has the focus; the save is one entry of the document. The card diagrams are the reference.
+- **Changes kept outside the document** (its state, asset items, its own api) are undone from the page only if the component answers the events delivered to its block, `historyUndo` and `historyRedo` (`useDocEventSubscribe`, as for `placeReveal` above): `{ code: 0 }` when it took a step of its own back, `undefined` when it has none, and the document is asked. `DemoCounter` of the example doc page does.
+
 ## Text blocks and edit mode
 
 The headings, paragraphs, and lists of the document body are rendered by explicit components in `comp-mdx/text/` (`headingTagCreate`, `ParagraphTag`, `listTagCreate`, mapped onto `h1`–`h6`, `p`, `ul`/`ol`/`li` by `buildMdxComps`), so these blocks have a home beside their default editors `HeadingEdit`, `ParagraphEdit`, `ListEdit`, and the fallback `BlockSourceEdit`; these editors are the built-in `source` edit mode of every block. A component with an editor of its own exposes it as an edit mode (`expose.editModeList`, [above](#view-modes-and-edit-modes)), exposes a `sourceDefaultCreate` for the insert menu ([Default source](#default-source)), and branches on `config.isEdit` (and on `config.edit.modeId` when it has several modes) to its `XxxEdit.jsx`. The edit contract, the naming rule, and the sharing of render code between `Xxx` and `XxxEdit` are specified in [In-place editing](doc_page_impl_edit.md#component-edit-mode); `Image` (mode `fields`) and `ImageGrid` (mode `images`) are the demonstrations in this folder.

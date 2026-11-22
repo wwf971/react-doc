@@ -38,20 +38,50 @@ export function docEditApiCreate(endpoint, { onUnreachable } = {}) {
     },
 
     // applies one line operation (lib/doc-edit-block.js builds them) against
-    // the version identified by hashBase; answers the new { text, hash }.
+    // the version identified by hashBase; answers the new { text, hash } and
+    // history, the summary of the document's history after the write.
     // a list of operations built on the same text is applied together.
     // filePathDeleteList: source files the server deletes with the write (a
     // block deletion with the files its component offered); sent only when
-    // nonempty, so every other write keeps its request as it was
-    sourceApply(internalPath, hashBase, operation, filePathDeleteList = []) {
+    // nonempty, so every other write keeps its request as it was.
+    // history: what the page says of the action, recorded with the write
+    // (doc_page_impl_edit_history.md): { actionId, kind, label, docPath, embed, isRetract }
+    sourceApply(internalPath, hashBase, operation, filePathDeleteList = [], history = undefined) {
       const body = Array.isArray(operation)
         ? { internalPath, hashBase, operationList: operation }
         : { internalPath, hashBase, operation };
       if (Array.isArray(filePathDeleteList) && filePathDeleteList.length > 0) body.filePathDeleteList = filePathDeleteList;
+      if (history) body.history = history;
       return requestSend('/source/apply', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
+      });
+    },
+
+    // the history of a document as the server keeps it: { path, entryList,
+    // undoEntryId, redoEntryId } (plugin/doc-edit-history.ts)
+    historyGet(internalPath) {
+      return requestSend(`/history?path=${encodeURIComponent(internalPath)}`);
+    },
+
+    // an entry of the history of a document undone or redone: the one named,
+    // else the one an undo (redo) of the document takes. answers { entry,
+    // fileList: [{ internalPath, textBefore, text, hash }], historyByPath }
+    historyStep(internalPath, direction, entryId = '') {
+      return requestSend('/history/step', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: internalPath, direction, ...(entryId ? { entryId } : {}) }),
+      });
+    },
+
+    // the history of a document forgotten
+    historyClear(internalPath) {
+      return requestSend('/history/clear', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: internalPath }),
       });
     },
 

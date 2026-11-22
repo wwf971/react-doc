@@ -35,8 +35,10 @@
 // and every subscriber of that place receives it and may answer.
 //
 //   subscribe({ type, sourcePath, sourceLine? }, listener)  -> unsubscribe
-//   publish({ type, subject: { sourcePath, blockLine }, data })
+//   publish({ type, subject: { sourcePath, blockLine }, data, isAcceptedFirst })
 //     -> { resultList: [DocEventResult], isAccepted }
+//   isAcceptedFirst: the first subscriber that takes the event is the only one
+//   (an undo delivered to a block: doc_page_impl_edit_history.md)
 //
 // a subscriber with a sourceLine (the marker line of its block) receives the
 // events of that block; one without receives every event of its document.
@@ -124,7 +126,9 @@ export class DocEventRouter {
   // every matching subscriber is called, in subscription order; a listener
   // that throws is reported and passed over. answers { code: 0, message, data:
   // { resultList, isAccepted } }; isAccepted: at least one answered with code 0.
-  async publish({ type, subject = {}, data = {} }) {
+  // isAcceptedFirst: no subscriber is called after one answered with code 0, for
+  // an event only one may act on (the undo of a step of a component)
+  async publish({ type, subject = {}, data = {}, isAcceptedFirst = false }) {
     const sourcePath = String(subject.sourcePath ?? '');
     const subscriptionList = [...(this.subscriptionListByType.get(type) ?? [])].filter((subscription) => (
       subscription.sourcePath === sourcePath
@@ -135,6 +139,7 @@ export class DocEventRouter {
       try {
         const result = resultNormalize(await subscription.listener({ ...data, subject: { ...subject, type } }));
         if (result) resultList.push(result);
+        if (isAcceptedFirst && eventResultIsAccepted(result)) break;
       } catch (error) {
         console.error(`[doc-event] a subscriber of ${type} failed.`, error);
       }

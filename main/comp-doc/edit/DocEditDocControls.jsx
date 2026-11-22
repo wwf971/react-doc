@@ -1,12 +1,14 @@
 import { observer } from 'mobx-react-lite';
 import { FileCode, LoaderCircle, Pencil, RotateCw } from '../../frontend/UICommon.js';
 import { useDocStores } from '../../frontend/src/store/context.js';
+import { DocHistoryButtons } from './DocHistoryButtons.jsx';
 import './DocEdit.css';
 
 // Document-level edit controls, shown in the toolbar next to the edit toggle
-// while edit mode is on for an editable document: edit the frontmatter, edit
-// the whole source, read the file again, and the "updating" mark while a
-// newer source compiles. They live in the toolbar so that the body gains no
+// while edit mode is on for an editable document: undo and redo of the
+// document (doc_page_impl_edit_history.md), edit the frontmatter, edit the
+// whole source, read the file again, and the "updating" mark while a newer
+// source compiles. They live in the toolbar so that the body gains no
 // extra row when edit mode is toggled.
 export const DocEditDocControls = observer(function DocEditDocControls() {
   const { docStore, editStore } = useDocStores();
@@ -18,6 +20,7 @@ export const DocEditDocControls = observer(function DocEditDocControls() {
 
   return (
     <div className="doc-edit-doc-controls" role="group" aria-label="Document edit actions">
+      <DocHistoryButtons path={path} />
       <button
         type="button"
         disabled={isSubmitting || !isFrontmatter}

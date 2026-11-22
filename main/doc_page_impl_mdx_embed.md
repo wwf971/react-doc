@@ -87,7 +87,7 @@ operationApply(embedded path, operation)   DocEditStore.embedOperationApply
   its text accepted again                   the compiled body follows
 ```
 
-- **One write of the host.** Every operation on the embedded document is one change of its host, the replacement of the lines of the block (or of the item holding it), and one history record of the host ([History records](doc_page_impl_edit.md#history-records)).
+- **One write of the host.** Every operation on the embedded document is one change of its host, the replacement of the lines of the block (or of the item holding it), and one entry of the history of the host, which the popup of the block finds as its own by the text it left: the popup undoes the edits made in the block, the host all of them ([The popup of an MDX block](doc_page_impl_edit_history.md#the-popup-of-an-mdx-block)).
 - **The same operations.** The line operations are the ones the backend applies to a file (`lineOperationApply`, `lineOperationListApply`), shared between the browser and the backend from `lib/doc-line-operation.ts`; `plugin/doc-edit-lines.ts` re-exports them beside the hash of a file.
 - **A conflict is a conflict.** When the host no longer holds the text the operation was computed on (it was edited elsewhere), the operation is refused as a write of a file is, and the document is read again.
 - **Written as its host is.** The embedded document is compiled in the dialect of its host (`.md` or `.mdx`), and it can be edited exactly when its host can (`docIsEditable` asks the host). It is one more kind of [document that is not a file](doc_page_impl_edit.md#documents-that-are-not-files), the one the page writes by itself: the edit api never sees its path, only the writes of its host.

@@ -45,6 +45,10 @@ sidePanelById:
       - doc: ~example/mdx-doc-edit-structure.md
         text: Editing the Structure of a Document
         tags: [guide]
+      # undo and redo of the edits of a document (edit mode)
+      - doc: ~example/mdx-doc-edit-history.md
+        text: Undo and Redo
+        tags: [guide]
       # moving and changing items in edit mode (MDX Document In-place Editing,
       # "Moving side-panel items", "Changing the side panel"): the first items
       # of this folder come from an included resource file, the last ones are

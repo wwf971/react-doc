@@ -510,7 +510,7 @@ Remove…
 
 **Rename** reports `sidePanelTextEditStartRequest` with the `instanceId` of the rendering the menu was opened from, so that rendering owns the edit as if its pencil was clicked; **Move…** reports `sidePanelItemMovePickerOpenRequest` with the point of the menu, so the picker opens there; every other entry reports the request of its change. All go through the event router with `placement: 'sidePanelContextMenu'`. An entry that does not apply is disabled with its reason as hover title, the reasons being those of the move and of the structure changes (`lib/side-panel-move.js`, `lib/side-panel-node.js`). The open state is `DocSidePanelStore.contextMenu { itemId, instanceId, point }`; opening closes the menu that is open and opens the new one on the next frame, so a right click on another row while the menu is open moves the menu there. A pointer down outside or Escape closes it.
 
-**History.** A move is recorded by `DocEditStore.historyRecord` with the text of both files before and after (`kind: 'sidePanelItemMove'`), next to the records of document operations; see [History records](doc_page_impl_edit.md#history-records). The events of the sidePanel route pass the host application first, like every component report.
+**History.** A move is not in the edit history, which holds documents only ([The Edit History](doc_page_impl_edit_history.md#what-is-not-recorded)); the answer of the move names both files with their texts before and after, what a history of the side panel would keep ([TODO](doc_page_impl_TODO.md#edit-history-side-panel)). The events of the sidePanel route pass the host application first, like every component report.
 
 ## Changing the structure
 

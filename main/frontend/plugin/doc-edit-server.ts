@@ -8,6 +8,7 @@ import {
   textHashGet,
   type LineOperation,
 } from './doc-edit-lines.ts';
+import { DocEditHistory, type HistoryFileMove } from './doc-edit-history.ts';
 import { sidePanelMoveBuild, sidePanelMoveRequestIsValid } from './doc-side-panel-move.ts';
 import { sidePanelNodeBuild, sidePanelNodeRequestIsValid } from './doc-side-panel-node.ts';
 import {
@@ -40,6 +41,18 @@ import { sourcePathLocalGet } from '../src/lib/doc-source-path.js';
 //                                         recoverable backup beside it before the
 //                                         document is written (sourceFileDeleteApply,
 //                                         with doc-source-file.ts)
+//        optional history: { actionId, kind, label, docPath, embed, isRetract }
+//                                         what the page says of the action, recorded
+//                                         with the write (doc-edit-history.ts); the
+//                                         answers of /source and /source/apply carry
+//                                         history, the summary of the document
+//   GET  {endpoint}/history?path=          -> { code: 0, data: summary }   the entries of a document
+//   POST {endpoint}/history/step           -> { code: 0, data: { entry, fileList, historyByPath } }
+//        body { path, direction: 'undo' | 'redo', entryId? }   an entry of the document undone or
+//        redone (its own when named, else the last done / the one undone last): every file of the
+//        entry written back, merged with what changed since; fileList [{ internalPath, textBefore,
+//        text, hash }]. -2 when a file changed since where the step would write
+//   POST {endpoint}/history/clear          -> { code: 0, data: summary }   body { path }
 //   POST {endpoint}/side-panel/text        -> { code: 0, data: { file, fieldName, text } }
 //        body { file, nodePath, language, text, textBase }   doc-side-panel-text.ts
 //   POST {endpoint}/side-panel/move        -> { code: 0, data: { fileChangeList } }
@@ -145,6 +158,9 @@ export type DocEditMiddlewareOptions = {
   docProvidedFind?: (internalPath: string) => { absPath: string; read: () => string; write: (text: string) => void } | undefined;
   sidePanel?: DocEditSidePanelOptions;
   config?: DocEditConfigOptions;
+  // the edit history of the server (doc-edit-history.ts); one is made when absent.
+  // it lives as long as the middleware, in memory only
+  history?: DocEditHistory;
   workspace?: DocEditWorkspaceOptions;
   sourceFile?: DocEditSourceFileOptions;
 };
@@ -155,7 +171,8 @@ const COMP_CONFIG_KEY = 'compConfig';
 
 type Middleware = (req: IncomingMessage, res: ServerResponse, next: () => void) => void;
 
-export function docEditMiddlewareCreate(options: DocEditMiddlewareOptions): Middleware {
+export function docEditMiddlewareCreate(optionsGiven: DocEditMiddlewareOptions): Middleware {
+  const options = { ...optionsGiven, history: optionsGiven.history ?? new DocEditHistory() };
   const { endpoint } = options;
 
   return (req, res, next) => {
@@ -199,14 +216,14 @@ async function routeHandle(
       const provided = options.docProvidedFind?.(internalPath);
       if (provided) {
         const text = provided.read();
-        jsonSend(res, 200, { code: 0, data: { internalPath, text, hash: textHashGet(text) }, message: '' });
+        jsonSend(res, 200, { code: 0, data: { internalPath, text, hash: textHashGet(text), history: options.history?.summaryGet(internalPath) }, message: '' });
         return;
       }
       jsonSend(res, 404, { code: -3, data: null, message: `not an editable document of the source: ${internalPath}` });
       return;
     }
     const text = fs.readFileSync(entry.absPath, 'utf-8');
-    jsonSend(res, 200, { code: 0, data: sourceDataBuild(entry, text), message: '' });
+    jsonSend(res, 200, { code: 0, data: { ...sourceDataBuild(entry, text), history: options.history?.summaryGet(internalPath) }, message: '' });
     return;
   }
 
@@ -260,6 +277,7 @@ async function routeHandle(
       jsonSend(res, 400, { code: -1, data: null, message: String(error?.message ?? error) });
       return;
     }
+    let fileMoveList: HistoryFileMove[] = [];
     if (filePathDeleteList.length === 0) {
       fs.writeFileSync(entry.absPath, textNext, 'utf-8');
     } else {
@@ -269,13 +287,45 @@ async function routeHandle(
         const movedList = sourceFileDeleteApply(entry, textCurrent, textNext, filePathDeleteList, fileEntryListGet());
         options.sourceFile?.pathListMark(movedList.map((item) => item.backup));
         options.sourceFile?.dataReport();
+        fileMoveList = movedList;
       } catch (error: any) {
         if (!(error instanceof SourceFileDeleteRequestError)) throw error;
         jsonSend(res, 400, { code: -1, data: null, message: error.message });
         return;
       }
     }
-    jsonSend(res, 200, { code: 0, data: sourceDataBuild(entry, textNext), message: '' });
+    options.history?.record({
+      path: internalPath, textBefore: textCurrent, textAfter: textNext, hashBefore: hashCurrent, hashAfter: textHashGet(textNext), fileMoveList,
+    }, body?.history);
+    jsonSend(res, 200, { code: 0, data: { ...sourceDataBuild(entry, textNext), history: options.history?.summaryGet(internalPath) }, message: '' });
+    return;
+  }
+
+  if (req.method === 'GET' && route === '/history') {
+    const internalPath = url.searchParams.get('path') ?? '';
+    if (!docAccessGet(options, internalPath)) {
+      jsonSend(res, 404, { code: -3, data: null, message: `not an editable document of the source: ${internalPath}` });
+      return;
+    }
+    jsonSend(res, 200, { code: 0, data: options.history!.summaryGet(internalPath), message: '' });
+    return;
+  }
+
+  if (req.method === 'POST' && route === '/history/step') {
+    const body = await jsonBodyRead(req);
+    historyStepRouteHandle(res, body, options);
+    return;
+  }
+
+  if (req.method === 'POST' && route === '/history/clear') {
+    const body = await jsonBodyRead(req);
+    const internalPath = String(body?.path ?? '');
+    if (!internalPath) {
+      jsonSend(res, 400, { code: -1, data: null, message: 'request needs the path of a document' });
+      return;
+    }
+    options.history!.pathClear(internalPath);
+    jsonSend(res, 200, { code: 0, data: options.history!.summaryGet(internalPath), message: '' });
     return;
   }
 
@@ -342,10 +392,108 @@ function docProvidedApply(
   try {
     const textNext = operationList ? lineOperationListApply(textCurrent, operationList as LineOperation[]) : lineOperationApply(textCurrent, body.operation as LineOperation);
     provided.write(textNext);
-    jsonSend(res, 200, { code: 0, data: { internalPath, text: textNext, hash: textHashGet(textNext) }, message: '' });
+    options.history?.record({
+      path: internalPath, textBefore: textCurrent, textAfter: textNext, hashBefore: textHashGet(textCurrent), hashAfter: textHashGet(textNext),
+    }, body?.history);
+    jsonSend(res, 200, { code: 0, data: { internalPath, text: textNext, hash: textHashGet(textNext), history: options.history?.summaryGet(internalPath) }, message: '' });
   } catch (error: any) {
     jsonSend(res, 400, { code: typeof error?.code === 'number' ? error.code : -1, data: null, message: String(error?.message ?? error) });
   }
+}
+
+// a document the edit api reads and writes: a file of the source, or one a layer
+// registered (docProvidedFind); undefined for anything else
+function docAccessGet(options: DocEditMiddlewareOptions, internalPath: string): { absPath: string; read: () => string; write: (text: string) => void } | undefined {
+  if (!internalPath) return undefined;
+  const entry = editableEntryGet(options.fileEntryListGet(), internalPath);
+  if (entry) {
+    return {
+      absPath: entry.absPath,
+      read: () => fs.readFileSync(entry.absPath, 'utf-8'),
+      write: (text: string) => fs.writeFileSync(entry.absPath, text, 'utf-8'),
+    };
+  }
+  return options.docProvidedFind?.(internalPath);
+}
+
+// an entry of the history undone or redone (doc-edit-history.ts): the texts the
+// history computes are written, every file of the entry or none, and the files
+// deleted with it are put back from their backups (an undo) or deleted again (a redo)
+function historyStepRouteHandle(res: ServerResponse, body: any, options: DocEditMiddlewareOptions) {
+  const history = options.history!;
+  const path = String(body?.path ?? '');
+  const direction = body?.direction === 'undo' || body?.direction === 'redo' ? body.direction : '';
+  if (!path || !direction) {
+    jsonSend(res, 400, { code: -1, data: null, message: "request needs a path and a direction ('undo' or 'redo')" });
+    return;
+  }
+  const prepared = history.stepPrepare(
+    { path, direction, entryId: typeof body?.entryId === 'string' && body.entryId ? body.entryId : undefined },
+    (internalPath) => {
+      try {
+        return docAccessGet(options, internalPath)?.read();
+      } catch {
+        return undefined;
+      }
+    },
+  );
+  if (prepared.code !== 0 || !prepared.data) {
+    jsonSend(res, prepared.code === -2 ? 409 : prepared.code === -3 ? 404 : 200, { code: prepared.code, data: null, message: prepared.message });
+    return;
+  }
+  const { entry, writeList } = prepared.data;
+  const accessList = writeList.map((write) => docAccessGet(options, write.path)!);
+  for (const access of accessList) {
+    if (readOnlySend(res, options, access.absPath)) return;
+  }
+  // a file put back from its backup must not be there again
+  if (direction === 'undo') {
+    for (const write of writeList) {
+      const moved = (write.change.fileMoveList ?? []).find((one) => fs.existsSync(one.file) || !fs.existsSync(one.backup));
+      if (moved) {
+        jsonSend(res, 409, { code: -2, data: null, message: `${moved.file} cannot be put back (it exists again, or its backup is gone); nothing was written` });
+        return;
+      }
+    }
+  }
+  const writtenList: { access: { write: (text: string) => void }; textCurrent: string }[] = [];
+  try {
+    for (const [index, write] of writeList.entries()) {
+      const moveList = write.change.fileMoveList ?? [];
+      if (moveList.length > 0) {
+        options.sourceFile?.pathListMark(moveList.flatMap((one) => [one.file, one.backup]));
+        if (direction === 'undo') sourceFileBackupRestore(moveList);
+        else {
+          write.change.fileMoveList = sourceFileBackupMove(moveList.map((one) => ({ absPath: one.file })) as any);
+          options.sourceFile?.pathListMark(write.change.fileMoveList.map((one) => one.backup));
+        }
+      }
+      accessList[index].write(write.textNext);
+      writtenList.push({ access: accessList[index], textCurrent: write.textCurrent });
+    }
+  } catch (error) {
+    for (const written of writtenList.reverse()) {
+      try {
+        written.access.write(written.textCurrent);
+      } catch {
+        // the file could not be written back
+      }
+    }
+    throw error;
+  }
+  if (writeList.some((write) => (write.change.fileMoveList ?? []).length > 0)) options.sourceFile?.dataReport();
+  history.stepCommit(entry, direction);
+  const historyByPath: Record<string, unknown> = {};
+  for (const write of writeList) historyByPath[write.path] = history.summaryGet(write.path);
+  jsonSend(res, 200, {
+    code: 0,
+    data: {
+      entry: history.summaryGet(path).entryList.find((one) => one.entryId === entry.entryId),
+      fileList: writeList.map((write) => ({ internalPath: write.path, textBefore: write.textCurrent, text: write.textNext, hash: textHashGet(write.textNext) })),
+      historyByPath,
+    },
+    message: '',
+  });
 }
 
 // one change of the workspace file, built in place by doc-workspace-edit.ts.

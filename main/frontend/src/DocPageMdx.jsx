@@ -18,6 +18,7 @@ import { DocSidePanelStore, sidePanelEventTypeList } from './store/DocSidePanelS
 import { DocPasteStore } from './store/DocPasteStore.js';
 import { DocBlockSelectStore } from './store/DocBlockSelectStore.js';
 import { DocEditStructStore, structEventTypeList } from './store/DocEditStructStore.js';
+import { DocHistoryStore, historyEventTypeList } from './store/DocHistoryStore.js';
 import { DocPanelLayoutStore } from './store/DocPanelLayoutStore.js';
 import { DocWorkspaceStore } from './store/DocWorkspaceStore.js';
 import { DocSlashStore } from './store/DocSlashStore.js';
@@ -238,6 +239,11 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
     // structural edit in edit mode: the block or list item selected, the
     // edits of list items, a drag (doc_page_impl_edit_structure.md)
     const structStore = new DocEditStructStore({ editStore });
+    // undo and redo (doc_page_impl_edit_history.md): the history is the server's,
+    // per document; the store routes a request to the document, or first to the
+    // component, the author is at, and shows where the step took place
+    const historyStore = new DocHistoryStore({ editStore, docStore });
+    historyStore.pageElementGet = () => pageElementRef.current;
     const blockSelectStore = new DocBlockSelectStore({ editStore, structStore });
     // a pasted Markdown / MDX text reviewed as blocks, then inserted after
     // the blocks the author is at (doc_page_impl_block_ops.md)
@@ -356,6 +362,12 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
       typeList: sidePanelEventTypeList,
       handle: (event) => sidePanelStore.eventHandle(event),
     });
+    eventRouter.routeAdd({
+      name: 'history',
+      typeList: historyEventTypeList,
+      handle: (event) => historyStore.eventHandle(event),
+    });
+    historyStore.eventRouter = eventRouter;
     const stores = {
       envStore,
       sourceStore,
@@ -380,6 +392,7 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
       pasteStore,
       blockSelectStore,
       structStore,
+      historyStore,
       panelLayoutStore,
       slashStore,
       cellStore,
@@ -413,6 +426,7 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
     stores.compStateStore.init();
     stores.editStore.init();
     stores.structStore.init();
+    stores.historyStore.init();
     stores.assetStore.init();
     stores.blockPopupStore.init();
     stores.serviceStore.init();
@@ -430,6 +444,7 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
       stores.blockPopupStore.dispose();
       stores.assetStore.dispose();
       stores.structStore.dispose();
+      stores.historyStore.dispose();
       stores.editStore.dispose();
       stores.compStateStore.dispose();
       stores.docStore.dispose();

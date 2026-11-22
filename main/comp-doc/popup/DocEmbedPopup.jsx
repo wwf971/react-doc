@@ -3,6 +3,7 @@ import { Check, Copy, DocsBody, Eye, Pencil } from '../../frontend/UICommon.js';
 import { useDocStores } from '../../frontend/src/store/context.js';
 import { PanelPopup } from './PanelPopup.jsx';
 import { DocPopupBody } from '../edit/DocPopupBody.jsx';
+import { DocHistoryButtons } from '../edit/DocHistoryButtons.jsx';
 import { EditValueInline } from '../edit/EditValueInline.jsx';
 import { EDIT_POPUP_CLASS } from '../edit/use-edit-outside-pointer.js';
 
@@ -58,6 +59,8 @@ export const DocEmbedPopup = observer(function DocEmbedPopup() {
   const headerRightContent = (
     <span className="doc-block-popup-head doc-code-lines-head not-prose">
       {store.titleStatus === 'error' ? <span className="doc-error doc-code-lines-message" role="alert" title={store.titleMessage}>{store.titleMessage}</span> : null}
+      {/* the history of this block's document: the entries made in it (doc_page_impl_edit_history.md) */}
+      {isEditShown ? <DocHistoryButtons path={store.path} variant="header" /> : null}
       <button type="button" className="doc-button" title="Copy the text of the document (Markdown)" onClick={() => void store.copy()}>
         {store.isCopied ? <Check aria-hidden="true" size={12} strokeWidth={2.2} /> : <Copy aria-hidden="true" size={12} strokeWidth={2.2} />}
         <span>{store.isCopied ? 'Copied' : 'Copy'}</span>

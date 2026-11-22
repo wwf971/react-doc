@@ -60,10 +60,10 @@ import { sidePanelSearchEntryListBuild, sidePanelSearchMatch } from '../lib/side
 // lib/side-panel-move.js (moveResolve); the drag, the picker and the event
 // all ask there. the move itself arrives as the event
 // sidePanelItemMoveRequest of the sidePanel route (doc_page_impl_event.md),
-// from the drag or the picker, and is written through the edit api; the
-// change is recorded in the history of the edit layer
-// (DocEditStore.historyRecord). the new configuration comes back as data and
-// rebuilds the side panel.
+// from the drag or the picker, and is written through the edit api (whose
+// answer lists the files changed, their texts before and after: what a history
+// of the side panel would keep, doc_page_impl_TODO.md#edit-history-side-panel).
+// the new configuration comes back as data and rebuilds the side panel.
 
 export type SidePanelMovePosition = 'before' | 'after' | 'insideFirst' | 'insideLast';
 
@@ -439,11 +439,6 @@ export class DocSidePanelStore {
     }
 
     const fileChangeList = result.data?.fileChangeList ?? [];
-    this.editStore.historyRecord({
-      kind: 'sidePanelItemMove',
-      time: Date.now(),
-      fileChangeList: fileChangeList.map((change: any) => ({ scope: 'sidePanel', ...change })),
-    });
     runInAction(() => {
       // the new parent is open, so the moved item is seen where it went
       if (resolved.data.parentItemId) this.folderOpenSet(resolved.data.parentItemId, true);
@@ -744,12 +739,6 @@ export class DocSidePanelStore {
     if (result.code !== 0) {
       return { code: result.code, message: result.code === -2 ? messageConflictNode : result.message || 'Nothing was changed.' };
     }
-    const fileChangeList = result.data?.fileChangeList ?? [];
-    this.editStore.historyRecord({
-      kind: `sidePanelNode${request.action[0].toUpperCase()}${request.action.slice(1)}`,
-      time: Date.now(),
-      fileChangeList: fileChangeList.map((change: any) => ({ scope: 'sidePanel', ...change })),
-    });
     return { code: 0, data: result.data, message: '' };
   }
 

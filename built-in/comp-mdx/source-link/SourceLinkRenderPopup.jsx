@@ -5,6 +5,7 @@ import { buildMdxComps } from '../../../main/frontend/src/lib/mdx-comps.js';
 import { useDocStores } from '../../../main/frontend/src/store/context.js';
 import { DocLanguageProvider } from '../multi-lang/MultiLangContext.jsx';
 import { DocPopupBody } from '../../../main/comp-doc/edit/DocPopupBody.jsx';
+import { DocHistoryButtons } from '../../../main/comp-doc/edit/DocHistoryButtons.jsx';
 import './SourceLink.css';
 
 // render-mode popup for SourceLink: shows the compiled document instead of its
@@ -13,7 +14,7 @@ import './SourceLink.css';
 // pipeline; components inside the popup receive the target as their source
 // path so registered-component configuration and identity stay scoped to it.
 const SourceLinkRenderPopup = observer(function SourceLinkRenderPopup({ Panel, store }) {
-	const { compById, docStore, sourceStore } = useDocStores();
+	const { compById, docStore, editStore, sourceStore } = useDocStores();
 	const pathPopup = store.pathPopup;
 	const compiled = pathPopup ? sourceStore.compiledByPath[pathPopup] : undefined;
 	const entryPopup = pathPopup ? sourceStore.entryByInternalPath.get(pathPopup) : undefined;
@@ -35,9 +36,15 @@ const SourceLinkRenderPopup = observer(function SourceLinkRenderPopup({ Panel, s
 	if (!Panel || !store.isPopupOpen || compiled?.status !== 'done') return null;
 
 	const Body = compiled.Body;
+	// the document edited here has its own history, the one it has wherever it is edited
+	// (doc_page_impl_edit_history.md)
+	const isEdited = Boolean(editStore?.isEditMode && editStore.docIsEditable(pathPopup));
 	return (
 		<Panel
 			data={{ title: <span>{entryPopup?.name ?? pathPopup}</span> }}
+			headerRightContent={isEdited ? (
+				<span className="doc-block-popup-head not-prose"><DocHistoryButtons path={pathPopup} variant="header" /></span>
+			) : undefined}
 			config={{
 				isPopup: true,
 				isCloseVisible: true,

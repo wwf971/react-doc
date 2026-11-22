@@ -29,6 +29,18 @@ hotkeyMap:
     - key: mod+shift+b
       api: edit/blockSelectModeToggle
       when: editAvailable
+    # undo and redo (doc_page_impl_edit_history.md): the document, or the
+    # component, the author is at; inside a text being typed (a field, the
+    # source of a block) the keys stay the text's own, the browser's undo
+    - key: mod+z
+      api: history/undo
+      when: editBody && !textFocused
+    - key: mod+shift+z
+      api: history/redo
+      when: editBody && !textFocused
+    - key: ctrl+y
+      api: history/redo
+      when: editBody && !textFocused
     - key: mod+,
       api: settings/toggle
     - key: mod+f

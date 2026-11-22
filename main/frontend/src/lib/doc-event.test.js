@@ -66,3 +66,15 @@ test('an event of a type nobody subscribed to is accepted by nobody', async () =
   const result = await router.publish({ type: 'placeReveal', subject: { sourcePath: '~ex/a.md', blockLine: 1 } });
   assert.deepEqual(result, { code: 0, message: '', data: { resultList: [], isAccepted: false } });
 });
+
+test('a published event with isAcceptedFirst stops at the first subscriber that takes it', async () => {
+  const router = new DocEventRouter();
+  const calledList = [];
+  router.subscribe({ type: 'historyUndo', sourcePath: '~ex/a.md', sourceLine: 4 }, () => { calledList.push('first'); return undefined; });
+  router.subscribe({ type: 'historyUndo', sourcePath: '~ex/a.md', sourceLine: 4 }, () => { calledList.push('second'); return { code: 0 }; });
+  router.subscribe({ type: 'historyUndo', sourcePath: '~ex/a.md', sourceLine: 4 }, () => { calledList.push('third'); return { code: 0 }; });
+  const result = await router.publish({ type: 'historyUndo', subject: { sourcePath: '~ex/a.md', blockLine: 4 }, isAcceptedFirst: true });
+  assert.deepEqual(calledList, ['first', 'second']);
+  assert.equal(result.data.isAccepted, true);
+  assert.equal(result.data.resultList.length, 1);
+});

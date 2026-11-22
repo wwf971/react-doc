@@ -14,7 +14,8 @@ import {
   codeTextViewGet, codeTextViewSet,
 } from '../lib/doc-edit-code.js';
 import { itemAtomKindAdd, itemAtomKindTextRemove, itemAtomValueSet, itemAtomModelBuild, itemAtomOffsetDisplayGet, itemAtomTextBuild, itemPartGet, itemPartTextWrite } from '../lib/doc-edit-item-atom.js';
-import { embedPathParse, embedTextHashGet } from '../lib/doc-edit-embed.js';
+import { embedHistoryHashGet, embedPathParse, embedTextHashGet } from '../lib/doc-edit-embed.js';
+import { textChangeOperationListGet } from '../lib/doc-text-merge';
 import { keyedComputedCreate } from '../lib/keyed-computed.js';
 import { lineOperationApply, lineOperationListApply } from '../lib/doc-line-operation';
 import { CODE_VIEW_LIST, codeViewConfigKeyGet } from '../lib/rehype-code-view.js';
@@ -92,12 +93,13 @@ import {
 // every edit action first leaves the open session, so a draft is never lost
 // by starting something else.
 //
-// every change of a document goes through operationApply. it, and every
-// other writer of the edit layer (the side-panel store moving an item), hand
-// what they changed to historyRecord: the files with their text before and
-// after. that list is where a future undo/redo starts from (an undo writes
-// textBefore back, refused when the file is no longer textAfter); nothing
-// reads it yet.
+// every change of a document goes through operationApply. the development
+// server records every write in the history of the document
+// (doc_page_impl_edit_history.md); operationApply says what the write is (a
+// label, the action it belongs to, the embedded document it was made in) and
+// keeps the summary of the history the server answers (historySummaryByPath).
+// an undo or a redo is historyStepApply: the server writes the text back, and
+// the new texts are accepted as those of any write.
 //
 // the events of the edit domain (doc_page_impl_event.md) arrive at
 // eventHandle, routed there by the event layer.
@@ -312,27 +314,37 @@ export type EditDocState = {
 
 export type EditResult = { code: number; data?: any; message: string };
 
-// one change of the files, as historyRecord keeps it
-//   kind             what the change was: 'document' (an operation of
-//                    operationApply), 'blockListMove' (blocks moved into
-//                    another document: both documents), 'sidePanelItemMove'
-//   fileChangeList   scope 'source': file is the internal path of a
-//                    document; 'sidePanel': the side-panel file, relative
-//                    to the config directory
-export type EditHistoryRecord = {
-  kind: string;
-  time: number;
-  fileChangeList: {
-    scope: 'source' | 'sidePanel';
-    file: string;
-    hashBefore: string;
-    hashAfter: string;
-    textBefore: string;
-    textAfter: string;
-  }[];
+// what a write says of the action it belongs to, recorded by the server with
+// the write (plugin/doc-edit-history.ts HistoryMeta)
+//   label      what an undo button says ("Move block"); made from the
+//              operation when absent (historyLabelDerive)
+//   actionId   the writes of one action (blocks moved into another document)
+//   isRetract  the write takes back the last entry of the document (a created
+//              block canceled): that entry goes, nothing is recorded
+//   docPath, embed   set by the edit layer for a write made in an embedded document
+export type EditHistoryMeta = {
+  label?: string;
+  kind?: string;
+  actionId?: string;
+  isRetract?: boolean;
+  docPath?: string;
+  embed?: { line: number; hashBefore: string; hashAfter: string };
 };
 
-const historyRecordCountMax = 100;
+// the history of a document as the server answers it
+export type EditHistoryEntrySummary = {
+  entryId: string;
+  seq: number;
+  kind: string;
+  label: string;
+  time: number;
+  state: 'done' | 'undone';
+  undoSeq: number;
+  docPath: string;
+  embed?: { line: number; hashBefore: string; hashAfter: string };
+  pathList: string[];
+};
+export type EditHistorySummary = { path: string; entryList: EditHistoryEntrySummary[]; undoEntryId: string; redoEntryId: string };
 
 type DocEvent = { type: string; data: Record<string, any>; source: Record<string, any>; point?: EditPoint };
 
@@ -430,8 +442,9 @@ export class DocEditStore {
   // the component state service layer: the states keyed by the lines of a
   // document follow the lines every write moves (doc_page_impl_mdx_comp_state.md)
   compStateStore: DocCompStateStore | undefined;
-  // the last changes of the files, oldest first (historyRecord); not observed
-  historyRecordList: EditHistoryRecord[] = [];
+  // the history of every document read, as the server answered it last
+  // (doc_page_impl_edit_history.md): with every read and every write
+  historySummaryByPath: Record<string, EditHistorySummary> = {};
 
   constructor(
     sourceStore: DocSourceStore,
@@ -481,7 +494,7 @@ export class DocEditStore {
       sessionReceiver: observable.ref,
       reactionDispose: false,
       reactionConfigDispose: false,
-      historyRecordList: false,
+      historySummaryByPath: observable.shallow,
       docStateServiceByPath: false,
       docStateServiceGet: false,
     });
@@ -698,6 +711,7 @@ export class DocEditStore {
       });
       return;
     }
+    this.historySummaryAccept(path, result.data.history);
     await this.sourceAccept(path, result.data.text, result.data.hash);
   }
 
@@ -823,15 +837,16 @@ export class DocEditStore {
 
   // the one path every change of a document takes: the operation is sent
   // with the hash of the text it was built on, the new text is accepted and
-  // compiled, and the change is recorded (historyRecord).
+  // compiled, and the server records the change in the history of the
+  // document (doc_page_impl_edit_history.md).
   //   operation        one line operation, or a list built on the same text
   //                    (applied together)
   //   messageFailure   what a failure other than a conflict is reported as
   //   onApplied        state to settle once the file is written, before the
   //                    new text is accepted (compiling it takes a moment)
-  //   isHistoryRecorded  false: the caller records the change itself, with
-  //                    the change of another file of the same action
-  //                    (data.fileChange of the answer)
+  //   history          what the write is, for its entry in the history of the
+  //                    document (EditHistoryMeta); the label is made from the
+  //                    operation when absent
   //   stateRemapList   how the marker lines of blocks move, when the
   //                    operation alone does not say (a swap of two blocks);
   //                    else it is derived from the operation (lineShiftListGet).
@@ -844,10 +859,10 @@ export class DocEditStore {
   private async operationApply(
     path: string,
     operation: any,
-    { messageFailure, onApplied, isHistoryRecorded = true, stateRemapList, filePathDeleteList = [] }: {
+    { messageFailure, onApplied, history, stateRemapList, filePathDeleteList = [] }: {
       messageFailure: string;
       onApplied?: () => void;
-      isHistoryRecorded?: boolean;
+      history?: EditHistoryMeta;
       stateRemapList?: { lineFrom: number; lineTo: number | undefined }[];
       filePathDeleteList?: string[];
     },
@@ -864,20 +879,13 @@ export class DocEditStore {
         if (one?.action === 'replaceLines' && typeof one.text === 'string') this.blockTextPrepare(path, one.text);
       }
     }
-    if (embedPathParse(path)) return this.embedOperationApply(path, operation, { messageFailure, onApplied, stateRemapList });
-    const result = await this.api.sourceApply(path, source.hash, operation, filePathDeleteList);
+    const historyMeta: EditHistoryMeta = { ...history, label: history?.label || this.historyLabelDerive(path, operation) };
+    if (embedPathParse(path)) return this.embedOperationApply(path, operation, { messageFailure, onApplied, stateRemapList, history: historyMeta });
+    const result = await this.api.sourceApply(path, source.hash, operation, filePathDeleteList, historyMeta);
     if (result.code !== 0) {
       return { code: result.code, message: result.code === -2 ? messageConflict : result.message || messageFailure };
     }
-    const fileChange: EditHistoryRecord['fileChangeList'][number] = {
-      scope: 'source',
-      file: path,
-      hashBefore: source.hash,
-      hashAfter: result.data.hash,
-      textBefore: source.text ?? '',
-      textAfter: result.data.text,
-    };
-    if (isHistoryRecorded) this.historyRecord({ kind: 'document', time: Date.now(), fileChangeList: [fileChange] });
+    this.historySummaryAccept(path, result.data.history);
     if (this.compStateStore) {
       if (stateRemapList) {
         this.compStateStore.docLineRemap(path, stateRemapList);
@@ -888,14 +896,85 @@ export class DocEditStore {
     }
     if (onApplied) runInAction(onApplied);
     await this.sourceAccept(path, result.data.text, result.data.hash);
-    return { code: 0, data: { ...result.data, fileChange }, message: '' };
+    return { code: 0, data: result.data, message: '' };
   }
 
-  // keeps one change of the files for a future undo/redo (see the top)
-  historyRecord(record: EditHistoryRecord) {
-    if (record.fileChangeList.length === 0) return;
-    this.historyRecordList.push(record);
-    if (this.historyRecordList.length > historyRecordCountMax) this.historyRecordList.shift();
+  // ---------- history (doc_page_impl_edit_history.md) ----------
+
+  // the summary of the history of a document the server answered with a read,
+  // a write or a step
+  historySummaryAccept(path: string, summary: EditHistorySummary | undefined) {
+    if (!summary || !Array.isArray(summary.entryList)) return;
+    runInAction(() => {
+      this.historySummaryByPath[path] = summary;
+    });
+  }
+
+  // what an undo button says of a write that did not say it itself: what the
+  // operation did, to which block
+  historyLabelDerive(path: string, operation: any): string {
+    if (Array.isArray(operation)) return operation.length > 1 ? 'Change blocks' : this.historyLabelDerive(path, operation[0]);
+    const model = this.docEditByPath[path]?.model;
+    const block = operation?.lineStart !== undefined
+      ? model?.blockList.find((one: any) => one.lineStart <= operation.lineStart && operation.lineStart <= one.lineEnd)
+      : undefined;
+    const blockName = block ? historyBlockNameGet(block) : 'block';
+    if (operation?.action === 'replaceLines') return `Edit ${blockName}`;
+    if (operation?.action === 'insertLines') return 'Insert block';
+    if (operation?.action === 'deleteLines') return `Delete ${blockName}`;
+    if (operation?.action === 'replaceAll') return 'Edit the source';
+    return 'Edit';
+  }
+
+  // an entry of the history of a document undone or redone by the server
+  // (the one named, else the one the document's undo / redo takes): the open
+  // session is left first (saved), and the texts the server wrote are taken as
+  // those of any write: accepted and compiled, the states of the blocks
+  // following their lines, the documents embedded in them read again.
+  // answers { entry, fileList: [{ internalPath, textBefore, text }] }
+  async historyStepApply(path: string, direction: 'undo' | 'redo', entryId = ''): Promise<EditResult> {
+    if (!this.api) return { code: -1, message: 'The edit api is not available.' };
+    const isLeft = await this.sessionLeave();
+    if (!isLeft) return { code: -1, message: this.session?.message || 'The open edit could not be saved.' };
+    if (this.isSubmitting) return { code: -1, message: 'A change is being written.' };
+    const result = await this.api.historyStep(path, direction, entryId);
+    if (result.code !== 0) return { code: result.code, message: result.message || `Nothing was ${direction === 'undo' ? 'undone' : 'redone'}.` };
+    for (const [pathOne, summary] of Object.entries(result.data.historyByPath ?? {})) this.historySummaryAccept(pathOne, summary as EditHistorySummary);
+    const fileList: { internalPath: string; textBefore: string; text: string; hash: string }[] = result.data.fileList ?? [];
+    await Promise.all(fileList.map(async (file) => {
+      const source = this.sourceByPath[file.internalPath];
+      if (!source) return;
+      if (this.compStateStore && source.text !== undefined) {
+        const frontmatterLineEnd = this.docEditByPath[file.internalPath]?.model?.frontmatter?.lineEnd ?? 0;
+        this.compStateStore.docLineShift(file.internalPath, lineShiftListGet(textChangeOperationListGet(source.text, String(file.text).replace(/\r\n/g, '\n')), frontmatterLineEnd));
+      }
+      await this.sourceAccept(file.internalPath, file.text, file.hash);
+    }));
+    // the documents embedded in a host written now are read from it again
+    const hostSet = new Set(fileList.map((file) => file.internalPath));
+    const embedPathList = Object.keys(this.sourceByPath).filter((one) => {
+      const embed = embedPathParse(one);
+      return embed !== undefined && embed !== null && hostSet.has(embed.hostPath);
+    });
+    await Promise.all(embedPathList.map((one) => this.embedEnsure(one)));
+    if (fileList.length > 0) void this.assetStore?.usageNotify(fileList.map((file) => ({ type: 'docChange', docPath: file.internalPath })));
+    return { code: 0, message: '', data: { entry: result.data.entry, fileList } };
+  }
+
+  // the history of a document forgotten by the server
+  async historyClear(path: string): Promise<EditResult> {
+    if (!this.api) return { code: -1, message: 'The edit api is not available.' };
+    const result = await this.api.historyClear(path);
+    if (result.code === 0) this.historySummaryAccept(path, result.data);
+    return result.code === 0 ? { code: 0, message: '', data: result.data } : { code: result.code, message: result.message };
+  }
+
+  // the history of a document read from the server (another tab may have written)
+  async historyRead(path: string): Promise<EditResult> {
+    if (!this.api) return { code: -1, message: 'The edit api is not available.' };
+    const result = await this.api.historyGet(path);
+    if (result.code === 0) this.historySummaryAccept(path, result.data);
+    return result.code === 0 ? { code: 0, message: '', data: result.data } : { code: result.code, message: result.message };
   }
 
   // ---------- sessions ----------
@@ -1475,9 +1554,10 @@ export class DocEditStore {
         session.status = 'submitting';
         session.message = '';
       });
+      // the block goes as it came: its creation leaves the history of the document
       const result = await this.blockDeleteApply(session.path, session.blockIndex, () => {
         if (this.session === session) this.session = undefined;
-      });
+      }, [], { isRetract: true, label: 'Delete block' });
       if (result.code !== 0) {
         runInAction(() => {
           session.status = 'error';
@@ -1551,6 +1631,8 @@ export class DocEditStore {
       isListEmpty ? blockDeleteOperationBuild(this.docEditByPath[session.path]!.model, session.blockIndex) : blockReplaceOperationBuild(block, text),
       {
         messageFailure: 'The new item was not removed.',
+        // the item goes as it came: its creation leaves the history of the document
+        history: { isRetract: true, label: 'Remove a list item' },
         onApplied: () => {
           if (this.session === session) this.session = undefined;
           if (!isListEmpty) this.blockTextPending = { path: session.path, blockIndex: session.blockIndex, text };
@@ -1989,7 +2071,7 @@ export class DocEditStore {
       return { code: -1, message: 'The place is not in the document anymore.' };
     }
     const operation = blockInsertOperationBuild(model, borderIndex, text.replace(/\r\n/g, '\n'));
-    return this.operationApply(path, operation, { messageFailure: 'The blocks were not inserted.' });
+    return this.operationApply(path, operation, { messageFailure: 'The blocks were not inserted.', history: { label: 'Insert blocks' } });
   }
 
   // copies the blocks at blockIndexList of one document to border
@@ -2033,7 +2115,7 @@ export class DocEditStore {
       }
       const { operationList, isNoop } = blockListMoveOperationListBuild(modelSource, blockIndexList, borderIndex);
       if (isNoop) return { code: 0, data: { isNoop: true }, message: 'The blocks already are there.' };
-      const result = await this.operationApply(sourcePath, operationList, { messageFailure: 'The blocks were not moved.' });
+      const result = await this.operationApply(sourcePath, operationList, { messageFailure: 'The blocks were not moved.', history: { label: 'Move blocks' } });
       if (result.code === 0) void this.assetStore?.usageNotify([{ type: 'docChange', docPath: sourcePath }]);
       return result;
     }
@@ -2045,22 +2127,19 @@ export class DocEditStore {
     if (borderIndex < 0 || borderIndex > modelTarget.blockList.length) {
       return { code: -1, message: 'The place is not in the document anymore.' };
     }
+    // the two writes are one action: one entry of the history of both documents
+    const history: EditHistoryMeta = { label: 'Move blocks', kind: 'blockListMove', actionId: historyActionIdNew() };
     const resultInsert = await this.operationApply(
       targetPath,
       blockInsertOperationBuild(modelTarget, borderIndex, blockListTextGet(modelSource, blockIndexList)),
-      { messageFailure: `The blocks were not inserted into ${targetPath}.`, isHistoryRecorded: false },
+      { messageFailure: `The blocks were not inserted into ${targetPath}.`, history },
     );
     if (resultInsert.code !== 0) return resultInsert;
     const resultRemove = await this.operationApply(
       sourcePath,
       blockListDeleteOperationListBuild(modelSource, blockIndexList),
-      { messageFailure: `The blocks were not removed from ${sourcePath}.`, isHistoryRecorded: false },
+      { messageFailure: `The blocks were not removed from ${sourcePath}.`, history },
     );
-    this.historyRecord({
-      kind: 'blockListMove',
-      time: Date.now(),
-      fileChangeList: [resultInsert.data.fileChange, ...(resultRemove.code === 0 ? [resultRemove.data.fileChange] : [])],
-    });
     void this.assetStore?.usageNotify([
       { type: 'docChange', docPath: targetPath },
       { type: 'docChange', docPath: sourcePath },
@@ -2086,6 +2165,7 @@ export class DocEditStore {
     if (blockListTextGet(model, blockIndexList) === '') return { code: -1, message: 'No block is chosen.' };
     const result = await this.operationApply(path, blockListDeleteOperationListBuild(model, blockIndexList), {
       messageFailure: 'The blocks were not deleted.',
+      history: { label: 'Delete blocks' },
     });
     if (result.code === 0) void this.assetStore?.usageNotify([{ type: 'docChange', docPath: path }]);
     return result;
@@ -2101,7 +2181,7 @@ export class DocEditStore {
     path: string,
     sourceHash: string,
     changeList: { blockIndex: number; text?: string; isRemoved?: boolean }[],
-    { messageFailure = 'The change was not written.' }: { messageFailure?: string } = {},
+    { messageFailure = 'The change was not written.', historyLabel }: { messageFailure?: string; historyLabel?: string } = {},
   ): Promise<EditResult> {
     const isLeft = await this.sessionLeave();
     if (!isLeft) return { code: -1, message: this.session?.message || 'The open edit could not be saved.' };
@@ -2120,6 +2200,7 @@ export class DocEditStore {
     const changeOnly = changeList.length === 1 && !changeList[0].isRemoved ? changeList[0] : undefined;
     const result = await this.operationApply(path, operationList.length === 1 ? operationList[0] : operationList, {
       messageFailure,
+      history: historyLabel ? { label: historyLabel } : undefined,
       onApplied: () => {
         if (changeOnly) this.blockTextPending = { path, blockIndex: changeOnly.blockIndex, text: String(changeOnly.text ?? '') };
       },
@@ -2294,6 +2375,7 @@ export class DocEditStore {
     const usageChangeList = blockSwapUsageChangeListBuild(model, indexUpper, path);
     const result = await this.operationApply(path, blockSwapOperationBuild(model, indexUpper), {
       messageFailure: 'The block was not moved.',
+      history: { label: 'Move block' },
       // the operation rewrites the lines of both blocks; the states keyed by
       // their marker lines exchange places with them
       stateRemapList: blockSwapStateRemapListBuild(model, indexUpper),
@@ -2355,6 +2437,7 @@ export class DocEditStore {
     if (text === block.text) return { code: 0, message: '', data: { isNoop: true } };
     return this.operationApply(path, blockReplaceOperationBuild(block, text), {
       messageFailure: 'The view of the block was not written.',
+      history: { label: 'Change the view of a block' },
       onApplied: () => {
         this.blockTextPending = { path, blockIndex, text };
       },
@@ -2387,6 +2470,7 @@ export class DocEditStore {
     const text = [...prefixList, codeTextJoin(parsed.value)].join('\n');
     return this.operationApply(path, blockReplaceOperationBuild(block, text), {
       messageFailure: 'The block was not turned into text.',
+      history: { label: 'Turn a block into text' },
       onApplied: () => {
         this.blockTextPending = { path, blockIndex, text };
       },
@@ -2469,6 +2553,7 @@ export class DocEditStore {
     sourceLine: number,
     transform: (blockText: string) => EditResult | Promise<EditResult>,
     messageFailure: string,
+    history?: EditHistoryMeta,
   ): Promise<EditResult> {
     const model = this.docEditByPath[path]?.model;
     if (!model) return { code: -1, message: 'the document is not read' };
@@ -2507,6 +2592,7 @@ export class DocEditStore {
     if (text === block.text) return { code: 0, message: '', data: { isNoop: true } };
     return this.operationApply(path, blockReplaceOperationBuild(block, text), {
       messageFailure,
+      history,
       onApplied: () => {
         this.blockTextPending = { path, blockIndex, text };
       },
@@ -2551,7 +2637,12 @@ export class DocEditStore {
   private async embedOperationApply(
     path: string,
     operation: any,
-    { messageFailure, onApplied, stateRemapList }: { messageFailure: string; onApplied?: () => void; stateRemapList?: { lineFrom: number; lineTo: number | undefined }[] },
+    { messageFailure, onApplied, stateRemapList, history }: {
+      messageFailure: string;
+      onApplied?: () => void;
+      stateRemapList?: { lineFrom: number; lineTo: number | undefined }[];
+      history?: EditHistoryMeta;
+    },
   ): Promise<EditResult> {
     const embed = embedPathParse(path)!;
     const source = this.sourceByPath[path];
@@ -2564,11 +2655,19 @@ export class DocEditStore {
     if (!this.docEditByPath[embed.hostPath]?.model || this.docEditIsStale(embed.hostPath)) await this.docEditEnsure(embed.hostPath);
     // the text is unchanged in the host since it was read: else it changed elsewhere
     if (this.embedTextGet(path) !== source.text) return { code: -2, message: messageConflict };
+    // an entry of the host made in this document: the popup of the block finds
+    // its own entries by the text they leave (doc_page_impl_edit_history.md)
+    const historyHost: EditHistoryMeta = {
+      ...history,
+      docPath: path,
+      embed: { line: embed.line, hashBefore: embedHistoryHashGet(source.text), hashAfter: embedHistoryHashGet(textAfter) },
+    };
     const result = await this.codeFenceTextChangeRaw(
       embed.hostPath,
       embed.line + 1,
       (blockText) => codeBlockValueTextSet(blockText, textAfter.replace(/\n$/, '')),
       messageFailure,
+      historyHost,
     );
     if (result.code !== 0) return result;
     if (this.compStateStore) {
@@ -2693,6 +2792,7 @@ export class DocEditStore {
     const text = componentBlockTextBuild(block, { raw: referenceText, lang: ASSET_REF_LANG });
     const result = await this.operationApply(path, blockReplaceOperationBuild(block, text), {
       messageFailure: 'The block was not rewritten as a reference.',
+      history: { label: 'Move data to the asset service layer' },
       onApplied: () => {
         if (this.blockAssetMove === move) this.blockAssetMove = undefined;
         this.blockTextPending = { path, blockIndex, text };
@@ -2735,6 +2835,7 @@ export class DocEditStore {
     const text = built.data;
     const result = await this.operationApply(path, blockReplaceOperationBuild(block, text), {
       messageFailure: 'The block was not rewritten as a reference.',
+      history: { label: 'Move data to the asset service layer' },
       onApplied: () => {
         if (this.blockAssetMove === move) this.blockAssetMove = undefined;
         this.blockTextPending = { path, blockIndex, text };
@@ -3190,6 +3291,7 @@ export class DocEditStore {
     const text = componentBlockTextBuild(block, { props });
     return this.operationApply(path, blockReplaceOperationBuild(block, text), {
       messageFailure: 'The props of the block were not changed.',
+      history: { label: `Change ${historyBlockNameGet(block)}` },
       onApplied: () => {
         this.blockTextPending = { path, blockIndex, text };
       },
@@ -3222,7 +3324,7 @@ export class DocEditStore {
 
   // the delete operation of one block, shared by the confirmed deletion and
   // by canceling a created block (which names no files)
-  private blockDeleteApply(path: string, blockIndex: number, onApplied: () => void, filePathDeleteList: string[] = []): Promise<EditResult> {
+  private blockDeleteApply(path: string, blockIndex: number, onApplied: () => void, filePathDeleteList: string[] = [], history?: EditHistoryMeta): Promise<EditResult> {
     const model = this.docEditByPath[path]?.model;
     if (!model || !model.blockList[blockIndex]) {
       return Promise.resolve({ code: -1, message: 'The block no longer exists.' });
@@ -3231,12 +3333,28 @@ export class DocEditStore {
       messageFailure: 'The block was not deleted.',
       onApplied,
       filePathDeleteList,
+      history,
     });
   }
 }
 
 function blockViewModeKeyBuild(path: string, blockIndex: number): string {
   return `${path}#${blockIndex}`;
+}
+
+// what an entry of the history calls a block: its component, else its kind
+const historyKindNameByKind: Record<string, string> = {
+  paragraph: 'paragraph', heading: 'heading', list: 'list', code: 'code block', table: 'table', blockquote: 'quote',
+  math: 'math', html: 'HTML', thematicBreak: 'rule', marker: 'markers', comment: 'comment',
+};
+function historyBlockNameGet(block: any): string {
+  if (block?.component?.compName) return block.component.compName;
+  return historyKindNameByKind[block?.kind] ?? (block?.kind ? String(block.kind) : 'block');
+}
+
+// the id the writes of one action share
+function historyActionIdNew(): string {
+  return `a${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
 }
 
 // the lines of a block in the content without frontmatter, the lines the

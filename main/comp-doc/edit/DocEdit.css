@@ -246,6 +246,79 @@
   background: color-mix(in srgb, var(--color-fd-destructive, #dc2626) 6%, transparent);
 }
 
+/* where an undo or a redo took place (doc_page_impl_edit_history.md#where-it-took-place):
+   the blocks it changed tinted for a moment, fading out; lines only taken away
+   are a bar at the border they were at. a box-shadow and a background only:
+   the mark takes no room, so nothing moves */
+.doc-edit-block[data-history-mark] {
+  --doc-history-mark-color: color-mix(in srgb, var(--color-fd-primary) 16%, transparent);
+  --doc-history-mark-bar: color-mix(in srgb, var(--color-fd-primary) 70%, transparent);
+  border-radius: 3px;
+}
+
+.doc-edit-block[data-history-mark='change'] {
+  animation: doc-history-mark-change 1.6s ease-out forwards;
+}
+
+.doc-edit-block[data-history-mark='border-top'] {
+  animation: doc-history-mark-border-top 1.6s ease-out forwards;
+}
+
+.doc-edit-block[data-history-mark='border-bottom'] {
+  animation: doc-history-mark-border-bottom 1.6s ease-out forwards;
+}
+
+@keyframes doc-history-mark-change {
+  0%, 35% {
+    background-color: var(--doc-history-mark-color);
+    box-shadow: 0 0 0 4px var(--doc-history-mark-color);
+  }
+  100% {
+    background-color: transparent;
+    box-shadow: 0 0 0 4px transparent;
+  }
+}
+
+@keyframes doc-history-mark-border-top {
+  0%, 35% { box-shadow: 0 -4px 0 -1px var(--doc-history-mark-bar); }
+  100% { box-shadow: 0 -4px 0 -1px transparent; }
+}
+
+@keyframes doc-history-mark-border-bottom {
+  0%, 35% { box-shadow: 0 4px 0 -1px var(--doc-history-mark-bar); }
+  100% { box-shadow: 0 4px 0 -1px transparent; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .doc-edit-block[data-history-mark] {
+    animation-duration: 0.01s;
+    animation-delay: 1.2s;
+  }
+}
+
+/* Undo / Redo of a document (DocHistoryButtons): in the document controls of
+   the toolbar, and small in the header of a popup */
+.doc-history-buttons {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.doc-history-buttons .is-mirrored svg {
+  transform: scaleX(-1);
+}
+
+.doc-history-buttons[data-variant='header'] .doc-button {
+  padding: 0 0.3rem;
+}
+
+.doc-edit-doc-controls .doc-history-buttons {
+  padding-right: 0.25rem;
+  margin-right: 0.05rem;
+  border-right: 1px solid var(--color-fd-border);
+}
+
 /* a block that renders nothing: a floating chip over the gap it sits in */
 .doc-edit-block[data-invisible] {
   height: 0;

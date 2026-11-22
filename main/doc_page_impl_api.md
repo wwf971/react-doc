@@ -42,7 +42,7 @@ The registry mirrors the other two registries of the page part for part, so a re
 
 A later layer replaces an id of an earlier one, and `null` removes it; a provider never replaces a registered id (a collision is warned about and the first kept). What is not a definition, or has no valid id, is reported (`[doc-api]`) and left out, never the page.
 
-The package's own apis live in `comp-doc/api/`, one file per layer of the page (`api-nav.js`, `api-doc.js`, `api-edit.js`, `api-page.js`), gathered by `api-registry.js`; the registry knows none of them by name.
+The package's own apis live in `comp-doc/api/`, one file per layer of the page (`api-nav.js`, `api-doc.js`, `api-edit.js`, `api-history.js`, `api-page.js`), gathered by `api-registry.js`; the registry knows none of them by name.
 
 ### The definition
 
@@ -149,6 +149,7 @@ An api that changes the document does not call a store where a component would r
 | `doc/itemTextSet`, `doc/itemInsert`, `doc/itemDelete`, `doc/itemIndent`, `doc/itemOutdent`, `doc/itemMove`, `doc/itemMoveTo`, `doc/itemListTypeSet` | the structural edits of a list item, each as the event its toolbar reports ([The apis of structural edit](doc_page_impl_edit_structure.md#the-apis)) | editing is available |
 | `edit/modeToggle`, `edit/modeSet { isOn }`, `edit/blockSelectModeToggle` | the modes of the page | editing is available |
 | `edit/sessionLeave`, `edit/sessionCancel` | the open session saved or dropped | a block is being edited |
+| `history/undo { doc? }`, `history/redo { doc? }`; `history/list { doc? }`, `history/clear { doc? }` | a step of the history of a document, as its buttons report it (`historyUndoRequest`); without `doc`, where the author is, the component of the block there first ([The Edit History](doc_page_impl_edit_history.md#routing-an-undo)); the entries of a document; its history forgotten | editing is available |
 | `edit/blockEnter { block?, editModeId?, doc? }`, `edit/itemEnter { item?, block?, doc? }` | a block opened in an edit mode (`editBlockEnterRequest`); the own text of a list item opened (`editItemEnterRequest`) | edit mode is on |
 | `edit/select { block?, item?, scope? }`, `edit/selectGrow`, `edit/selectClear`, `edit/selectionGet`; `edit/selectionMove { direction }`, `edit/selectionEnter`, `edit/selectionDeleteAsk` | the selection of structural edit, and what the keys of the selection do ([Structural edit](doc_page_impl_edit_structure.md#the-keys-of-the-selection)) | edit mode is on; something is selected |
 | `page/contextGet` | the context above, serializable | |
@@ -260,7 +261,7 @@ frontend/src/lib/doc-api.js                apiDefine, apiByIdBuild, params check
                                            apiDeclaredDefine (yaml aliases)
 frontend/src/store/DocApiStore.ts          the registry (layers + providers), the context, call, the call records,
                                            the notice, the remote bridge of the page, uiHandle (search)
-comp-doc/api/api-registry.js               the package's apis by id, from api-nav.js, api-doc.js, api-edit.js, api-struct.js
+comp-doc/api/api-registry.js               the package's apis by id, from api-nav.js, api-doc.js, api-edit.js, api-history.js, api-struct.js
                                            (list items, the selection of structural edit), api-page.js, api-object.js,
                                            api-playground.js
 comp-doc/api/api-service.js                the provider of the service instances' apis

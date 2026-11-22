@@ -307,6 +307,8 @@ test('only listed deletable files can be chosen; the chosen subset reaches the r
       hashBase: HASH_DOC,
       operation: { action: 'deleteLines', lineStart: 3, lineEnd: 7 },
       filePathDeleteList: ['~docs/dog.png'],
+      // what the history of the document records of the write (doc_page_impl_edit_history.md)
+      history: { label: 'Delete PhotoSet' },
     });
     assert.equal(store.deleteConfirm, undefined);
   } finally {

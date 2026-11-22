@@ -29,6 +29,13 @@ export function embedPathParse(path) {
 
 // the identity of a version of an embedded text (it has no file and no hash
 // of the server): FNV-1a of the text, enough to tell two versions apart
+// the identity of the text of an embedded document in its history
+// (doc_page_impl_edit_history.md#the-popup-of-an-mdx-block): the hash of the text
+// without its trailing newlines, which a fence written and read again may add or drop
+export function embedHistoryHashGet(text) {
+  return embedTextHashGet(String(text ?? '').replace(/\r\n/g, '\n').replace(/\n+$/, ''));
+}
+
 export function embedTextHashGet(text) {
   let hash = 0x811c9dc5;
   const value = String(text ?? '');

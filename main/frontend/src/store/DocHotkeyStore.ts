@@ -40,6 +40,10 @@ const CHORD_WAIT_MS = 2000;
 // the names a binding's "when" may use
 export const hotkeyContextKeyList = [
   'editMode', 'viewMode', 'editAvailable', 'sessionOpen', 'blockSelectMode',
+  // the edit body is shown (edit mode or block selection mode); a text field has
+  // the focus (an input, a textarea, something contenteditable), whose own keys
+  // (its undo) a binding leaves to it with !textFocused
+  'editBody', 'textFocused',
   'structSelected', 'structItemSelected',
   'paletteOpen', 'settingsOpen', 'blockPopupOpen', 'devServer',
   'findScopeActive', 'findOpen',
@@ -164,6 +168,10 @@ export class DocHotkeyStore {
       editAvailable: editStore?.isAvailable === true,
       sessionOpen: editStore?.isSessionOpen === true,
       blockSelectMode: editStore?.isBlockSelectMode === true,
+      editBody: isEditMode || editStore?.isBlockSelectMode === true,
+      // known only at a key (keyDownHandle sets it from the key's target): the
+      // table and the keys shown beside the apis are those of the page outside a text
+      textFocused: false,
       paletteOpen: paletteStore?.isOpen === true,
       settingsOpen: configStore?.isSettingsOpen === true,
       blockPopupOpen: blockPopupStore?.isOpen === true,
@@ -207,7 +215,11 @@ export class DocHotkeyStore {
     const isEditing = targetIsEditable(event.target) || this.apiStore.stores.editStore?.isSessionOpen === true;
     if (!chordPending && !hotkeyStrokeHasModifier(stroke) && isEditing) return false;
     const keyText = chordPending ? `${chordPending.strokeText} ${strokeText}` : strokeText;
-    const resolved = hotkeyResolve(this.table, keyText, this.resolveOptions);
+    // the text field is the one the key happened in, not the focus the table was last drawn with
+    const resolved = hotkeyResolve(this.table, keyText, {
+      ...this.resolveOptions,
+      contextKeyByName: { ...this.contextKeyByName, textFocused: targetIsEditable(event.target) },
+    });
     if (!resolved) {
       if (!chordPending && this.table.isChordPrefix(strokeText)) {
         this.chordStart(strokeText);

@@ -1,5 +1,6 @@
 import { apiByIdDoc } from './api-doc.js';
 import { apiByIdEdit } from './api-edit.js';
+import { apiByIdHistory } from './api-history.js';
 import { apiByIdNav } from './api-nav.js';
 import { apiByIdPage } from './api-page.js';
 import { apiByIdObject } from './api-object.js';
@@ -18,6 +19,7 @@ export const apiById = {
   ...apiByIdNav,
   ...apiByIdDoc,
   ...apiByIdEdit,
+  ...apiByIdHistory,
   ...apiByIdStruct,
   ...apiByIdPage,
   ...apiByIdObject,
