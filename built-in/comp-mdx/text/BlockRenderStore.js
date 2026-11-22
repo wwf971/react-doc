@@ -1,15 +1,22 @@
 import { makeAutoObservable, observable, runInAction } from 'mobx';
-import { compileDoc } from '../../../main/frontend/src/lib/mdx-compile.js';
+import { blockCompileStart } from '../../../main/frontend/src/lib/block-compile-cache.js';
 
 // compile state of one BlockRender instance. the previous Body stays visible
-// while a newer text compiles, so a live preview does not flicker.
+// while a newer text compiles, so a live preview does not flicker. the
+// compiles are shared (lib/block-compile-cache.js): a text compiled already
+// (a block just saved, compiled as its write started) is drawn at once.
+//   compiledDone   the compile of the first text, when it is done already
 export class BlockRenderStore {
   status = 'empty';
   Body = null;
   message = '';
   compileVersion = 0;
 
-  constructor() {
+  constructor(compiledDone) {
+    if (compiledDone?.Body) {
+      this.status = 'done';
+      this.Body = compiledDone.Body;
+    }
     makeAutoObservable(this, { Body: observable.ref });
   }
 
@@ -22,7 +29,7 @@ export class BlockRenderStore {
     }
     this.status = 'loading';
     try {
-      const compiled = await compileDoc({ source: text, internalPath, format, config: compileConfig ?? {} });
+      const compiled = await blockCompileStart({ text, internalPath, format, compileConfig });
       if (compileVersion !== this.compileVersion) return;
       runInAction(() => this.resultSet('done', compiled.Body, ''));
     } catch (error) {

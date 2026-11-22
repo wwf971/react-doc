@@ -20,6 +20,11 @@ import './CodeEditor.css';
 //     onSave       Ctrl/⌘ + S and Ctrl/⌘ + Enter
 //     onCancel     Escape, while the editor has the keyboard
 //
+// Tab indents the lines of the selection (the line of the caret) by one unit,
+// Shift + Tab takes one away (indentWithTab), as in a code editor: the
+// keyboard stays in the lines. a read-only editor leaves Tab to the page, so
+// the focus moves on.
+//
 // until CodeMirror is there, the text is shown in a plain box of the same
 // type, so the dialog does not open empty.
 
@@ -32,7 +37,8 @@ function moduleListLoad() {
     import('@codemirror/language'),
     import('@codemirror/language-data'),
     import('@lezer/highlight'),
-  ]).then(([codemirror, state, view, language, languageData, highlight]) => ({ codemirror, state, view, language, languageData, highlight }));
+    import('@codemirror/commands'),
+  ]).then(([codemirror, state, view, language, languageData, highlight, commands]) => ({ codemirror, state, view, language, languageData, highlight, commands }));
   return moduleListPromise;
 }
 
@@ -54,7 +60,7 @@ export function CodeEditor({ value = '', lang = '', isReadOnly = true, onChange,
     void moduleListLoad().then((module) => {
       if (isCanceled || !hostRef.current) return;
       moduleRef.current = module;
-      const { codemirror, state, view: viewModule, language, highlight } = module;
+      const { codemirror, state, view: viewModule, language, highlight, commands } = module;
       const compartment = { readOnly: new state.Compartment(), language: new state.Compartment(), wrap: new state.Compartment() };
       compartmentRef.current = compartment;
       // a change the page made to the text is not reported back as one typed
@@ -75,6 +81,9 @@ export function CodeEditor({ value = '', lang = '', isReadOnly = true, onChange,
               { key: 'Mod-Enter', run: () => { propRef.current.onSave?.(); return Boolean(propRef.current.onSave); } },
               { key: 'Escape', run: () => { propRef.current.onCancel?.(); return Boolean(propRef.current.onCancel); } },
             ])),
+            // Tab and Shift + Tab indent and outdent (they do nothing, and the
+            // focus moves on, while the editor is read-only)
+            viewModule.keymap.of([commands.indentWithTab]),
             viewModule.EditorView.contentAttributes.of({ 'aria-label': label, spellcheck: 'false' }),
             viewModule.EditorView.updateListener.of((update) => {
               if (update.docChanged && !update.transactions.some((one) => one.annotation(isExternal))) {

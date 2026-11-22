@@ -181,7 +181,6 @@ export class DocCellStore {
       context,
       actionList,
       isPageActionIncluded: false,
-      isTriggerLoose: true,
       triggerList: cellTriggerListBuild(cell.tokenList.filter((kind: any) => kind.isTriggerDirect !== false), actionOf),
     };
   }

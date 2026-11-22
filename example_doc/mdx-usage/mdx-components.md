@@ -53,6 +53,11 @@ subtopics:
           en: Multilingual display
           jp: 多言語表示
         target: ~example/mdx-usage/comp-multi-lang.md
+      - id: math
+        title:
+          en: LaTeX math
+          jp: LaTeX 数式
+        target: ~example/mdx-usage/math.md
   - id: blocks
     title:
       en: Blocks
@@ -234,12 +239,13 @@ MDX コンポーネントを直接書く代わりに、HTML コメントとコ�
 
 <!--renderComp=MultiLang,type=paragraphs,languages=[en,jp]-->
 ```markdown
-`MultiLang` switches headings, paragraphs, and lists to the language selected on the page.
+`MultiLang` switches headings, paragraphs, and lists to the language selected on the page. A formula of LaTeX, `$…$` in a line or `$$` on a row of its own, is drawn by KaTeX and typed in place in edit mode.
 
-`MultiLang` は、ページで選択されている言語に合わせて、見出し、段落、一覧を切り替えて表示します。
+`MultiLang` は、ページで選択されている言語に合わせて、見出し、段落、一覧を切り替えて表示します。LaTeX の数式（行内の `$…$`、独立した行の `$$`）は KaTeX で描画され、編集モードではその場で入力できます。
 ```
 
 - [Multilingual display](comp-multi-lang.md)
+- [LaTeX math](math.md)
 
 <!--renderComp=MultiLang-->
 ## {en: "Blocks", jp: "ブロック"}

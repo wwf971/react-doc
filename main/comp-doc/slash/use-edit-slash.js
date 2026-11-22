@@ -22,14 +22,14 @@ import { EditSlashMenu } from './EditSlashMenu.jsx';
 //                        { store: DocSlashStore, context,
 //                          actionList?            the surface's own actions
 //                          isPageActionIncluded?  the page's too (default true)
-//                          isTriggerLoose?        "/" starts the slash mode anywhere but in
-//                                                 a path or a url (a cell: no spaces
-//                                                 between its words); default false
 //                          triggerList?           direct triggers: [{ text, action, endList? }],
 //                                                 a text entering the param mode of an
 //                                                 action at once ("{{" in a cell) }
 //   textBeforeCaretGet   (element) => the text from the start of the
 //                        surface to the caret, as the surface reads it
+//   charAfterCaretGet    (element) => the character after the caret, '' at
+//                        the end of its line: a "/" starts the slash mode only
+//                        where no word goes on after it (slashTriggerIs)
 //
 // answers { inputAfter(event), keyDown(event) -> isConsumed, menu }: the
 // surface calls inputAfter after it reported an input, offers every key
@@ -41,7 +41,11 @@ import { EditSlashMenu } from './EditSlashMenu.jsx';
 //                    block of its text; a paragraph: a block between two
 //                    paragraphs). without it the source of the block is typed
 //                    as lines at the caret (the source of a whole list)
-export function useEditSlash(elementRef, slash, { textBeforeCaretGet, blockInsert }) {
+//   atomInsert(atomKind, isRow, offset)  optional: what the editor does with an
+//                    atom of a kind an action puts at the caret (slashEffect.atom:
+//                    a formula): offset is where the caret is, the slash text
+//                    gone. without it the action's textFallback is typed
+export function useEditSlash(elementRef, slash, { textBeforeCaretGet, charAfterCaretGet, blockInsert, atomInsert }) {
   const surfaceId = useId();
   const slashStore = slash?.store;
 
@@ -87,6 +91,12 @@ export function useEditSlash(elementRef, slash, { textBeforeCaretGet, blockInser
   const apply = (result) => {
     if (!result || result.textNew === undefined || !elementRef.current) return;
     slashTextReplace(elementRef.current, result.lengthOld, result.textNew);
+    if (result.atom) {
+      const offsetAtom = textBeforeCaretGet(elementRef.current)?.length;
+      if (atomInsert && offsetAtom !== undefined) atomInsert(result.atom.atomKind, result.atom.isRow, offsetAtom);
+      else if (result.atom.textFallback) document.execCommand('insertText', false, result.atom.textFallback);
+      return;
+    }
     if (result.blockSource === undefined) return;
     const offset = textBeforeCaretGet(elementRef.current)?.length;
     if (blockInsert && offset !== undefined) blockInsert(result.blockSource, offset);
@@ -103,10 +113,10 @@ export function useEditSlash(elementRef, slash, { textBeforeCaretGet, blockInser
     }
     const inputEvent = event.nativeEvent;
     if (!lineState || inputEvent?.inputType !== 'insertText' || typeof inputEvent.data !== 'string') return;
-    // what was just typed: a "/" beginning a word, or the last character of
-    // a direct trigger of the surface
+    // what was just typed: a "/" no word goes on after, or the last character
+    // of a direct trigger of the surface
     const trigger = inputEvent.data === '/' ? undefined : slashTriggerMatch(lineState.lineBefore, slash.triggerList);
-    const isSlash = inputEvent.data === '/' && slashTriggerIs(lineState.lineBefore, { isLoose: slash.isTriggerLoose === true });
+    const isSlash = inputEvent.data === '/' && slashTriggerIs(lineState.lineBefore, charAfterCaretGet && elementRef.current ? charAfterCaretGet(elementRef.current) : '');
     if (!isSlash && !(trigger && trigger.text.endsWith(inputEvent.data))) return;
     const textStart = isSlash ? '/' : trigger.text;
     slashStore.slashStart(surfaceId, {

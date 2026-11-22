@@ -13,7 +13,7 @@ import {
   CODE_COMPONENT_NAME, codeBlockAssetDataGet, codeBlockAssetTextBuild, codeBlockInTextReplace, codeBlockTextParse, codeBlockValueTextSet, codeMarkerPropsSet, codeTextJoin,
   codeTextViewGet, codeTextViewSet,
 } from '../lib/doc-edit-code.js';
-import { itemAtomModelBuild, itemAtomOffsetDisplayGet, itemAtomTextBuild, itemPartGet, itemPartTextWrite } from '../lib/doc-edit-item-atom.js';
+import { itemAtomKindAdd, itemAtomKindTextRemove, itemAtomValueSet, itemAtomModelBuild, itemAtomOffsetDisplayGet, itemAtomTextBuild, itemPartGet, itemPartTextWrite } from '../lib/doc-edit-item-atom.js';
 import { embedPathParse, embedTextHashGet } from '../lib/doc-edit-embed.js';
 import { keyedComputedCreate } from '../lib/keyed-computed.js';
 import { lineOperationApply, lineOperationListApply } from '../lib/doc-line-operation';
@@ -154,6 +154,13 @@ export type EditSession = {
   // item: a part of it, one code block among its text edited as its lines
   // (itemPartGet): itemFormat 'block', the draft the lines of that block
   itemPart?: { index: number };
+  // block (a paragraph): its atoms of a kind (a formula of the component math),
+  // typed as one character each, as the atoms of an item are: textInitial and
+  // textDraft are the typed text, the save writes them back
+  blockAtom?: any;
+  // the field of an atom of a kind to open under its chip ({ char, version }):
+  // one just added by a slash action, whose value is typed at once
+  atomOpenRequest?: { char: string; version: number };
   // the block was created from the insert menu by this session; cancel removes it
   isCreated: boolean;
   // the edit mode the block is open in (doc_page_impl_mdx_comp.md#view-modes-and-edit-modes):
@@ -334,9 +341,12 @@ type DocEvent = { type: string; data: Record<string, any>; source: Record<string
 // the block wrapper or a toolbar reports for the block it belongs to
 export const editEventTypeList = [
   'editDraftChange',
+  'editAtomValueChange',
+  'editAtomAdd',
   'editTextSetRequest',
   'editSubmitRequest',
   'editCancelRequest',
+  'editBlockRemoveRequest',
   'editFocusShiftRequest',
   'editBlockEnterRequest',
   'editItemEnterRequest',
@@ -377,6 +387,13 @@ export class DocEditStore {
   docEditByPath: Record<string, EditDocState> = {};
   // computed values per key, made on first use (lib/keyed-computed.js)
   keyedGet = keyedComputedCreate();
+  // the kinds of atoms of the page, by name: what an atom of a text can be
+  // beside a code block (lib/doc-edit-atom-kind.js: a formula of the component math)
+  atomKindByName: Record<string, any> = {};
+  // the page starts the compile of the text a write gives a block
+  // (lib/block-compile-cache.js): drawn as its pending text, the block then
+  // never shows its old rendering before the new one
+  blockTextPrepare: ((path: string, text: string) => void) | undefined = undefined;
   compilePendingByPath: Record<string, { hash: string; promise: Promise<void> }> = {};
   session: EditSession | undefined = undefined;
   blockViewModeById: Record<string, string> = {};
@@ -420,9 +437,19 @@ export class DocEditStore {
     sourceStore: DocSourceStore,
     docStore: DocStore,
     configStore: DocConfigStore,
-    options?: { envStore?: Pick<DocEnvStore, 'isCapable' | 'endpointGet'> & Partial<Pick<DocEnvStore, 'serverLostReport'>>; assetStore?: DocAssetStore; compStateStore?: DocCompStateStore },
+    options?: {
+      envStore?: Pick<DocEnvStore, 'isCapable' | 'endpointGet'> & Partial<Pick<DocEnvStore, 'serverLostReport'>>;
+      assetStore?: DocAssetStore;
+      compStateStore?: DocCompStateStore;
+      // the kinds of atoms of the page (lib/doc-edit-atom-kind.js), by name
+      atomKindByName?: Record<string, any>;
+      // (path, text) => void: the text a write gives a block, compiled ahead
+      blockTextPrepare?: (path: string, text: string) => void;
+    },
   ) {
     this.sourceStore = sourceStore;
+    this.atomKindByName = options?.atomKindByName ?? {};
+    this.blockTextPrepare = options?.blockTextPrepare;
     this.envStore = options?.envStore ?? sourceStore.envStore;
     this.docStore = docStore;
     this.configStore = configStore;
@@ -444,6 +471,8 @@ export class DocEditStore {
       sourceStore: false,
       docEditByPath: observable.shallow,
       keyedGet: false,
+      atomKindByName: observable.ref,
+      blockTextPrepare: false,
       sourceByPath: observable.shallow,
       compilePendingByPath: false,
       leavePromise: false,
@@ -828,6 +857,13 @@ export class DocEditStore {
     if (source?.status !== 'done' || !source.hash) {
       return { code: -1, message: 'The document source is not loaded.' };
     }
+    // a block this write replaces is drawn by its new text until the document
+    // is compiled again (blockTextPending): its compile starts with the write
+    if (this.blockTextPrepare) {
+      for (const one of Array.isArray(operation) ? operation : [operation]) {
+        if (one?.action === 'replaceLines' && typeof one.text === 'string') this.blockTextPrepare(path, one.text);
+      }
+    }
     if (embedPathParse(path)) return this.embedOperationApply(path, operation, { messageFailure, onApplied, stateRemapList });
     const result = await this.api.sourceApply(path, source.hash, operation, filePathDeleteList);
     if (result.code !== 0) {
@@ -906,14 +942,23 @@ export class DocEditStore {
     if (!isLeft) return false;
     const block = this.docEditByPath[path]?.model?.blockList[blockIndex];
     if (!block) return false;
+    // a paragraph typed as its source: its atoms of a kind are chips of the text
+    const blockAtom = block.kind === 'paragraph' && mode.id === COMP_EDIT_MODE_SOURCE_ID
+      ? itemAtomModelBuild(block.text, { atomKindList: Object.values(this.atomKindByName) })
+      : undefined;
+    let selectionInitial: EditSelectionInitial = options.selectionInitial ?? 'end';
+    if (blockAtom && typeof selectionInitial === 'object' && selectionInitial.type === 'offset') {
+      selectionInitial = { type: 'offset', offset: itemAtomOffsetDisplayGet(blockAtom, selectionInitial.offset) };
+    }
     this.sessionStart({
       type: 'block',
       path,
       blockIndex,
-      textInitial: block.text,
+      textInitial: blockAtom ? blockAtom.display : block.text,
       isCreated: options.isCreated === true,
       editModeId: mode.id,
-      selectionInitial: options.selectionInitial ?? 'end',
+      selectionInitial,
+      ...(blockAtom ? { blockAtom } : {}),
     });
     return true;
   }
@@ -1027,6 +1072,7 @@ export class DocEditStore {
   // labeled by the language of that item
   itemAtomModelGet(path: string, textOwn: string): any {
     return itemAtomModelBuild(textOwn, {
+      atomKindList: Object.values(this.atomKindByName),
       iconAlign: this.configStore?.valueDocGet?.(path, 'CodeBlockIconAlign') === 'top' ? 'top' : 'bottom',
       viewResolve: ({ viewAuthored, place }: { viewAuthored: string; place: string }) => {
         if (CODE_VIEW_LIST.includes(viewAuthored)) return viewAuthored;
@@ -1249,7 +1295,7 @@ export class DocEditStore {
 
   private sessionStart(
     sessionPartial: Pick<EditSession, 'type' | 'path' | 'blockIndex' | 'textInitial' | 'isCreated' | 'editModeId' | 'selectionInitial'>
-      & Pick<Partial<EditSession>, 'itemPath' | 'itemFormat' | 'itemBlockInfo' | 'itemAtom' | 'itemPart'>,
+      & Pick<Partial<EditSession>, 'itemPath' | 'itemFormat' | 'itemBlockInfo' | 'itemAtom' | 'itemPart' | 'blockAtom'>,
   ) {
     runInAction(() => {
       this.insertMenu = undefined;
@@ -1265,6 +1311,49 @@ export class DocEditStore {
         message: '',
       };
     });
+  }
+
+  // the kinds of atoms of the page again (DocPageMdx config.atomKindById
+  // changed): texts opened from now on have their atoms
+  replaceAtomKindByName(atomKindByName: Record<string, any>) {
+    this.atomKindByName = atomKindByName ?? {};
+  }
+
+  // the value of an atom of a kind typed in its field (and how its kind
+  // writes it): its atom stands for it now
+  sessionAtomValueSet(char: string, value: string, source: string): EditResult {
+    const session = this.session;
+    const model = session?.type === 'item' ? session.itemAtom : session?.blockAtom;
+    if (!session || session.status === 'submitting' || !itemAtomValueSet(model, char, value, source)) {
+      return { code: -1, message: 'no atom of the text has that character' };
+    }
+    return { code: 0, message: '' };
+  }
+
+  // a new atom of a kind at a place of the text typed (a slash action, the
+  // formula of /math): an atom of the text of the session (a paragraph, the
+  // text of an item; not the lines of a block), the surface drawn again with
+  // its chip, whose field opens. data: { atomKind, isRow, offset, text } (text:
+  // the text typed, the slash text gone from it). in a paragraph, an atom of
+  // its own lines is written as a block of its own (sessionSubmit: pieceGap)
+  sessionAtomAdd(data: any): EditResult {
+    const session = this.session;
+    if (!session || session.status === 'submitting') return { code: -1, message: 'no edit session is open' };
+    const atomKind = this.atomKindByName[String(data?.atomKind ?? '')];
+    if (!atomKind) return { code: -1, message: `no atom kind ${String(data?.atomKind ?? '')} on this page` };
+    const isItem = session.type === 'item';
+    const isParagraph = session.type === 'block' && this.docEditByPath[session.path]?.model?.blockList[session.blockIndex]?.kind === 'paragraph';
+    if ((!isItem && !isParagraph) || session.itemFormat === 'block') return { code: -1, message: 'this goes into a text: a paragraph, or the text of a list item' };
+    const isRow = data?.isRow === true;
+    const text = typeof data?.text === 'string' ? data.text : session.textDraft;
+    const offset = Math.max(0, Math.min(text.length, Number(data?.offset) || 0));
+    const { model, atom } = itemAtomKindAdd(isItem ? session.itemAtom : session.blockAtom, atomKind.name, { isRow, display: text, label: atomKind.label });
+    if (isItem) session.itemAtom = model;
+    else session.blockAtom = model;
+    session.textDraft = text.slice(0, offset) + atom.char + text.slice(offset);
+    session.draftVersion += 1;
+    session.atomOpenRequest = { char: atom.char, version: (session.atomOpenRequest?.version ?? 0) + 1 };
+    return { code: 0, message: '', data: { char: atom.char } };
   }
 
   // the current draft; the editing surface already shows it
@@ -1408,6 +1497,31 @@ export class DocEditStore {
     return true;
   }
 
+  // the block of the session taken out by its editor, the session ended: what
+  // the editor edits is empty and means nothing so (a formula of its own lines
+  // whose source was emptied, Backspace in it: MathBlockEdit). a block of the
+  // document only, not an item, the frontmatter or the document
+  async sessionBlockRemove(): Promise<boolean> {
+    const session = this.session;
+    if (!session || session.type !== 'block') return false;
+    if (session.status === 'submitting' || this.leavePromise) return false;
+    runInAction(() => {
+      session.status = 'submitting';
+      session.message = '';
+    });
+    const result = await this.blockDeleteApply(session.path, session.blockIndex, () => {
+      if (this.session === session) this.session = undefined;
+    });
+    if (result.code !== 0) {
+      runInAction(() => {
+        session.status = 'error';
+        session.message = result.message;
+      });
+      return false;
+    }
+    return true;
+  }
+
   // an item created by its session is taken out of its list again: the
   // creation was canceled, or the item was left as it was created
   private async sessionItemCreatedRemove(session: EditSession): Promise<boolean> {
@@ -1545,7 +1659,9 @@ export class DocEditStore {
     if (session.type === 'item' && session.isCreated && (text.trim() === '' || text === session.textInitial)) {
       return this.sessionItemCreatedRemove(session);
     }
-    if (text === session.textInitial) {
+    // an atom of a kind typed in its field changes the text written, not the text typed
+    const atomModel = session.type === 'item' ? session.itemAtom : session.blockAtom;
+    if (text === session.textInitial && !atomModel?.isEdited) {
       runInAction(() => {
         this.session = undefined;
       });
@@ -1584,6 +1700,9 @@ export class DocEditStore {
             return false;
           }
           textBlock = result.data!.text;
+        } else if (session.blockAtom) {
+          // a paragraph with atoms of a kind: each written back in its place
+          textBlock = itemAtomTextBuild(text, session.blockAtom, { pieceGap: '\n\n' });
         }
         operation = blockReplaceOperationBuild(block, textBlock);
       }
@@ -1742,9 +1861,15 @@ export class DocEditStore {
       if (text !== undefined) this.sessionDraftSet(text);
       return { code: 0, message: '' };
     }
+    if (event.type === 'editAtomValueChange') return this.sessionAtomValueSet(String(event.data.char ?? ''), String(event.data.value ?? ''), String(event.data.source ?? ''));
+    if (event.type === 'editAtomAdd') return this.sessionAtomAdd(event.data);
     if (event.type === 'editTextSetRequest') {
       this.sessionTextSet(String(event.data.text ?? ''));
       return { code: 0, message: '' };
+    }
+    if (event.type === 'editBlockRemoveRequest') {
+      const isRemoved = await this.sessionBlockRemove();
+      return isRemoved ? { code: 0, message: '' } : { code: -1, message: this.session?.message ?? 'the block was not taken out' };
     }
     if (event.type === 'editCancelRequest') {
       const isCanceled = await this.sessionCancel();
@@ -2001,6 +2126,23 @@ export class DocEditStore {
     });
     if (result.code === 0) void this.assetStore?.usageNotify([{ type: 'docChange', docPath: path }]);
     return result;
+  }
+
+  // a thing drawn as one unit taken out of the text of a paragraph by its
+  // menu (doc_page_impl_edit_structure.md#deleting-a-thing): the atom of a
+  // kind at index among the things of that kind (a formula). a paragraph left
+  // with no text goes with it
+  async blockAtomRemove(path: string, blockIndex: number, atomKindName: string, index: number): Promise<EditResult> {
+    const atomKind = this.atomKindByName[atomKindName];
+    if (!atomKind) return { code: -1, message: `The page has no atom kind ${atomKindName}.` };
+    const state = this.docEditGet(path);
+    const block = state?.model?.blockList[blockIndex];
+    if (!state || !block) return { code: -1, message: 'The block is not in the document anymore.' };
+    const text = itemAtomKindTextRemove(block.text, atomKind, index);
+    if (text === undefined) return { code: -1, message: `The ${atomKind.label} is not in the block anymore.` };
+    return this.blockChangeListApply(path, state.hash, [text.trim() === '' ? { blockIndex, isRemoved: true } : { blockIndex, text }], {
+      messageFailure: `The ${atomKind.label} was not deleted.`,
+    });
   }
 
   // the block model of a document for a write: read and compiled first when

@@ -97,7 +97,7 @@ operationApply(embedded path, operation)   DocEditStore.embedOperationApply
 
 ## In the text of a list item
 
-An MDX block among the text of a list item is a **chip of the text**, as a code block is ([Code blocks in the text of an item](doc_page_impl_edit_structure.md#code-blocks-in-the-text-of-an-item)): one character the caret steps over, selected by a first Backspace and deleted by a second. A double click on the chip opens the popup. Unlike a code block, an MDX block is a chip even when it is the whole text of its item, since its lines are never edited in the item (`isEmbed` in the table of blocks, `lib/doc-edit-item-atom.js`), and it cannot be turned into text: its document is not one line.
+An MDX block among the text of a list item is a **chip of the text**, as a code block is ([Code blocks in the text of an item](doc_page_impl_edit_structure.md#code-blocks-in-the-text-of-an-item)): one character the caret steps over, selected by a first Backspace and deleted by a second. A double click on the chip opens the popup. A right click on it, on its tile or its card in an item not being edited, deletes it (`Delete MDX Block…`); at the root an MDX block is a block, deleted by the menu of the block ([Deleting a thing](doc_page_impl_edit_structure.md#deleting-a-thing)). Unlike a code block, an MDX block is a chip even when it is the whole text of its item, since its lines are never edited in the item (`isEmbed` in the table of blocks, `lib/doc-edit-item-atom.js`), and it cannot be turned into text: its document is not one line.
 
 ## Adding a block
 

@@ -103,6 +103,7 @@ export {
   Settings,
   ShieldCheck,
   ShieldX,
+  Sigma,
   Sheet as SheetIcon,
   SlidersHorizontal,
   Square,

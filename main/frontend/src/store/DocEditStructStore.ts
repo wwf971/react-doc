@@ -29,7 +29,7 @@ import {
   pathDepthGet,
   pathIsWithin,
 } from '../lib/doc-edit-list.js';
-import { itemAtomCharIs, itemAtomTextBuild, itemBlockSplitOut, itemCodeBlockListGet, itemPartGet, itemPartOffsetGet, itemPartTextWrite } from '../lib/doc-edit-item-atom.js';
+import { itemAtomCharIs, itemAtomKindTextRemove, itemAtomTextBuild, itemBlockSplitOut, itemCodeBlockListGet, itemPartGet, itemPartOffsetGet, itemPartTextWrite } from '../lib/doc-edit-item-atom.js';
 import { codeBlockAssetTextBuild, codeBlockTextParse, codeTextJoin, codeTextViewGet, codeTextViewSet, textJoinSpaceIs } from '../lib/doc-edit-code.js';
 import { assetRefParse } from '../lib/doc-asset-ref.js';
 
@@ -1059,6 +1059,26 @@ export class DocEditStructStore {
   // the own text of an item replaced (what its editor saves, without a session)
   itemTextSet(ref: StructItemRef, text: string): Promise<EditResult> {
     return this.itemEdit(ref, (list) => listItemTextSet(list, ref.itemPath, text));
+  }
+
+  // a thing drawn as one unit taken out of the text of an item by its menu
+  // (doc_page_impl_edit_structure.md#deleting-a-thing): its code block or MDX
+  // block at index among the code blocks of the text (kind 'code'), or the
+  // atom of a kind at index among the things of that kind (kind 'atom': a
+  // formula). an item left with no text and nothing under it goes with it
+  itemPartRemove(ref: StructItemRef, part: { kind: 'code' | 'atom'; index: number; atomKind?: string }): Promise<EditResult> {
+    const atomKind = part.kind === 'atom' ? this.editStore.atomKindByName[String(part.atomKind ?? '')] : undefined;
+    return this.itemEdit(ref, (list) => {
+      const text = listItemTextGet(list, ref.itemPath);
+      const written = part.kind === 'code'
+        ? itemPartTextWrite(text, part.index, '', { isRemoved: true })?.text
+        : itemAtomKindTextRemove(text, atomKind, part.index);
+      if (written === undefined) return { code: -1, message: 'It is not in the item anymore.' };
+      if (written.trim() === '' && itemChildListGet(listItemGet(list, ref.itemPath)).length === 0) {
+        return listItemDelete(list, ref.itemPath);
+      }
+      return listItemTextSet(list, ref.itemPath, written);
+    }, { isSelectionKept: false });
   }
 
   // swapped with the item before or after it in its list, with what is under it

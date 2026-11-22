@@ -1,4 +1,4 @@
-import { makeAutoObservable, runInAction } from 'mobx';
+import { makeAutoObservable, observable, runInAction } from 'mobx';
 import type { DocEditStore } from './DocEditStore.js';
 import type { DocEditStructStore } from './DocEditStructStore.js';
 import type { BlockPlace, BlockPlacePosition } from './DocPasteStore.js';
@@ -66,9 +66,24 @@ export type BlockSelectContextMenu = {
   blockIndex: number;
   offset: { x: number; y: number };
   openId: number;
-  step: 'actions' | 'deleteConfirm';
+  step: 'actions' | 'deleteConfirm' | 'partDeleteConfirm';
   status: 'idle' | 'submitting' | 'error';
   message: string;
+};
+
+// the thing drawn as one unit inside the text of the block that was
+// right-clicked (doc_page_impl_edit_structure.md#deleting-a-thing): a formula,
+// a code block or an MDX block of a list item. the first entry of the menu
+// deletes it
+//   label     what it is: 'formula', 'code block', 'MDX block'
+//   isTyped   in a text being typed: it goes as a typed delete (Undo brings it
+//             back), at once, and the menu has no entries of the block (the
+//             block is being edited); else the menu asks first, then writes
+//   remove()  takes it out: { code, message }
+export type BlockSelectMenuPart = {
+  label: string;
+  isTyped: boolean;
+  remove: () => { code: number; message: string } | Promise<{ code: number; message: string }>;
 };
 
 export type BlockTransfer = {
@@ -95,13 +110,15 @@ export class DocBlockSelectStore {
   selection: BlockSelection | undefined = undefined;
   textSelection: BlockTextSelection | undefined = undefined;
   contextMenu: BlockSelectContextMenu | undefined = undefined;
+  // the thing of the block right-clicked, when the click was on one
+  contextMenuPart: BlockSelectMenuPart | undefined = undefined;
   contextMenuOpenCount = 0;
   transfer: BlockTransfer | undefined = undefined;
 
   constructor({ editStore, structStore }: { editStore: DocEditStore; structStore?: DocEditStructStore }) {
     this.editStore = editStore;
     this.structStore = structStore;
-    makeAutoObservable(this, { editStore: false, structStore: false });
+    makeAutoObservable(this, { editStore: false, structStore: false, contextMenuPart: observable.ref });
   }
 
   // ---------- the mode ----------
@@ -240,10 +257,12 @@ export class DocBlockSelectStore {
   // frame, so a right click while it is open moves it, never leaving a
   // stale menu at the old point. offset is the point of the click from the
   // top left of the block: the menu is anchored there, not to the window.
-  contextMenuOpen(path: string, blockIndex: number, offset: { x: number; y: number }) {
+  // part: the thing right-clicked inside the text of the block; one being
+  // typed leaves the selection as it is (its menu has no entries of the block)
+  contextMenuOpen(path: string, blockIndex: number, offset: { x: number; y: number }, part?: BlockSelectMenuPart) {
     if (!this.isContextMenuAvailable) return;
     if (this.contextMenu?.status === 'submitting') return;
-    if (!this.blockIsSelected(path, blockIndex)) {
+    if (!part?.isTyped && !this.blockIsSelected(path, blockIndex)) {
       const hash = this.editStore.docEditGet(path)?.hash ?? '';
       this.selection = { path, hash, blockIndexList: [blockIndex], blockIndexAnchor: blockIndex };
     }
@@ -252,6 +271,7 @@ export class DocBlockSelectStore {
       runInAction(() => {
         if (!this.isContextMenuAvailable) return;
         this.contextMenuOpenCount += 1;
+        this.contextMenuPart = part;
         this.contextMenu = {
           path,
           blockIndex,
@@ -268,6 +288,7 @@ export class DocBlockSelectStore {
   contextMenuClose() {
     if (this.contextMenu?.status === 'submitting') return;
     this.contextMenu = undefined;
+    this.contextMenuPart = undefined;
     // the block a right click selected in edit mode is not kept selected
     if (!this.isMode && !this.transfer) this.selection = undefined;
   }
@@ -327,6 +348,22 @@ export class DocBlockSelectStore {
   }
 
   // the selected blocks deleted (after the menu's confirmation step)
+  // the entry of the thing right-clicked: one being typed goes at once;
+  // another is asked first (the step partDeleteConfirm), then written
+  async contextMenuPartDelete({ isConfirmed = false }: { isConfirmed?: boolean } = {}): Promise<boolean> {
+    const part = this.contextMenuPart;
+    if (!part || !this.contextMenu) return false;
+    if (part.isTyped) {
+      this.contextMenuClose();
+      return (await part.remove()).code === 0;
+    }
+    if (!isConfirmed) {
+      this.contextMenuStepSet('partDeleteConfirm');
+      return false;
+    }
+    return this.contextMenuWrite(async () => part.remove());
+  }
+
   async selectionDelete(): Promise<boolean> {
     const path = this.selection?.path ?? '';
     const indexList = this.selectionIndexListGet(path);

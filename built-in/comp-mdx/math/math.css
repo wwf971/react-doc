@@ -1,0 +1,86 @@
+/* ---------- formulas while a text is edited (comp_math.md) ----------
+   a formula is drawn in the editor as the document draws it (KaTeX, its own
+   size and place), so entering a text, or a block of math, moves nothing.
+   what editing adds is drawn without taking room: a background on hover and
+   while selected, a hairline frame while its source is typed below it. a
+   formula of its own lines keeps the margins KaTeX gives its display inside
+   its row (an inline-block lets none out), so it stands where it stood. */
+
+/* the chip of a formula among a text (surface-atom.js: data-atom-kind math) */
+.doc-edit-atom-kind[data-atom-kind='math'] {
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.doc-edit-atom-kind[data-atom-kind='math']:hover {
+  background: color-mix(in srgb, var(--color-fd-foreground) 5%, transparent);
+}
+
+.doc-edit-atom-kind[data-atom-kind='math'][data-selected] {
+  background: color-mix(in srgb, var(--color-fd-primary) 14%, transparent);
+}
+
+/* its source typed below it: a hairline frame and nothing else (the field
+   below says enough), whatever else marks it */
+.doc-edit-atom-kind[data-atom-kind='math'][data-editing],
+.doc-edit-atom-kind[data-atom-kind='math'][data-editing]:hover,
+.doc-math-block-edit {
+  background: transparent;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-fd-foreground) 14%, transparent);
+}
+
+/* a formula of its own lines being typed keeps its room (DocEdit.css
+   .doc-edit-atom-row[data-locked]), and so does a block of math being edited
+   (the geometry lock of its block): a formula drawn taller extends over what
+   follows, so it paints the page background, not a transparent one */
+.doc-edit-atom-row[data-atom-kind='math'][data-editing],
+.doc-edit-atom-row[data-atom-kind='math'][data-editing]:hover,
+.doc-math-block-edit {
+  background: var(--color-fd-background);
+}
+
+/* an empty formula: its place, quiet, with what it is */
+.doc-edit-atom-kind[data-atom-kind='math'][data-empty]::after,
+.doc-math-block-edit[data-empty]::after {
+  content: attr(data-label);
+  color: var(--color-fd-muted-foreground);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.8em;
+}
+
+.doc-edit-atom-kind[data-atom-kind='math'][data-empty]:not(.doc-edit-atom-row) {
+  padding: 0 0.3em;
+}
+
+.doc-edit-atom-row[data-atom-kind='math'][data-empty],
+.doc-math-block-edit[data-empty] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.2em;
+}
+
+.doc-edit-atom-row[data-atom-kind='math'][data-empty] {
+  margin: 0.25em 0;
+}
+
+/* KaTeX could not read it: drawn as far as it goes, the faulty part in red
+   (KaTeX's own); the chip underlined so */
+.doc-edit-atom-kind[data-atom-kind='math'][data-error],
+.doc-math-block-edit[data-error] {
+  text-decoration: underline wavy color-mix(in srgb, var(--color-red-600, #dc2626) 60%, transparent);
+  text-decoration-skip-ink: none;
+}
+
+/* a block of math edited (MathBlockEdit): the formula in its place, the
+   display of KaTeX inside keeping its margins out of the ring: the ring is
+   the formula's box */
+.doc-math-block-edit {
+  border-radius: 3px;
+  cursor: text;
+}
+
+.doc-math-block-edit[data-empty] {
+  display: flex;
+  margin: 1em 0;
+}

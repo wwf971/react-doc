@@ -107,6 +107,7 @@ export const ListItemEdit = observer(function ListItemEdit({ data = {}, config =
   const textJoinReason = (() => {
     if (isBlock) return codeTextJoin(text) === '' ? 'the block has no text' : '';
     if (!chipAtom) return 'select a code block of the text first (a click on its chip)';
+    if (chipAtom.atomKind) return `a ${chipAtom.label} is not lines of code`;
     if (chipAtom.isReference) return 'the lines are an item of the asset store';
     if (chipAtom.isEmbed) return 'an MDX block is a document of its own: double-click it to open it';
     return codeTextJoin(chipAtom.raw) === '' ? 'the block has no text' : '';
@@ -246,7 +247,7 @@ export const ListItemEdit = observer(function ListItemEdit({ data = {}, config =
           <ArrowDown aria-hidden="true" size={12} strokeWidth={2.2} />
         </button>
       </span>
-      {isBlock || atomModel ? (
+      {isBlock || atomModel?.atomList.some((atom) => !atom.atomKind) ? (
         <span className="doc-edit-segment" role="group" aria-label="Code block">
           <button type="button" disabled={isLocked || textJoinReason !== ''}
             title={textJoinReason || 'To text: the lines of the code block joined into one line of text, the line breaks removed'}

@@ -18,6 +18,7 @@ import {
 import { slashActionByIdBuild, slashActionByNameBuild, slashActionDefine, slashBlockActionDefine } from '../../../comp-doc/slash/slash-define.js';
 import { codeBlockSourceBuild, codeSlashAction } from '../../../../built-in/comp-mdx/text/code-slash.js';
 import { mdxSlashAction } from '../../../../built-in/comp-mdx/text/mdx-slash.js';
+import { mathSlashAction } from '../../../../built-in/comp-mdx/math/math-slash.js';
 import { DocSlashStore } from '../store/DocSlashStore.js';
 
 const actionLink = slashActionDefine({
@@ -33,11 +34,19 @@ const actionDate = slashActionDefine({ name: 'date', label: 'Date', run: () => s
 const actionByName = slashActionByNameBuild({ 'nav/link': actionLink, 'misc/date': actionDate });
 const actionGet = (name) => actionByName.get(name.toLowerCase());
 
-test('a "/" starts the slash mode only at the start of a word', () => {
+test('a "/" starts the slash mode where no word goes on after it, whatever stands before it', () => {
   assert.equal(slashTriggerIs('/'), true);
   assert.equal(slashTriggerIs('see /'), true);
-  assert.equal(slashTriggerIs('and/'), false);
-  assert.equal(slashTriggerIs('http:/'), false);
+  assert.equal(slashTriggerIs('aaa/'), true);
+  assert.equal(slashTriggerIs('月/'), true);
+  assert.equal(slashTriggerIs('{{birth/month}}/'), true);
+  // before a space, a line break or a chip (an atom: a character of the private use area)
+  assert.equal(slashTriggerIs('aaa/', ' '), true);
+  assert.equal(slashTriggerIs('aaa/', '\n'), true);
+  assert.equal(slashTriggerIs('aaa/', '\uE000'), true);
+  // typed into a word
+  assert.equal(slashTriggerIs('and/', 'o'), false);
+  assert.equal(slashTriggerIs('月/', '日'), false);
   assert.equal(slashTriggerIs('see'), false);
 });
 
@@ -84,6 +93,10 @@ test('effects say what the surface does', () => {
   assert.deepEqual(slashEffectApplyGet(slashEffect.paramSet('docs/'), 'ln'), { textNew: '/ln docs/', isEnded: false });
   assert.deepEqual(slashEffectApplyGet(slashEffect.cancel(), 'link'), { textNew: undefined, isEnded: true });
   assert.deepEqual(slashEffectApplyGet(undefined, 'link'), { textNew: undefined, isEnded: false });
+  // an atom of a kind: the slash text goes, the editor puts the atom at the caret
+  assert.deepEqual(slashEffectApplyGet(slashEffect.atom('math', { isRow: true, textFallback: '$$' }), 'math'), {
+    textNew: '', isEnded: true, atom: { atomKind: 'math', isRow: true, textFallback: '$$' },
+  });
 });
 
 test('a definition is checked, and the registry layers override by id', () => {
@@ -166,19 +179,6 @@ test('a surface brings its own actions: alone, or before the page\'s, a folder c
   // with the page's actions too
   store.slashStart('cell', { anchor: { lineIndex: 0, column: 0 }, context: {}, actionOwnList: [actionQuery] });
   assert.deepEqual(store.itemList.map((item) => item.id), ['link', 'query']);
-});
-
-test('the loose rule starts the slash mode anywhere but in a path, a url or a fraction', () => {
-  assert.equal(slashTriggerIs('月/', { isLoose: true }), true);
-  assert.equal(slashTriggerIs('{{birth/month}}/', { isLoose: true }), true);
-  assert.equal(slashTriggerIs('(a)/', { isLoose: true }), true);
-  assert.equal(slashTriggerIs('and/', { isLoose: true }), false);
-  assert.equal(slashTriggerIs('1/', { isLoose: true }), false);
-  assert.equal(slashTriggerIs('http:/', { isLoose: true }), false);
-  assert.equal(slashTriggerIs('http://', { isLoose: true }), false);
-  assert.equal(slashTriggerIs('~root/', { isLoose: true }), false);
-  // the rule of the documents is unchanged
-  assert.equal(slashTriggerIs('月/'), false);
 });
 
 const actionQuery = slashActionDefine({
@@ -306,4 +306,17 @@ test('/code and /mdx: the default view by the place, written only when another i
   assert.deepEqual(mdxSlashAction.run({}), slashEffect.block('<!--renderComp=Mdx-->\n```md\n```'));
   const itemCard = mdxSlashAction.param.itemListGet('ca', {})[0];
   assert.deepEqual(mdxSlashAction.param.itemChoose(itemCard, 'ca', {}), slashEffect.block('<!--renderComp=Mdx,view=card-->\n```md\n```'));
+});
+
+test('/math puts a formula at the caret: in the line by default, on a row of its own as its parameter', () => {
+  const byName = slashActionByNameBuild({ 'text/math': mathSlashAction });
+  assert.equal(byName.get('latex'), mathSlashAction);
+  assert.deepEqual(mathSlashAction.run({}), { type: 'atom', atomKind: 'math', isRow: false, textFallback: '$x$' });
+  assert.equal(mathSlashAction.param.isOptional, true);
+  const itemList = mathSlashAction.param.itemListGet('', {});
+  assert.deepEqual(itemList.map((item) => [item.id, item.isDefault]), [['inline', true], ['row', false]]);
+  assert.deepEqual(mathSlashAction.param.itemListGet('ro', {}).map((item) => item.id), ['row']);
+  const effect = mathSlashAction.param.itemChoose(itemList[1], '', {});
+  assert.equal(effect.isRow, true);
+  assert.match(effect.textFallback, /^\n\$\$\nx\n\$\$\n$/);
 });

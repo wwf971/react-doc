@@ -189,6 +189,8 @@ In the view `card` the document is drawn in place, and a click on it in edit mod
 A note drawn **in place**: in edit mode, click it to edit it in its popup.
 ```
 
+**Deleting one.** Right-click a tile, a card or the lines of a code block: in an item the menu starts with **Delete MDX Block…** or **Delete Code Block…**, which takes that block out of the item and leaves its text; at the root of the document the menu is that of the block, **Delete Blocks…**. The same works on a formula, inside the popup, and on a chip of an item being typed (there the delete is typed, and Undo brings it back).
+
 A link written with `?nav=popup` opens its document in the same popup, and that document is edited there too: [the playground of content edits](./mdx-doc-edit-in-place.md?nav=popup). In edit mode a click on a link edits the text it stands in, so the link is followed by Ctrl/⌘ + click. `/inline` writes such a link.
 
 ## The spacing of a list

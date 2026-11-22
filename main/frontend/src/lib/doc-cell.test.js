@@ -105,11 +105,10 @@ test('the store: a cell of a component, its kinds, its slash, its context read l
   // the same text is parsed once for the same kinds
   assert.equal(cell.parse('{{name/jp}}'), cell.parse('{{name/jp}}'));
 
-  // its slash: the actions of its kinds and no other, "/" anywhere, the brace kinds entered at once
+  // its slash: the actions of its kinds and no other, the brace kinds entered at once
   assert.equal(cell.slash.store, slashStore);
   assert.deepEqual(cell.slash.actionList.map((action) => action.name), ['query', 'link', 'object']);
   assert.equal(cell.slash.isPageActionIncluded, false);
-  assert.equal(cell.slash.isTriggerLoose, true);
   assert.deepEqual(cell.slash.triggerList.map((trigger) => trigger.text), ['{{', '{{@']);
   // what its actions are given: the component's context, read live, with the page's services
   assert.equal(cell.slash.context.valueByQuery['name/jp'], '次郎');

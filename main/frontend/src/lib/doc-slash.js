@@ -16,11 +16,12 @@
 //   /link␣a␣␣    ended: two spaces in a row end the slash mode
 // (␣ stands for a space)
 //
-// the slash mode starts only when a "/" is typed at the start of a line or
-// after a space, so a path or a url typed in the text never starts it. a
-// surface whose text has no spaces between words (a cell of a form, text in
-// Japanese) asks for the loose rule: anywhere but inside a path, a url or a
-// fraction (slashTriggerIs).
+// the slash mode starts when a "/" is typed where no word goes on after it:
+// at the end of its line, or before a space, whatever stands before it
+// ("aaa/" starts it as "see /" does). a "/" typed into a word ("and|or")
+// never starts it (slashTriggerIs). a path or a url typed at the end of a
+// line starts it for a moment: "//", or a name no action has, lists nothing
+// and shows no menu.
 //
 // a surface may also name direct triggers: a text that, typed, enters the
 // param mode of one action at once, without "/" and a name. the trigger
@@ -50,6 +51,7 @@ export const SLASH_EFFECT_REPLACE = 'replace';
 export const SLASH_EFFECT_PARAM_SET = 'paramSet';
 export const SLASH_EFFECT_CANCEL = 'cancel';
 export const SLASH_EFFECT_BLOCK = 'block';
+export const SLASH_EFFECT_ATOM = 'atom';
 
 export const slashEffect = Object.freeze({
   replace: (text) => ({ type: SLASH_EFFECT_REPLACE, text: String(text ?? '') }),
@@ -59,20 +61,25 @@ export const slashEffect = Object.freeze({
   // MDX block): the slash text goes, and the editor puts the block where the
   // caret is. an editor that cannot take a block gets its source as lines
   block: (source) => ({ type: SLASH_EFFECT_BLOCK, source: String(source ?? '') }),
+  // an atom of a kind at the caret (lib/doc-edit-atom-kind.js: a formula of the
+  // component math), empty, its field open for its value: in the line, or on
+  // lines of its own (isRow). an editor that types no atoms types textFallback
+  atom: (atomKind, { isRow = false, textFallback = '' } = {}) => ({
+    type: SLASH_EFFECT_ATOM, atomKind: String(atomKind ?? ''), isRow: isRow === true, textFallback: String(textFallback ?? ''),
+  }),
 });
 
-// a "/" just typed starts the slash mode when it begins a word:
-// lineBefore is the text of the line up to the caret, the "/" included.
-//   isLoose   the rule of a surface whose words are not set apart by spaces:
-//             the "/" starts the slash mode unless it follows a Latin letter,
-//             a digit or one of / : . ~ _ - < (a path, a url, 1/2, and/or)
-export function slashTriggerIs(lineBefore, { isLoose = false } = {}) {
+// a "/" just typed starts the slash mode when no word goes on after it:
+//   lineBefore   the text of the line up to the caret, the "/" included
+//   charAfter    the character after the caret: '' at the end of the line
+//                (or of the text), a space, or a chip of the surface (a
+//                character of the private use area: an atom, not a letter)
+// what stands before the "/" does not matter
+export function slashTriggerIs(lineBefore, charAfter = '') {
   const text = String(lineBefore ?? '');
   if (!text.endsWith('/')) return false;
-  if (text.length === 1) return true;
-  const charBefore = text[text.length - 2];
-  if (/\s/.test(charBefore)) return true;
-  return isLoose && !/[A-Za-z0-9/:.~_\-<]/.test(charBefore);
+  const after = String(charAfter ?? '');
+  return after === '' || /^[\s\uE000-\uF8FF]/.test(after);
 }
 
 // the direct trigger just typed, when the line up to the caret ends with
@@ -224,5 +231,6 @@ export function slashEffectApplyGet(effect, actionName, trigger) {
   }
   if (effect.type === SLASH_EFFECT_CANCEL) return { textNew: undefined, isEnded: true };
   if (effect.type === SLASH_EFFECT_BLOCK) return { textNew: '', isEnded: true, blockSource: effect.source };
+  if (effect.type === SLASH_EFFECT_ATOM) return { textNew: '', isEnded: true, atom: { atomKind: effect.atomKind, isRow: effect.isRow, textFallback: effect.textFallback } };
   return { textNew: undefined, isEnded: false };
 }

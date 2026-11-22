@@ -62,8 +62,9 @@
 //   })
 //
 // an effect is one of slashEffect of lib/doc-slash.js: replace(text),
-// paramSet(text), cancel(), block(source). the action never touches the
-// editing surface; the slash mode applies the effect.
+// paramSet(text), cancel(), block(source), atom(atomKind, { isRow,
+// textFallback }). the action never touches the editing surface; the slash
+// mode applies the effect.
 //
 // context, the same for every call while the slash mode is open:
 //   { sourcePath    the document being edited (full source path)

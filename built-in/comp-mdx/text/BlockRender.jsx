@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { observer } from 'mobx-react-lite';
+import { blockCompileDoneGet } from '../../../main/frontend/src/lib/block-compile-cache.js';
 import { buildMdxComps } from '../../../main/frontend/src/lib/mdx-comps.js';
 import { useDocStores } from '../../../main/frontend/src/store/context.js';
 import { BlockRenderStore } from './BlockRenderStore.js';
@@ -19,10 +20,14 @@ import './text-block.css';
 //                      is already rendered), so nothing collapses meanwhile
 export const BlockRender = observer(function BlockRender({ data = {}, config = {}, children }) {
   const { compById, sourceStore } = useDocStores();
-  const [store] = useState(() => new BlockRenderStore());
   const text = String(data.text ?? '');
   const format = config.format === 'mdx' ? 'mdx' : 'md';
   const sourcePath = config.sourcePath ?? '';
+  // a text compiled already (a block just saved: its compile started with its
+  // write) is drawn at once, not after the old rendering
+  const [store] = useState(() => new BlockRenderStore(
+    blockCompileDoneGet({ text, format, internalPath: sourcePath, compileConfig: sourceStore.compileConfig }),
+  ));
   const components = useMemo(
     () => buildMdxComps(sourceStore.configDoc, compById, { sourcePath }),
     [compById, sourceStore.configDoc, sourcePath],

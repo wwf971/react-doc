@@ -78,6 +78,10 @@ export { TextBlockEdit } from '../../../built-in/comp-mdx/text/TextBlockEdit.jsx
 export { slashActionDefine } from '../../comp-doc/slash/slash-define.js';
 export { slashEffect } from './lib/doc-slash.js';
 export { DocSlashStore } from './store/DocSlashStore.js';
+// the kinds of atoms (doc_page_impl_edit_structure.md#atoms-of-a-kind): a thing a component
+// writes inside a text, typed as a chip, its value edited below it (a formula of LaTeX); a host
+// defines its own and hands them as config.atomKindById
+export { atomKindDefine } from './lib/doc-edit-atom-kind.js';
 // the slash mode in a component's own surfaces (doc_page_impl_edit_slash.md#beyond-the-document-editors)
 export { useEditSlashConfig } from '../../comp-doc/slash/use-edit-slash-config.js';
 export { EditSlashToggle } from '../../comp-doc/slash/EditSlashToggle.jsx';

@@ -105,6 +105,7 @@ export const compIdBuiltinByName = {
   List: 'common/List',
   ListItem: 'common/ListItem',
   BlockSource: 'common/BlockSource',
+  MathBlock: 'common/MathBlock',
 };
 
 // tag name -> component id: config compRegistry first, then built-in names,

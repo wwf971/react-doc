@@ -26,7 +26,8 @@ import { CODE_PLACE_IN_LIST_ITEM } from '../../frontend/src/lib/rehype-code-view
 //   whose data is a reference into the asset service layer, which is changed through
 //   the asset panel, doc_page_impl_asset.md#edit-mode)
 //     -> the default editor of the block kind: the registered components
-//        Heading / Paragraph / List, or BlockSource for every other kind
+//        Heading / Paragraph / List / MathBlock, or BlockSource for every
+//        other kind
 //   one item of a list block (session.type 'item')
 //     -> the registered component ListItem: the own text of the item, in the
 //        type of the list (doc_page_impl_edit_structure.md#editing-an-item)
@@ -159,6 +160,7 @@ const compNameByBlockKind = {
   heading: 'Heading',
   paragraph: 'Paragraph',
   list: 'List',
+  math: 'MathBlock',
 };
 
 const labelByBlockKind = {

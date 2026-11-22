@@ -28,6 +28,7 @@ import { DocFindStore } from './store/DocFindStore.js';
 import { DocHotkeyStore } from './store/DocHotkeyStore.js';
 import { DocObjectStore, objectEventTypeList } from './store/DocObjectStore.js';
 import { objectProviderDocCreate } from './lib/doc-object-provider-doc.js';
+import { blockCompilePrepare } from './lib/block-compile-cache.js';
 import { objectProviderLinkCreate } from './lib/doc-object-provider-link.js';
 import { objectProviderAssetCreate } from './lib/doc-object-provider-asset.js';
 import { objectProviderBackendCreate } from './lib/doc-object-provider-backend.js';
@@ -75,6 +76,9 @@ import { slashActionById as slashActionByIdDefault } from '../../comp-doc/slash/
 import { slashActionByIdBuild } from '../../comp-doc/slash/slash-define.js';
 import { cellTokenById as cellTokenByIdDefault } from '../../comp-doc/cell/cell-registry.js';
 import { cellTokenByIdBuild } from '../../comp-doc/cell/cell-define.js';
+import { atomKindById as atomKindByIdDefault } from '../../comp-doc/edit/atom-kind-registry.js';
+import { pageLayerById as pageLayerByIdDefault, pageLayerListBuild } from '../../comp-doc/registry/page-layer-registry.js';
+import { atomKindRegistryBuild } from './lib/doc-edit-atom-kind.js';
 import { apiById as apiByIdDefault } from '../../comp-doc/api/api-registry.js';
 import { apiByIdBuild, apiDeclaredLayerBuild } from './lib/doc-api.js';
 import './DocPageMdx.css';
@@ -124,6 +128,12 @@ import './DocPageMdx.css';
 // (doc_page_impl_edit_slash.md#the-slash-action-registry); null removes one.
 // config.cellTokenById are the host's token kinds of cells over the package's
 // (doc_page_impl_edit_cell.md#token-kinds); null removes one.
+// config.atomKindById are the host's kinds of atoms over the package's: what a
+// text holds as a chip beside its code blocks, a formula of LaTeX
+// (doc_page_impl_edit_structure.md#atoms-of-a-kind); null removes one.
+// config.pageLayerById are the host's layers of the page over the package's:
+// what a component draws over the page, in no block, the copy control of a
+// formula (doc_page_impl.md#page-layers); null removes one.
 // config.apiById are the host's apis over the package's and the doc pages'
 // declared ones (doc_page_impl_api.md#the-registry); null removes one.
 // config.hotkeyMapList are the host's keyboard maps, stacked above the doc
@@ -145,6 +155,7 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
     const compById = compByIdBuild(data.compMountList, config.compById);
     const slashActionById = slashActionByIdPageBuild(config.slashActionById);
     const cellTokenById = cellTokenByIdPageBuild(config.cellTokenById);
+    const atomKindByName = atomKindByNamePageBuild(config.atomKindById);
     const apiById = apiByIdPageBuild(data.configDoc?.apiDeclared, config.apiById);
     // the environment of the page: how it is served, and so what it allows.
     // every store asks it, not an endpoint or a build flag of its own
@@ -199,7 +210,16 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
     });
     // the edit store creates asset items when a block's inline data is
     // moved into the asset service layer (doc_page_impl_asset.md)
-    const editStore = new DocEditStore(sourceStore, docStore, configStore, { envStore, assetStore, compStateStore });
+    // the text a write gives a block is compiled as the write starts, as the
+    // block will draw it (BlockRender: the format of the document, the
+    // compile configuration of the page)
+    const blockTextPrepare = (path, text) => blockCompilePrepare({
+      text,
+      format: sourceStore.entryByInternalPath.get(path)?.ext === 'mdx' ? 'mdx' : 'md',
+      internalPath: path,
+      compileConfig: sourceStore.compileConfig,
+    });
+    const editStore = new DocEditStore(sourceStore, docStore, configStore, { envStore, assetStore, compStateStore, atomKindByName, blockTextPrepare });
     // a component block shown in a popup, in View or in Edit (doc_page_impl_popup.md)
     const blockPopupStore = new DocBlockPopupStore({ docStore, editStore, sourceStore, assetStore });
     // the popup of an MDX block, the page's (doc_page_impl_mdx_embed.md#the-popup)
@@ -376,6 +396,7 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
     return stores;
   });
   const framework = useMemo(() => makeFramework(stores.docStore), [stores]);
+  const pageLayerList = useMemo(() => pageLayerListPageBuild(config.pageLayerById), [config.pageLayerById]);
   const contextValue = useMemo(() => ({
     ...stores,
     compConfigHost: config.compConfigHost ?? {},
@@ -427,6 +448,10 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
   useEffect(() => {
     stores.cellStore.replaceCellTokenById(cellTokenByIdPageBuild(config.cellTokenById));
   }, [config.cellTokenById, stores]);
+
+  useEffect(() => {
+    stores.editStore.replaceAtomKindByName(atomKindByNamePageBuild(config.atomKindById));
+  }, [config.atomKindById, stores]);
 
   useEffect(() => {
     stores.apiStore.replaceApiById(apiByIdPageBuild(data.configDoc?.apiDeclared, config.apiById));
@@ -515,6 +540,7 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
               <DocCommandPalette />
               <DocApiNotice />
               <DocHotkeyListener />
+              {pageLayerList.map(({ id, Layer }) => <Layer key={id} />)}
               {config.isTabTitleSet ? <DocTabTitle /> : null}
             </RootProvider>
           </FrameworkProvider>
@@ -627,7 +653,7 @@ function DocPageLayoutContainer({ children, ...props }) {
 
 // ---------- registry building ----------
 //
-// the page has four registries, built the same way when the page starts
+// the page has six registries, built the same way when the page starts
 // and again when what they are built from changes: the package's
 // definitions, then those of the doc pages, then the host's, each layer
 // over the one before (an id of a later layer replaces the same id of an
@@ -637,13 +663,17 @@ function DocPageLayoutContainer({ children, ...props }) {
 //   compById            registry.js        data.compMountList             config.compById
 //   slashActionById     slash-registry.js  (none yet)                     config.slashActionById
 //   cellTokenById       cell-registry.js   (none yet)                     config.cellTokenById
+//   atomKindById        atom-kind-registry.js  (none yet)                 config.atomKindById
 //   apiById             api-registry.js    configDoc.apiDeclared (yaml)   config.apiById
+//   pageLayerById       page-layer-registry.js  (none yet)                config.pageLayerById
 //
 // compById is held by DocStore (replaceCompById), slashActionById by
 // DocSlashStore (replaceSlashActionById), cellTokenById by DocCellStore
-// (replaceCellTokenById), apiById by DocApiStore
+// (replaceCellTokenById), atomKindById by DocEditStore, by name
+// (replaceAtomKindByName), apiById by DocApiStore
 // (replaceApiById; the apis of components and services join it through
-// providers at run time).
+// providers at run time); pageLayerById is drawn by the page itself, the
+// layers in the order of their ids.
 
 // the component registry (doc_page_impl.md#component-registry)
 function compByIdBuild(compMountList, compByIdHost) {
@@ -658,6 +688,16 @@ function slashActionByIdPageBuild(slashActionByIdHost) {
 // the token kinds of cells (doc_page_impl_edit_cell.md#token-kinds)
 function cellTokenByIdPageBuild(cellTokenByIdHost) {
   return cellTokenByIdBuild(cellTokenByIdDefault, cellTokenByIdHost);
+}
+
+// the kinds of atoms (doc_page_impl_edit_structure.md#atoms-of-a-kind), by name
+function atomKindByNamePageBuild(atomKindByIdHost) {
+  return atomKindRegistryBuild(atomKindByIdDefault, atomKindByIdHost).byName;
+}
+
+// the layers of the page (doc_page_impl.md#page-layers): [{ id, Layer }]
+function pageLayerListPageBuild(pageLayerByIdHost) {
+  return pageLayerListBuild(pageLayerByIdDefault, pageLayerByIdHost);
 }
 
 // the api registry (doc_page_impl_api.md#the-registry)

@@ -79,7 +79,7 @@ Typing, deleting, pasting and undoing therefore all lead to the right state with
 
 **Why two spaces end it.** A parameter may contain one space (`/link getting started`), so a single space cannot mean "stop". Two spaces in a row never belong to a parameter, so they say that the author went back to writing. Escape does the same from the keyboard without typing anything. The first Escape closes the menu only; a second Escape cancels the block's edit session as usual.
 
-**Where a `/` starts it.** In a document, only at the start of a line or after a space, so a path or a url typed in the text never starts it. A surface whose words no space sets apart (a cell: `{{birth/month}}月`, text in Japanese) asks for the **loose rule** (`isTriggerLoose`): anywhere, unless the `/` follows a Latin letter, a digit or one of `/ : . ~ _ - <`, which is where a path, a url, `1/2` or `and/or` has one (`slashTriggerIs`).
+**Where a `/` starts it.** Where no word goes on after it: at the end of its line, or before a space (or a chip of the text, a code block or a formula). What stands before it does not matter, so `aaa/` starts it as `see /` does, in a document as in a cell (`{{birth/month}}月`, text in Japanese). A `/` typed into a word (`and|or`) never starts it (`slashTriggerIs`; the surface tells the binding the character after the caret). A path or a url typed at the end of a line starts it for a moment and shows nothing: `//` ends it, and a name no action has (`/2`, `/readme.md`) lists no action, so no menu is drawn and Enter is the surface's.
 
 **Direct triggers.** A surface may name texts that enter the param mode of one action at once, without `/` and a name (`triggerList: [{ text, action, endList }]`). The trigger text then stands where `/name ␣` stands:
 
@@ -90,7 +90,7 @@ Typing, deleting, pasting and undoing therefore all lead to the right state with
 {{name}       ended: a character of the trigger's endList, two spaces in a row, a line break
 ```
 
-The mode still follows from the text: the text from the first character of the trigger to the caret is parsed again after every input, the longest trigger first. The [cell edit layer](doc_page_impl_edit_cell.md#drawing-and-typing) uses both: its cells have the loose rule, and the opening text of a brace token (`{{`, `{{@`) is a direct trigger of the action that completes it.
+The mode still follows from the text: the text from the first character of the trigger to the caret is parsed again after every input, the longest trigger first. The [cell edit layer](doc_page_impl_edit_cell.md#drawing-and-typing) uses them: the opening text of a brace token (`{{`, `{{@`) is a direct trigger of the action that completes it.
 
 ## Keys and pointer
 
@@ -136,6 +136,8 @@ context = { sourcePath, docPageAlias, source, object,   the document edited, its
                                                           item) and the config of the document (configValueGet(key))
 effect  = slashEffect.replace(text) | slashEffect.paramSet(text) | slashEffect.cancel()
         | slashEffect.block(source)              a block at the caret (below)
+        | slashEffect.atom(atomKind, { isRow, textFallback })
+                                                 an atom of a kind at the caret (below)
 ```
 
 **An optional parameter.** An action with both `run` and `param` runs as it is when it is chosen, and its parameter is there for the author who wants it: Enter (or a click on its row) runs it, Tab (or a space after its name) enters its param mode. The parameter says what it is (`param.label`, `view`), which the menu shows in the head of the param mode and in its foot ("Tab: choose the view"). An item of the parameter marked `isDefault` is what running without it does: the menu marks it `default`, lists it first, and says it in the foot ("Enter: Icon (default)"). A short list that does not depend on what is typed is drawn on the row of the action too (`param.isListedOnRow`), so a pointer chooses in one click what the keyboard reaches by Tab. Typing chooses as well: `/mdx card` and Enter.
@@ -161,6 +163,8 @@ Callbacks rather than a component of its own keep the parameter logic pure and t
 
 **A block at the caret.** `slashEffect.block(source)` takes the slash text away and hands the source of a block to the editor of the surface, which knows what a block is in its text (`blockInsert` of the surface binding): the editor of a list item makes it a chip of the item's text ([Code blocks in the text of an item](doc_page_impl_edit_structure.md#code-blocks-in-the-text-of-an-item)); a paragraph is saved as the text before the caret, the block and the text after it, blank lines between them, and its session ends (`slashBlockTextInsert`); a surface with no such editor (the source of a whole list) gets the lines of the block typed at the caret. `/mdx` is such an action ([MDX blocks](doc_page_impl_mdx_embed.md#adding-a-block)).
 
+**An atom at the caret.** `slashEffect.atom(atomKind, { isRow, textFallback })` takes the slash text away and asks the editor of the surface for an empty atom of that kind at the caret, in the line or on a row (`atomInsert` of the surface binding): in a paragraph and in the text of a list item it is a chip of the text, and the editor of its kind opens below it ([Atoms of a kind](doc_page_impl_edit_structure.md#atoms-of-a-kind)); a surface that types no atoms gets `textFallback` typed at the caret. `/math` is such an action ([Adding a formula](../built-in/comp-mdx/math/comp_math.md#adding-a-formula)).
+
 ## The slash action registry
 
 The registry mirrors the [component registry](doc_page_impl.md#component-registry) part for part, so a reader who knows one knows the other:
@@ -183,6 +187,7 @@ Ids are `{layer}/{name}`, such as `nav/link`. The [unified api registry](doc_pag
 | `nav/inline` | `/inline`, `/popup` | navigation | the same link with `?nav=popup`: the document opens in the inline popup of the page, and is edited there in edit mode |
 | `block/code` | `/code`, `/fence` | the code block ([Adding a block](doc_page_impl_mdx_code.md#adding-a-block)) | a fenced code block at the caret; its view an optional parameter (`card`, `plain`, `icon`; the default is the config's for the place) |
 | `block/mdx` | `/mdx`, `/embed`, `/doc` | the MDX block ([Adding a block](doc_page_impl_mdx_embed.md#adding-a-block)) | an MDX block at the caret (`slashEffect.block`); its view an optional parameter (`icon`, `card`) |
+| `text/math` | `/math`, `/latex` | the built-in component math ([Adding a formula](../built-in/comp-mdx/math/comp_math.md#adding-a-formula)) | an empty formula at the caret, its field open below it (`slashEffect.atom`); where it stands an optional parameter (in the line, the default; on a row) |
 | `object/view` | `/object`, `/obj`, `/o` | the object service layer ([Writing a reference](doc_page_impl_obj.md#writing-a-reference)) | a view of an object of the registry, found a type, an object, then what is inside it; in a document the inline form of `ObjectView` |
 
 ## Which blocks offer it
@@ -219,7 +224,6 @@ const slash = useEditSlashConfig({
   actionList: [myAction],               // its own actions, slashActionDefine as any
   context: { info, dateNow },           // what its actions receive
   isPageActionIncluded: false,          // the page's registry (/link ...) too; default false
-  isTriggerLoose: false,                // "/" anywhere but in a path or a url; default false
   triggerList: [],                      // direct triggers: [{ text, action, endList }]
 });
 <EditSourceSurface kind="plain" slash={slash} text={draft} onTextChange={draftSet} ... />
@@ -241,12 +245,12 @@ What holds for both:
 
 ## The surface binding
 
-`useEditSlash(elementRef, slash, { textBeforeCaretGet, blockInsert })` (`comp-doc/slash/use-edit-slash.js`) is the one place between the surface and the store (`blockInsert(source, offset)`: what the editor does with a block an action puts at the caret, [above](#the-action-interface)):
+`useEditSlash(elementRef, slash, { textBeforeCaretGet, charAfterCaretGet, blockInsert, atomInsert })` (`comp-doc/slash/use-edit-slash.js`) is the one place between the surface and the store (`charAfterCaretGet`: the character after the caret, `''` at the end of its line, for [where a `/` starts it](#the-state-machine); `blockInsert(source, offset)`: what the editor does with a block an action puts at the caret; `atomInsert(atomKind, isRow, offset)`: with an atom of a kind, [above](#the-action-interface)):
 
 ```text
 surface onInput  -> textReport (the draft, as before) -> inputAfter
                       open here:   slashUpdate(line of the caret, caret rect)
-                      else:        "/" typed where the surface's rule lets it start, or the last character
+                      else:        "/" typed with no word going on after it, or the last character
                                    of one of its direct triggers? -> slashStart(line, column, context)
 selectionchange, scroll (while open)  -> slashUpdate, or slashEnd when the surface lost focus
 surface onKeyDown -> keyDown first (see Keys and pointer)
@@ -288,4 +292,5 @@ In the action mode, a query that matches no action shows no menu, because the au
 | `comp-doc/slash/EditSlashMenu.jsx`, `EditSlashToggle.jsx`, `EditSlash.css` | the menu and the switch |
 | `comp-doc/link/link-slash.js`, `frontend/src/lib/doc-link-complete.js` | `/link`: the action, its items and the link it writes |
 | `comp-doc/object/object-slash.js`, `frontend/src/lib/doc-object-complete.js` | `/object`: the action, the walk from a type to what is inside an object |
+| `built-in/comp-mdx/math/math-slash.js` | `/math`: a formula in the line or on a row |
 | `frontend/src/lib/doc-slash.test.js`, `doc-link-complete.test.js`, `doc-object-complete.test.js` | the state machine, the triggers, the store, `/link`, `/object` |

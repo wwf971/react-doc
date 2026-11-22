@@ -1,4 +1,4 @@
-import { itemAtomOf } from '../../frontend/src/lib/doc-edit-item-atom.js';
+import { ITEM_ATOM_CHAR_FIRST, itemAtomOf } from '../../frontend/src/lib/doc-edit-item-atom.js';
 
 // The atoms of an editing surface (EditSourceSurface, prop atomModel): things
 // of the text that are typed as one character and drawn as a chip, never as
@@ -58,7 +58,9 @@ export function surfaceAtomTextRead(container) {
 }
 
 // the content of the surface for a text: text nodes and chips
-export function surfaceAtomContentWrite(element, text, atomModel) {
+//   atomKindByName   the kinds of atoms of the page (lib/doc-edit-atom-kind.js):
+//                    what draws an atom of a kind into its chip
+export function surfaceAtomContentWrite(element, text, atomModel, atomKindByName = {}) {
   const nodeList = [];
   let run = '';
   for (const char of text) {
@@ -69,7 +71,7 @@ export function surfaceAtomContentWrite(element, text, atomModel) {
     }
     if (run) nodeList.push(document.createTextNode(run));
     run = '';
-    nodeList.push(atomChipBuild(atom));
+    nodeList.push(atom.atomKind ? atomKindChipBuild(atom, atomKindByName[atom.atomKind]) : atomChipBuild(atom));
   }
   // a text that ends with a line break gets one more, as in a plain surface
   if (run) nodeList.push(document.createTextNode(run.endsWith('\n') ? `${run}\n` : run));
@@ -104,6 +106,128 @@ function atomChipBuild(atom) {
   const name = atom.isEmbed ? (atom.title || 'MDX block') : (atom.title || `Code · ${atom.lang || 'text'}`);
   chip.title = `${name}${countText}: double-click to ${atom.isEmbed ? 'open the document' : 'show the lines'} (← → move over it, Backspace selects it, then deletes it)`;
   return chip;
+}
+
+// a chip of an atom of a kind (lib/doc-edit-atom-kind.js, a formula of the
+// component math): drawn by its kind, in the line (inline) or as wide as the
+// surface on a line of its own (row); an empty one shows its place
+function atomKindChipBuild(atom, atomKind) {
+  const chip = document.createElement('span');
+  const isRow = atom.kind === 'row';
+  chip.className = `doc-edit-atom doc-edit-atom-kind${isRow ? ' doc-edit-atom-row' : ''}`;
+  chip.contentEditable = 'false';
+  chip.setAttribute('data-atom', atom.char);
+  chip.setAttribute('data-kind', atom.kind);
+  chip.setAttribute('data-atom-kind', atom.atomKind);
+  chip.setAttribute('data-label', atom.label);
+  chip.title = `${atom.label[0]?.toUpperCase() ?? ''}${atom.label.slice(1)}: click to edit it (← → move over it, Backspace selects it, then deletes it)`;
+  atomKindDraw(chip, atom.value, isRow, atomKind);
+  return chip;
+}
+
+function atomKindDraw(chip, value, isRow, atomKind) {
+  if (String(value ?? '').trim() === '' || !atomKind) {
+    chip.replaceChildren();
+    chip.setAttribute('data-empty', '');
+    chip.removeAttribute('data-error');
+    return '';
+  }
+  chip.removeAttribute('data-empty');
+  let message = '';
+  try {
+    message = String(atomKind.draw(chip, value, isRow) ?? '');
+  } catch (error) {
+    message = String(error?.message ?? error);
+  }
+  if (message) chip.setAttribute('data-error', '');
+  else chip.removeAttribute('data-error');
+  return message;
+}
+
+// the chip of an atom of a kind drawn again for its value (typed in its
+// field); answers what is wrong with it ('' when nothing)
+export function surfaceAtomKindRender(element, char, value, atomKind) {
+  const chip = [...element.querySelectorAll('[data-atom]')].find((one) => one.getAttribute('data-atom') === char);
+  if (!chip) return '';
+  return atomKindDraw(chip, value, chip.getAttribute('data-kind') === 'row', atomKind);
+}
+
+// ---------- a row whose value is typed: its room locked ----------
+// (doc_page_impl_edit_structure.md#atoms-of-a-kind) the chip of an atom of a
+// kind on lines of its own (a formula on a row) is drawn again at every key
+// typed in its field, and its height follows what it draws. it keeps the room
+// it took when its field opened, as a block being edited keeps the geometry it
+// had in view mode (the geometry lock, doc_page_impl_edit.md#in-place-editing-
+// and-the-no-jitter-rule, rule 4): its margin box stays as high as it was, so
+// nothing after it moves while its value is typed.
+//
+//   drawn taller    the chip grows, its frame around what it draws, and its
+//                   bottom margin is less by as much: it extends down over
+//                   the lines after it, above them, on the page background
+//                   (data-locked, DocEdit.css)
+//   drawn shorter   the chip keeps its height (min-height)
+//
+// released when the field closes: the row then takes the room its value
+// needs, as a block saved does.
+
+export function surfaceAtomRowLock(chip) {
+  if (!chip || chip.getAttribute('data-kind') !== 'row' || chip.hasAttribute('data-locked')) return;
+  const style = getComputedStyle(chip);
+  const height = chip.getBoundingClientRect().height;
+  const marginBottom = parseFloat(style.marginBottom) || 0;
+  chip.style.marginTop = `${parseFloat(style.marginTop) || 0}px`;
+  chip.style.marginBottom = `${marginBottom}px`;
+  chip.style.minHeight = `${height}px`;
+  chip.setAttribute('data-lock-height', String(height));
+  chip.setAttribute('data-lock-margin-bottom', String(marginBottom));
+  chip.setAttribute('data-locked', '');
+}
+
+// after the chip was drawn again: what it grew by taken from its bottom margin
+export function surfaceAtomRowLockFollow(chip) {
+  if (!chip?.hasAttribute('data-locked')) return;
+  const height = Number(chip.getAttribute('data-lock-height'));
+  const marginBottom = Number(chip.getAttribute('data-lock-margin-bottom'));
+  const grown = Math.max(0, chip.getBoundingClientRect().height - height);
+  chip.style.marginBottom = `${marginBottom - grown}px`;
+}
+
+export function surfaceAtomRowUnlock(chip) {
+  if (!chip?.hasAttribute('data-locked')) return;
+  for (const name of ['data-locked', 'data-lock-height', 'data-lock-margin-bottom']) chip.removeAttribute(name);
+  chip.style.marginTop = '';
+  chip.style.marginBottom = '';
+  chip.style.minHeight = '';
+}
+
+// the chip of an atom of a kind under a point ({ clientX, clientY }), or null:
+// a block entered by a click on a formula opens its field. what is drawn at
+// the point first (the glyphs of a formula reach out of the box of its chip),
+// then the box of a chip
+export function surfaceAtomKindChipAt(element, point) {
+  if (!Number.isFinite(point?.clientX) || !Number.isFinite(point?.clientY)) return null;
+  const chipHit = (document.elementsFromPoint?.(point.clientX, point.clientY) ?? [])
+    .map((node) => node.closest?.('[data-atom-kind]'))
+    .find((chip) => chip && element.contains(chip));
+  if (chipHit) return chipHit;
+  return [...element.querySelectorAll('[data-atom-kind]')].find((chip) => {
+    const rect = chip.getBoundingClientRect();
+    return point.clientX >= rect.left && point.clientX <= rect.right && point.clientY >= rect.top && point.clientY <= rect.bottom;
+  }) ?? null;
+}
+
+// the number of the atom a chip stands for (its character), not its place
+// among the chips: the atoms of code come first in the numbering, the atoms
+// of the kinds after them, whatever their order in the text
+export function surfaceAtomIndexOf(chip) {
+  const char = chip?.getAttribute?.('data-atom') ?? '';
+  return char ? char.codePointAt(0) - ITEM_ATOM_CHAR_FIRST : -1;
+}
+
+// a chip that takes a line of its own: a block, an atom of a kind of its own lines
+function chipIsRow(node) {
+  const kind = node?.getAttribute?.('data-kind');
+  return kind === 'block' || kind === 'row';
 }
 
 // the space a chip keeps from what stands beside it: the width of a space in
@@ -151,12 +275,19 @@ export function surfaceAtomShapeKeep(element) {
   let isSomethingBefore = false;
   let chipLast;
   for (const node of element.childNodes) {
-    if (chipIs(node) && node.getAttribute('data-kind') === 'block') {
+    if (chipIs(node) && chipIsRow(node)) {
       // a line of its own: what follows it starts a line
       chipAttributeSet(node, 'data-gap-before', false);
       chipAttributeSet(node, 'data-gap-after', false);
       chipLast = undefined;
       isSomethingBefore = false;
+    } else if (chipIs(node) && node.getAttribute('data-kind') === 'inline') {
+      // an atom of the line is written where it stands: the spaces around it
+      // are the text's own, it keeps none of its own
+      chipAttributeSet(node, 'data-gap-before', false);
+      chipAttributeSet(node, 'data-gap-after', false);
+      chipLast = undefined;
+      isSomethingBefore = true;
     } else if (chipIs(node)) {
       chipAttributeSet(node, 'data-gap-before', isSomethingBefore);
       chipAttributeSet(node, 'data-gap-after', false);
@@ -316,7 +447,7 @@ export function surfaceAtomSelectionMark(element) {
       && range.comparePoint(chip, 0) <= 0 && range.comparePoint(chip, chip.childNodes.length) >= 0));
   }
   const caretBeside = range?.collapsed && element.contains(range.startContainer) ? surfaceAtomBlockBesideCaretGet(element, range) : undefined;
-  for (const chip of element.querySelectorAll('[data-kind="block"]')) {
+  for (const chip of element.querySelectorAll('[data-kind="block"], [data-kind="row"]')) {
     const side = caretBeside?.chip === chip ? caretBeside.side : '';
     if ((chip.getAttribute('data-caret') ?? '') !== side) {
       if (side) chip.setAttribute('data-caret', side);
@@ -329,7 +460,7 @@ export function surfaceAtomSelectionMark(element) {
 // in the spacer after it (on the right of the block, where the chip takes the
 // whole line) or before it, with no text of its own between them
 function surfaceAtomBlockBesideCaretGet(element, range) {
-  const isBlock = (node) => chipIs(node) && node.getAttribute('data-kind') === 'block';
+  const isBlock = (node) => chipIs(node) && chipIsRow(node);
   const node = range.startContainer;
   let nodeBefore;
   let nodeAfter;
@@ -372,9 +503,24 @@ export function surfaceAtomDoubleClick(event, element) {
   const chip = event.target?.closest?.('[data-atom]');
   if (!chip || !element.contains(chip)) return false;
   event.preventDefault();
-  const index = [...element.querySelectorAll('[data-atom]')].indexOf(chip);
-  element.dispatchEvent(new CustomEvent(ATOM_OPEN_EVENT, { bubbles: true, detail: { index, kind: chip.getAttribute('data-kind') } }));
+  const index = surfaceAtomIndexOf(chip);
+  element.dispatchEvent(new CustomEvent(ATOM_OPEN_EVENT, { bubbles: true, detail: { index, kind: chip.getAttribute('data-kind'), char: chip.getAttribute('data-atom') } }));
   return true;
+}
+
+// a right click on a chip asks for the menu of the thing it stands for
+// (doc_page_impl_edit_structure.md#deleting-a-thing): an event of the DOM,
+// cancelable, heard by the menu of the page (DocBlockSelectMenu), which opens
+// at the block of the session and cancels the event to say it did; the
+// surface then keeps the browser's menu away. detail: { label (what the thing
+// is: 'formula', 'code block', 'MDX block'), clientX, clientY, remove() (a
+// typed delete of the chip) }
+export const ATOM_MENU_EVENT = 'doc-edit-atom-menu';
+
+// what the thing of an atom is called in its menu
+export function surfaceAtomThingLabel(atom) {
+  if (atom?.atomKind) return atom.label || atom.atomKind;
+  return atom?.isEmbed ? 'MDX block' : 'code block';
 }
 
 // a caret the browser put inside a chip (a point on it) goes before or after it
@@ -387,7 +533,7 @@ export function surfaceAtomCaretNormalize(element, point) {
     : anchor?.parentElement?.closest('[data-atom]');
   // a spacer beside a chip: the side of the chip the point is on
   if (!chip && anchor?.nodeType === Node.TEXT_NODE && anchor.parentNode === element && !textHasReal(anchor) && Number.isFinite(point?.clientX)) {
-    chip = [anchor.previousSibling, anchor.nextSibling].find((node) => chipIs(node) && node.getAttribute('data-kind') !== 'block');
+    chip = [anchor.previousSibling, anchor.nextSibling].find((node) => chipIs(node) && !chipIsRow(node));
   }
   if (!chip || !element.contains(chip)) return;
   const rect = chip.getBoundingClientRect();
@@ -432,7 +578,6 @@ export const ATOM_LINES_EVENT = 'doc-edit-atom-lines';
 export function surfaceAtomBlockLineGet(element, direction, rectCaret) {
   if (!rectCaret || rectCaret.height <= 0) return undefined;
   const entryList = [];
-  const chipList = [...element.querySelectorAll(':scope > [data-atom]')];
   for (const node of element.childNodes) {
     if (chipIs(node)) {
       entryList.push({ rect: node.getBoundingClientRect(), chip: node });
@@ -449,11 +594,11 @@ export function surfaceAtomBlockLineGet(element, direction, rectCaret) {
     if (belowList.length === 0) return undefined;
     const topNearest = Math.min(...belowList.map(({ rect }) => rect.top));
     const chip = belowList.find(({ rect, chip: one }) => one?.getAttribute('data-kind') === 'block' && rect.top <= topNearest + half)?.chip;
-    return chip ? { index: chipList.indexOf(chip), chip } : undefined;
+    return chip ? { index: surfaceAtomIndexOf(chip), chip } : undefined;
   }
   const aboveList = entryList.filter(({ rect }) => rect.bottom <= rectCaret.top + tolerance);
   if (aboveList.length === 0) return undefined;
   const bottomNearest = Math.max(...aboveList.map(({ rect }) => rect.bottom));
   const chip = aboveList.find(({ rect, chip: one }) => one?.getAttribute('data-kind') === 'block' && rect.bottom >= bottomNearest - half)?.chip;
-  return chip ? { index: chipList.indexOf(chip), chip } : undefined;
+  return chip ? { index: surfaceAtomIndexOf(chip), chip } : undefined;
 }

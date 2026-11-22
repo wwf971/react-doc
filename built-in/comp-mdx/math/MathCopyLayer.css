@@ -1,0 +1,83 @@
+/* ---------- the copy control of a formula on a row (MathCopyLayer) ----------
+   a small box floating right after the formula, as the popovers of the page
+   are (popover.css): a hairline, a small radius, the background of a popover,
+   a light shadow; two quiet buttons, the copy of the LaTeX and the forms.
+   nothing of it is in the flow of the page */
+.doc-math-copy {
+  position: fixed;
+  z-index: 75;
+  display: inline-flex;
+  align-items: stretch;
+  border: 1px solid var(--color-fd-border);
+  border-radius: 4px;
+  background: var(--color-fd-popover, var(--color-fd-background));
+  color: var(--color-fd-muted-foreground);
+  box-shadow: 0 2px 6px rgb(0 0 0 / 0.08);
+}
+
+.doc-math-copy-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.375rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.doc-math-copy-button:hover,
+.doc-math-copy-button[aria-expanded='true'] {
+  background: color-mix(in srgb, var(--color-fd-foreground) 7%, transparent);
+  color: var(--color-fd-foreground);
+}
+
+.doc-math-copy-more {
+  width: 1.125rem;
+  border-left: 1px solid color-mix(in srgb, var(--color-fd-border) 70%, transparent);
+  border-radius: 0 3px 3px 0;
+}
+
+.doc-math-copy[data-status='copied'] .doc-math-copy-button:first-child {
+  color: var(--color-green-600, #16a34a);
+}
+
+.doc-math-copy[data-status='failed'] .doc-math-copy-button:first-child {
+  color: var(--color-red-600, #dc2626);
+}
+
+.doc-math-copy[data-status='busy'] .doc-math-copy-button:first-child {
+  opacity: 0.55;
+}
+
+/* the forms of copy, in the menu of the page (doc-edit-mode-menu's frame) */
+.doc-math-copy-item {
+  display: grid;
+  grid-template-columns: 1rem auto 1fr;
+  align-items: center;
+  gap: 0.4rem;
+  width: 100%;
+  font-size: 0.8125rem;
+}
+
+.doc-math-copy-item-icon {
+  display: inline-flex;
+  color: var(--color-fd-muted-foreground);
+}
+
+.doc-math-copy-item-note {
+  justify-self: end;
+  padding-left: 0.75rem;
+  color: var(--color-fd-muted-foreground);
+  font-size: 0.75rem;
+}
+
+@media print {
+  .doc-math-copy {
+    display: none;
+  }
+}

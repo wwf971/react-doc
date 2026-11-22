@@ -155,3 +155,51 @@ test('an MDX block of an item is a chip, icon by default, never a part', () => {
   const whole = itemAtomModelBuild('<!--renderComp=Mdx-->\n```md\nx\n```', { viewResolve: () => 'card' });
   assert.equal(whole.atomList[0].kind, 'icon');
 });
+
+test('atoms of a kind (the formulas of the component math): a chip in the line, or a chip of its own lines', async () => {
+  const { itemAtomValueSet, itemAtomKindAdd } = await import('./doc-edit-item-atom.js');
+  const { atomKindDefine } = await import('./doc-edit-atom-kind.js');
+  const { mathSpanListGet, mathSourceBuild } = await import('../../../../built-in/comp-mdx/math/MathData.js');
+  const math = atomKindDefine({ name: 'math', label: 'formula', spanListGet: mathSpanListGet, sourceBuild: mathSourceBuild, draw: () => '' });
+  const build = (text) => itemAtomModelBuild(text, { atomKindList: [math] });
+  const set = (model, char, value) => itemAtomValueSet(model, char, value, mathSourceBuild(value, itemAtomModelGetKind(model, char) === 'row'));
+  const itemAtomModelGetKind = (model, char) => model.atomList.find((atom) => atom.char === char)?.kind;
+  assert.deepEqual(mathSpanListGet('a $x$ b `$y$` \\$z$'), [{ start: 2, end: 5, value: 'x', isRow: false }]);
+  assert.equal(mathSourceBuild(' a\nb '), '$a b$');
+  assert.equal(mathSourceBuild('a\n', true), '$$\na\n$$');
+  // no kind given: the text has no atom
+  assert.equal(itemAtomModelBuild('see $x$'), undefined);
+  // in the line: the chip stands where the formula is, nothing around it changes
+  const inline = build('see $x^2$ here');
+  const char0 = String.fromCodePoint(0xe000);
+  assert.equal(inline.display, `see ${char0} here`);
+  assert.equal(inline.atomList[0].kind, 'inline');
+  assert.equal(inline.atomList[0].atomKind, 'math');
+  assert.equal(itemAtomTextBuild(inline.display, inline), 'see $x^2$ here');
+  assert.ok(set(inline, char0, 'y_1'));
+  assert.equal(itemAtomTextBuild(inline.display, inline), 'see $y_1$ here');
+  assert.equal(itemAtomTextBuild('see  here', inline), 'see  here');
+  // on lines of its own: the lines around it stay lines
+  const block = build('a\n$$\nx\n$$\nb');
+  assert.equal(block.display, `a${char0}b`);
+  assert.equal(block.atomList[0].kind, 'row');
+  set(block, char0, 'y');
+  assert.equal(itemAtomTextBuild(block.display, block), 'a\n$$\ny\n$$\nb');
+  set(block, char0, '');
+  assert.equal(itemAtomTextBuild(block.display, block), 'a\nb');
+  // with code: the code block keeps atom 0, the formula comes after it in the numbering
+  const mixed = build('$a$ and\n```js view=icon\nx\n```');
+  assert.equal(mixed.atomList[0].kind, 'icon');
+  assert.equal(mixed.atomList[1].kind, 'inline');
+  assert.equal(mixed.display, `${String.fromCodePoint(0xe001)} and${String.fromCodePoint(0xe000)}`);
+  assert.equal(itemAtomTextBuild(mixed.display, mixed), '$a$ and\n```js view=icon\nx\n```');
+  // an offset after the formula in the text is after its chip
+  assert.equal(itemAtomOffsetDisplayGet(inline, 'see $x^2$'.length), 'see '.length + 1);
+  // a new one, typed in its field; an empty one is not written
+  const { model: added, atom } = itemAtomKindAdd(undefined, 'math', { display: 'ab', label: 'formula' });
+  assert.equal(itemAtomTextBuild(`a${atom.char}b`, added), 'ab');
+  itemAtomValueSet(added, atom.char, 'z', mathSourceBuild('z'));
+  assert.equal(itemAtomTextBuild(`a${atom.char}b`, added), 'a$z$b');
+  // copied out: the formula in its place
+  assert.equal(itemAtomTextSourceGet(`a${atom.char}b`, added), 'a$z$b');
+});

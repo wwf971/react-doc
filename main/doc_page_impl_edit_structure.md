@@ -35,6 +35,7 @@ a document                        what a click does      what Shift + click does
 - **Shift is the key of structure.** With Shift the pointer addresses things, not their content. One place needs no Shift: in a list a line is an item, so in an item being typed Enter, Backspace and Tab are structural edits, as an author expects of an outline ([The keys of an item](#the-keys-of-an-item)).
 - **The item model.** The items of a list block are read from the positions the Markdown parser reports and kept as a tree; an edit changes the tree and writes the whole list back ([The list model](#the-list-model)).
 - **The layer.** Everything structural edit shows of a list item (its toolbar, the frame of the selection, the editor of its text, a drag) floats in one layer over the body; nothing is added inside the list ([The layer](#the-layer)).
+- **A thing is deleted from its right-click menu.** Whatever is drawn as one unit (a block, a code block or an MDX block in any view, a formula) is deleted from the menu a right click on it opens, wherever it stands: a root-level block, the text of a list item, a paragraph, a document embedded in an MDX block, a text being typed. One menu, the menu of the page, whose first entry is about the thing under the pointer ([Deleting a thing](#deleting-a-thing)).
 
 Structural edit exists in edit mode, on a document the page can write ([Availability and mode](doc_page_impl_edit.md#availability-and-mode)). The older **block selection mode**, a mode of its own beside edit mode, is being merged into it ([Block selection mode](#block-selection-mode)).
 
@@ -324,12 +325,41 @@ the item, rendered, and in its editor with a chip in the place of each block
 
 - **What is an atom.** Every code block of the own text of the item: a fenced code block, or a block of `Code` (its marker on the line before its fence), of the kind its view gives it, the view written in it or given by the config for its place (`itemAtomModelBuild`, `lib/doc-edit-item-atom.js`; the session holds it as `itemAtom`): `icon`, a chip in the line, or `block`, a chip as wide as the item. A block of another view that is the whole text of the item is no atom: that item is edited as the lines of its block ([A text block](#a-text-block)). An [MDX block](doc_page_impl_mdx_embed.md#in-the-text-of-a-list-item) is an atom too, even when it is the whole item, since its lines are a document edited in its popup (`isEmbed`). Other blocks of an item (the data of an `Image`) stay source in the editor.
 - **Typed as one character.** The text the editor types holds one character of the private use area per atom; the atom stands for its block and for the line breaks around it, which only Markdown needs. Saved, every atom is a block on lines of its own again, the text around it on the lines before and after it, the spaces next to it dropped (a blank line would make the list loose, an indented line code) (`itemAtomTextBuild`). A text not typed is written back as it was.
-- **The chip is the rendered block, in its place.** So nothing moves when the item is entered. The chip of an icon is the tile, the same box at the same alignment, a space from what stands beside it; it holds no text of its own (`surface-atom.js`: its icon and label are drawn by the stylesheet). The chip of a block is as wide as the surface, which puts it on a line of its own, and shows a copy of the rendered block, inert, with the margins it has in the item (DocEditItemEditor fills it as soon as the surface writes it, `ATOM_FILL_EVENT`, before the caret is placed). The text of the editor, the ranges of the browser and the slash mode never meet the words of a chip. A text node stands on each side of every chip (a zero-width spacer where there is none), so the caret has a place between two chips and after the last one. **The caret beside a block** is drawn by the page, as tall as the frame of the block, on the side it stands (`data-caret` of the chip, a blinking bar of the color of the caret): the caret of the browser is as high as the line of text it stands in, the spacer beside the chip, and is hidden there. Beside an icon, and in any text, the caret is the browser's.
+- **The chip is the rendered block, in its place.** So nothing moves when the item is entered. The chip of an icon is the tile, the same box at the same alignment, a space from what stands beside it; it holds no text of its own (`surface-atom.js`: its icon and label are drawn by the stylesheet). The chip of a block is as wide as the surface, which puts it on a line of its own, and shows a copy of the rendered block, inert, with the margins it has in the item (DocEditItemEditor fills it as soon as the surface writes it, `ATOM_FILL_EVENT`, before the caret is placed: the chips of code stand for the code blocks of the rendered item in order, and the chips of the kinds of atoms, a formula among the text, are not counted). The text of the editor, the ranges of the browser and the slash mode never meet the words of a chip. A text node stands on each side of every chip (a zero-width spacer where there is none), so the caret has a place between two chips and after the last one. **The caret beside a block** is drawn by the page, as tall as the frame of the block, on the side it stands (`data-caret` of the chip, a blinking bar of the color of the caret): the caret of the browser is as high as the line of text it stands in, the spacer beside the chip, and is hidden there. Beside an icon, and in any text, the caret is the browser's.
 - **The keys.** ← and → move over a chip in one step, Shift + ← / → select over it; Backspace or Delete next to a chip selects it first, and deletes it when pressed again (Undo brings it back); a click on a chip selects it (and To text in the bar turns it into its lines as one line of text); a double click on the chip of a block edits its lines in place (below), on the chip of an icon it saves the item and opens the dialog of the lines (`codeLinesOpen`, [Editing the lines](doc_page_impl_mdx_code.md#editing-the-lines)). A copy of a part of the text with chips carries their blocks as text; a paste never makes a chip. Enter splits the item between the chips (before a block, the block goes to the new item with what follows it), Backspace at its start joins it to the row above, Tab changes its level, as for any item.
 - **Shift + Enter makes a text block.** In the text of an item with code blocks, Shift + Enter makes **the segment of text the caret is in** (the run between two chips, or between line breaks) a text block of its own, broken at the caret: a fenced block of language `text` standing where the segment stood, drawn in the view of a block in a list item (`CodeBlockViewInListItem`, plain by default), and the author goes on in its lines, after the break. The text before and after the segment stays as it was.
 - **The lines of a block among the text** are edited where they are drawn, as the lines of an item that is one block are ([A text block](#a-text-block)): the session edits one **part** of the item (`session.itemPart`, `itemPartGet` and `itemPartTextWrite` of `lib/doc-edit-item-atom.js`), laid over the lines of that block, and writes them back into the text of the item. A part is entered by a click on the lines of the block, by a double click on its chip, by Shift + Enter as above, or by adding the block (`/code`: the author goes on in its new lines). In it, Shift + Enter is a line break, and **Enter takes the lines after the caret out of the block**: they become text of the item right after the block, joined into one line (as To text joins them) and joined to the line of text that already follows the block, and the caret goes on at their start (`editItemBlockSplitRequest`, `itemBlockSplitOut`); a block left with no lines is taken out. ← at the start of the lines and → at their end write the lines and lead back into the text of the item, beside the chip (`editItemPartLeaveRequest`); Backspace or Delete in empty lines takes the block out.
 - **↑ and ↓ go through the lines of a block** as through lines of text, the caret keeping its x: from a line of text (or an icon) right above or below a block into its first or last line (`surfaceAtomBlockLineGet`, `ATOM_LINES_EVENT`); from its first or last line to the line above or below it in the item, or on to the row above or below when the block begins or ends the item; and from the row above or below into the block that begins or ends an item (`sessionItemStart` with a line to start on). A block of text down to one line is written as a line of text among the others. Tab changes the level of the item, and the part stays open. An icon has no part: its lines are in its dialog.
 - **Its place.** A block that is the whole item, and one among other things, can be drawn differently when their view is the config's (`CodeBlockViewAsListItem`, `CodeBlockView`). A block whose view came from the config keeps it when text is typed beside it, or taken away: the view is written into it.
+
+#### Atoms of a kind
+
+A component can write things of its own inside a text that are not code blocks: a formula of LaTeX, `$x^2$` or a `$$` block, is the one the page has ([the component math](../built-in/comp-mdx/math/comp_math.md)). The edit layer types them as it types code blocks, one character and a chip for each, but knows none of them by name: the component gives a **kind of atom**, and the editor of a text asks every kind where its things are.
+
+<!--renderComp=DiagramText-->
+```text
+atomKindDefine({
+  name                     'math': what the atoms of the kind are called
+  label                    'formula': what a chip says it is
+  spanListGet(text)        where its things are in a text (Markdown):
+                           [{ start, end, value, isRow }]
+  sourceBuild(value, isRow)  how one is written
+  draw(element, value, isRow) -> message   draws one into its chip; '' or
+                           what is wrong with it
+  Editor                   edits a value below its chip: { anchorGet, value,
+                           isRow, message, onChange(value), onLeave(how) }
+  elementSelector          optional: the element the rendered document draws
+                           one thing as ('.katex'), one per thing, in order:
+                           which one a right click is on (Deleting a thing)
+})
+```
+
+- **The registry.** The kinds are a registry of the page built as the slash actions are ([The slash action registry](doc_page_impl_edit_slash.md#the-slash-action-registry)): the package's by id in `comp-doc/edit/atom-kind-registry.js` (`text/math`), the host's over them (`config.atomKindById`, an id mapped to `null` removes one), built by `atomKindRegistryBuild` in `DocPageMdx` and held by name by the edit store (`DocEditStore.atomKindByName`, `replaceAtomKindByName`).
+- **Where they are typed.** In a paragraph (its session holds them as `blockAtom`) and in the text of a list item (`itemAtom`, with its code blocks), not in the lines of a block. A thing of a kind inside a code block, or overlapping another, is no atom. The atoms of code are numbered first, those of the kinds after them (`atomOrderList` keeps the order of the text).
+- **In the line or a row.** An atom of a kind is `inline`: written where it stands, the spaces around it the text's own, its chip in the line and keeping no gap of its own; or a `row`: on lines of its own, its chip as wide as the surface, the caret beside it as tall as the row. Saved, a row is lines of the item; in a paragraph, a block of its own between the paragraphs before and after it (`itemAtomTextBuild`, `pieceGap`). An atom with an empty value is written as nothing.
+- **A row keeps its room while its value is typed.** The chip of a row is drawn again at every key, and its height follows what it draws; so, as a block being edited keeps the geometry it had ([the geometry lock](doc_page_impl_edit.md#in-place-editing-and-the-no-jitter-rule), rule 4), the chip keeps the margin box it had when its field opened (`surfaceAtomRowLock`: its margins and height inline, `data-locked`). Drawn taller, it grows and its bottom margin is less by as much (`surfaceAtomRowLockFollow`), so its line keeps its height: it extends over the lines after it, above them, on the page background. Drawn shorter, it keeps its height (`min-height`). The lock is released when the field closes (`surfaceAtomRowUnlock`), and the row then takes the room its value needs, as a saved block does.
+- **Its value is typed below its chip.** A click on the chip, or Enter on it selected, opens the `Editor` of its kind under it; so does the click that enters the paragraph or the item, when it lands on the chip (`selectionInitial` a point on it, `surfaceAtomKindChipAt`: what is drawn there first, since the glyphs of a formula reach out of its box) (the surface keeps the chip and marks it `data-editing`). Each value typed is reported (`editAtomValueChange { char, value, source }`, `itemAtomValueSet`) and the chip is drawn again by its kind; the typed text does not change, so the save writes the source of the value (`model.isEdited`). The editor leaves with how: `before` or `after` (the caret goes on there), `done` and `cancel` (after it), `remove` (the atom is taken out, as a typed delete Undo brings back), `blur`.
+- **Added by an action.** `slashEffect.atom(atomKind, { isRow, textFallback })` takes the slash text away and asks the editor of the text for a new atom at the caret (`editAtomAdd { atomKind, isRow, offset, text }`, `itemAtomKindAdd`): the surface is drawn again with its chip, and its editor opens (`session.atomOpenRequest`). A surface that types no atoms gets `textFallback` typed instead.
 
 ### The toolbar of an item
 
@@ -560,6 +590,29 @@ The structural edits of blocks existed before this design and keep their writes 
 - **Dragging a block** to another border of its document (`DocEditStructStore.blockMoveTo`, the write of a move of blocks).
 - **A move of the selected block keeps the selection on it** (`selectionBlockMove`), so Alt + ↓ pressed three times moves it three places.
 
+## Deleting a thing
+
+**Design principle: a thing drawn as one unit is deleted from its right-click menu, wherever it stands.** A thing is what the page draws as one unit and the author points at as one: a root-level block, a code block or an MDX block in any view (an icon, a card, plain lines), a formula. Where it stands does not change how it goes: at the root of a document, in the text of a list item, among the words of a paragraph, in a document embedded in an MDX block (its popup), in a text being typed (its chip). The author never has to open a thing's editor, find its source or select its characters to take it out.
+
+- **One menu.** The menu is the menu of the page, the [menu of the selection](#the-menu-of-the-selection); no second menu is made for things. A right click on a thing inside the text of a block heads it with the entry of that thing, `Delete Formula…`, `Delete Code Block…`, `Delete MDX Block…`, then the entries of the block. A right click on a thing that is itself a block (a code block, an MDX block or a `$$` block at the root) opens the menu of the block as it is: its delete is `Delete Blocks…`.
+- **A tile is the thing, not a control.** A tile and an MDX card are buttons (a click opens them), but a right click on them is about the thing: the browser's own menu stays only in a field, an editor, the floating area of the block and a popup of the edit layer (`EDIT_CONTEXT_OWN_SELECTOR`).
+- **Written or typed.** Outside a text being typed the delete is a write of the file, and the menu asks first, as it does for blocks: `Delete the formula?` Delete · Cancel. In a text being typed (a paragraph or an item open in its editor) the thing is a chip, and its delete is a typed delete, as Backspace twice is: at once, the menu having that entry alone (the block is being edited, so it has no entries of the block), and Undo brings it back; the draft is saved as any draft.
+- **What goes with it.** The text around a thing reads as before: a formula in the line takes a space next to it, a thing on lines of its own the line break around it (`atomRemoveSpanGet`, the same for the typed delete and the write). An item left with no text and nothing under it goes with its last thing; a paragraph that was one formula goes with it.
+
+<!--renderComp=DiagramText-->
+```text
+right click on                  first entry          written by
+a root-level block, any view    (the block's menu)   blockListDelete
+a formula of a paragraph        Delete Formula…      blockAtomRemove
+a formula of an item            Delete Formula…      itemPartRemove
+a code / MDX block of an item   Delete Code Block…   itemPartRemove
+  (tile, card, plain lines)     Delete MDX Block…
+a chip of a text being typed    Delete Formula       a typed delete
+                                (alone, not asked)
+```
+
+**Which thing.** In a block not being edited, the wrapper of the block finds the thing under the pointer in the rendered block (`blockPartAtGet`, `comp-doc/edit/block-part-at.js`) and names it by its place among the things of its sort, as the model counts them: a code block or MDX block of an item by its place among the code blocks of the item (`[data-code-key]`, the order of `itemCodeBlockListGet`, as [the parts of an item](#code-blocks-in-the-text-of-an-item) are counted), a formula by its place among the elements of its kind in the paragraph or the item (`elementSelector` of the [kind](#atoms-of-a-kind)), leaving out those of sub-items, of code blocks and of embedded documents. The delete then takes that thing out of the text of the model (`itemPartTextWrite` with `isRemoved`, `itemAtomKindTextRemove`) and writes the block (`DocEditStructStore.itemPartRemove`, `DocEditStore.blockAtomRemove`, through `blockChangeListApply`). While the block shows a text just saved, its rendering is not the model's, and the menu has no entry of a thing. In a text being typed the surface asks for the menu itself: a right click on a chip sends `ATOM_MENU_EVENT` (`surface-atom.js`, cancelable) with what the thing is called and how to delete it; the menu of the page takes it for the block of the session (`DocBlockSelectMenu`) and cancels the event, and only then does the surface keep the browser's menu away. A surface no page menu listens to keeps the browser's.
+
 ## Block selection mode
 
 Before structural edit existed in edit mode, blocks were selected in a mode of the page of its own, **block selection mode**. It still exists for what edit mode does not offer yet: several blocks selected together, duplicated, deleted, and copied or moved to another place or document through a dialog. It is being merged into edit mode ([TODO](doc_page_impl_TODO.md#edit-structure-merge)); new structural features go into edit mode.
@@ -582,9 +635,11 @@ A click selects only: links, buttons and fields inside a block do nothing in the
 
 A right click on a selected block opens the menu for the whole selection; on a block that is not selected, that block alone becomes the selection, then the menu opens.
 
-**In edit mode too.** A right click on a block that is not being edited opens the same menu, the block alone selected, so a block is deleted, duplicated or moved from where the pointer is, by the same entries and writes (`DocEditBlock`, `DocBlockSelectStore.isContextMenuAvailable`). There the selection lasts only while the menu or its dialog is open, and is not drawn: the menu stands at the block. In the block being edited, on a control of a block and in a field the browser keeps its own menu (spelling, paste). The menu is anchored at the block of the body it was opened in (`.doc-edit-body[data-edit-path]`), so in a [document edited in a popup](doc_page_impl_mdx_embed.md#a-document-in-a-popup) it opens there.
+**In edit mode too.** A right click on a block that is not being edited opens the same menu, the block alone selected, so a block is deleted, duplicated or moved from where the pointer is, by the same entries and writes (`DocEditBlock`, `DocBlockSelectStore.isContextMenuAvailable`). There the selection lasts only while the menu or its dialog is open, and is not drawn: the menu stands at the block. A right click on a thing inside the text of the block heads the menu with the entry that deletes it, and a right click on a chip of a text being typed opens the menu with that entry alone ([Deleting a thing](#deleting-a-thing)). In the rest of the block being edited, in a field and in the floating area of a block the browser keeps its own menu (spelling, paste); a tile or a card is not such a control. The menu is anchored at the block of the body it was opened in (`.doc-edit-body[data-edit-path]`), so in a [document edited in a popup](doc_page_impl_mdx_embed.md#a-document-in-a-popup) it opens there.
 
 ```text
+Delete Formula…      only on a thing of the text of the block: "Delete the formula?"  Delete · Cancel
+─────
 Copy Blocks To…      the copy / move dialog, Copy first
 Move Blocks To…      the same dialog, Move first
 ─────
@@ -596,7 +651,7 @@ Move Down            (duplicate and move: one selected block only, greyed out wi
 Delete Blocks…       the menu asks first: "Delete the 3 selected blocks?"  Delete · Cancel
 ```
 
-The menu is the injected `Menu` (`config.components.Menu`), styled like the mode menu of a block (`DocBlockSelectMenu`). Its state is `DocBlockSelectStore.contextMenu { path, blockIndex, offset, openId, step, status, message }`.
+The menu is the injected `Menu` (`config.components.Menu`), styled like the mode menu of a block (`DocBlockSelectMenu`). Its state is `DocBlockSelectStore.contextMenu { path, blockIndex, offset, openId, step, status, message }`, and the thing right-clicked `contextMenuPart { label, isTyped, remove() }` (kept by reference: `remove` may be a typed delete of the surface).
 
 - **It stays with its block.** The menu is anchored to the point of the block that was right-clicked (`config.anchor`: the block's rect plus the offset of the click in it), not to the window, so it moves with the block when the page scrolls.
 - **Opening again.** A right click while it is open must not leave a stale menu at the old point or reuse the state of the old one: opening is always a close, then an opening on the next animation frame with a new `openId`, by which the menu is keyed. A pointer going down elsewhere closes the menu, and the click of that same gesture only closes: it does not change the selection.
@@ -615,7 +670,12 @@ frontend/src/lib/doc-edit-list.js          the item model of a list block: the p
 frontend/src/lib/doc-edit-item-atom.js     the atoms of an item: its code blocks as chips, the text the editor
                                            types (one character each) and the text written back (itemAtomModelBuild,
                                            itemAtomTextBuild, itemAtomOffsetDisplayGet); a part, one block among the
-                                           text edited as its lines (itemPartGet, itemPartTextWrite) (pure); .test.js
+                                           text edited as its lines (itemPartGet, itemPartTextWrite); a thing taken
+                                           out by its menu (itemAtomKindTextRemove, atomRemoveSpanGet); atoms of a kind
+                                           (itemAtomKindAdd, itemAtomValueSet) (pure); .test.js
+frontend/src/lib/doc-edit-atom-kind.js     atomKindDefine, atomKindRegistryBuild: the kinds of atoms; .test.js (the
+                                           store with a kind: added, typed, saved; a block taken out)
+comp-doc/edit/atom-kind-registry.js        the package's kinds of atoms by id (text/math)
 frontend/src/lib/doc-edit-block.js         remarkEditBlock marks and describes the list blocks; editDocModelBuild
                                            gives a list block its item model (block.list)
 frontend/src/store/DocEditStructStore.ts   the selection and its growth, the hover / menu / confirmation of an item,
@@ -633,13 +693,18 @@ comp-doc/edit-structure/                   DocEditStructLayer (the layer: frame,
                                            grip, the hover, scrolling under a drag), struct-geometry.js (elements,
                                            rectangles, dropTargetFind, itemRoomOpen: the room of an item being
                                            edited), DocEditStruct.css
-comp-doc/edit/DocEditBlock.jsx             a click on a list block opens the item under it; the selected block
+comp-doc/edit/DocEditBlock.jsx             a click on a list block opens the item under it; the selected block; a
+                                           right click: the menu of the block, headed by the thing under it
+comp-doc/edit/block-part-at.js             the thing drawn as one unit under a right click in a block not being
+                                           edited (blockPartAtGet): a code / MDX block or a formula, by its place
 comp-doc/edit/DocEditBlockToolbar.jsx      the grip of a block; a move of the selected block
 comp-doc/edit/DocEditBody.jsx              the layer; data-struct-selected / data-struct-dragging of the body
 comp-doc/edit/EditSourceSurface.jsx        onKeyDownFirst: the keys an editor takes before the surface, with the
                                            place of the caret in the text; atomModel: chips in the text
 comp-doc/edit/surface-atom.js              the chips of a surface: written and read, spacers, the keys over them,
-                                           the selection marked, a double click asking to open one
+                                           the selection marked, a double click asking to open one; a chip of a kind
+                                           drawn by its kind (surfaceAtomKindRender); a right click asking for the
+                                           menu of its thing (ATOM_MENU_EVENT)
 comp-doc/edit/caret-place.js               the caret at an offset of the text
 built-in/comp-mdx/text/ListItem.jsx, ListItemEdit.jsx   the default editor of a list item (common/ListItem): the
                                            keys of an item
@@ -650,7 +715,8 @@ comp-doc/api/api-struct.js                 the apis of items, of a block move, o
 main/hotkey/default.yaml                   the keys of the selection
 comp-doc/block-select/                     block selection mode: DocBlockSelectToggle, DocBlockSelectBlock,
                                            DocBlockSelectMenu, DocBlockTransferPopup (+ DocBlockSelect.css)
-frontend/src/store/DocBlockSelectStore.ts  the selection of that mode, its menu, the blocks the author is at
+frontend/src/store/DocBlockSelectStore.ts  the selection of that mode, its menu (with the thing right-clicked,
+                                           contextMenuPart), the blocks the author is at
 frontend/src/lib/doc-edit-list.test.js     the item model and every edit, with the texts they write
 frontend/src/lib/doc-edit-struct.test.js   the selection, the edits and the item session over the stores; the place
                                            of a drag

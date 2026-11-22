@@ -20,6 +20,20 @@ export const EDIT_CLICK_OWN_SELECTOR = [
   EDIT_POPUP_SELECTOR,
 ].join(', ');
 
+// what keeps the browser's own menu on a right click inside a block that is
+// not being edited (spelling, paste): a field, an editor, the floating area of
+// the block, a popup of the edit layer. not a button: a tile, a card that
+// opens its document, are the thing the right click is about, and open its
+// menu (doc_page_impl_edit_structure.md#deleting-a-thing)
+export const EDIT_CONTEXT_OWN_SELECTOR = [
+  'input',
+  'select',
+  'textarea',
+  '[contenteditable]:not([contenteditable="false"])',
+  '.doc-edit-block-anchor',
+  EDIT_POPUP_SELECTOR,
+].join(', ');
+
 // the nearest element of the target matching the selector, when it lies
 // inside the container; null otherwise. a control or a popup of the edit
 // layer around a whole body (a document edited in a popup: the popup holds

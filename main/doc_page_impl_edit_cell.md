@@ -110,7 +110,7 @@ CellEdit  { cell, text, ... }     the text typed: tokens written out, in EditSou
 **The slash of a cell** is built by the layer from its kinds (`DocCellStore.slashBuild`):
 
 - **Its actions are the actions of its kinds**, the owner's first, and nothing else: the page's other actions are not offered in a cell.
-- **`/` starts the slash mode anywhere but in a path or a url** (the loose rule, [The state machine](doc_page_impl_edit_slash.md#the-state-machine)). A cell is often text without spaces between its words (`{{birth/month}}月`), where the rule of documents, the start of a word, would never hold.
+- **`/` starts the slash mode wherever no word goes on after it**, whatever stands before it, as in a document ([The state machine](doc_page_impl_edit_slash.md#the-state-machine)). A cell is often text without spaces between its words (`{{birth/month}}月`), where a rule asking for a space before the `/` would never hold.
 - **The opening text of a brace kind enters its action at once** (a direct trigger): `{{` lists what the owner's kind completes, `{{@` what `/object` lists. The author who knows what a token looks like types it and is completed; the author who does not types `/` and reads the menu. Both end with the same text.
 - **Its context** is the owner's own, read live, with the page's services added: `{ ...the owner's, cell, sourcePath, docPageAlias, source, object }`. So an action of the page (`/link`, `/object`) and an action of the owner read what they need from one object.
 

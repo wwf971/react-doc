@@ -13,9 +13,6 @@ import { StoreContext } from '../../frontend/src/store/context.js';
 //   context               what its actions receive (anything it likes)
 //   isPageActionIncluded  the page's registry too (/link ...); default false:
 //                         a component's text is seldom a document's markdown
-//   isTriggerLoose        "/" starts the slash mode anywhere but inside a path or
-//                         a url, not only at the start of a word: for text whose
-//                         words no space sets apart; default false
 //   triggerList           direct triggers: [{ text, action, endList? }], a text
 //                         that enters the param mode of an action at once
 //
@@ -25,9 +22,9 @@ import { StoreContext } from '../../frontend/src/store/context.js';
 // answers the slash of EditSourceSurface, or undefined outside a page (no
 // slash mode then: the surface is plain text). the switch of the page
 // (EditSlashToggle) applies to it as to every surface
-export function useEditSlashConfig({ actionList = [], context = {}, isPageActionIncluded = false, isTriggerLoose = false, triggerList = [] } = {}) {
+export function useEditSlashConfig({ actionList = [], context = {}, isPageActionIncluded = false, triggerList = [] } = {}) {
   const stores = useContext(StoreContext);
   const store = stores?.slashStore;
   if (!store) return undefined;
-  return { store, context, actionList, isPageActionIncluded, isTriggerLoose, triggerList };
+  return { store, context, actionList, isPageActionIncluded, triggerList };
 }

@@ -2,6 +2,7 @@ import { linkInlineSlashAction, linkSlashAction } from '../link/link-slash.js';
 import { objectSlashAction } from '../object/object-slash.js';
 import { mdxSlashAction } from '../../../built-in/comp-mdx/text/mdx-slash.js';
 import { codeSlashAction } from '../../../built-in/comp-mdx/text/code-slash.js';
+import { mathSlashAction } from '../../../built-in/comp-mdx/math/math-slash.js';
 
 // all slash actions the package registers, by id ({layer}/{name}), the
 // counterpart of compById in registry/registry.js. each is defined by the
@@ -18,6 +19,9 @@ export const slashActionById = {
   // this one, an icon whose popup shows it (and edits it, in edit mode)
   'block/code': codeSlashAction,
   'block/mdx': mdxSlashAction,
+  // a formula of LaTeX at the caret, in the line or on a row of its own, its
+  // field open below its chip (the built-in component math)
+  'text/math': mathSlashAction,
   // the object service layer: a view of an object of the registry, found a
   // type, an object, then what is inside it
   'object/view': objectSlashAction,

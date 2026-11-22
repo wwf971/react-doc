@@ -8,9 +8,11 @@ import { DocEditBlockToolbar } from './DocEditBlockToolbar.jsx';
 import { DocEditBlockEditor, blockLabelInfoGet } from './DocEditBlockEditor.jsx';
 import { DocBlockSelectBlock } from '../block-select/DocBlockSelectBlock.jsx';
 import { itemCodeElementListGet, itemPathAtPoint } from '../edit-structure/struct-geometry.js';
+import { blockPartAtGet } from './block-part-at.js';
 import { keyedComputedCreate } from '../../frontend/src/lib/keyed-computed.js';
 import {
   EDIT_CLICK_OWN_SELECTOR,
+  EDIT_CONTEXT_OWN_SELECTOR,
   targetClosestWithin,
   clickAfterPointerDownSuppress,
   editFocusRelease,
@@ -289,15 +291,30 @@ const DocEditBlockEditable = observer(function DocEditBlockEditable({ blockIndex
 
   // a right click on the block, while it is not being edited: the menu of the
   // selection with this block alone selected (DocBlockSelectMenu, the menu of
-  // block selection mode: duplicate, move, copy / move to, delete). in a
-  // control or an editor the browser keeps its own menu (spelling, paste)
+  // block selection mode: duplicate, move, copy / move to, delete), headed by
+  // the entry that deletes the thing under the pointer when it is one drawn as
+  // a unit inside the text of the block (a formula, a code block or an MDX
+  // block of an item: doc_page_impl_edit_structure.md#deleting-a-thing). a
+  // tile or a card is the thing, not a control; in a field or an editor the
+  // browser keeps its own menu (spelling, paste)
   const contextMenuHandle = (event) => {
     if (isEditing || !blockSelectStore?.isContextMenuAvailable || !componentConfig.Menu) return;
-    if (clickIsNotOwn(event)) return;
+    if (contextIsNotOwn(event)) return;
     event.preventDefault();
     event.stopPropagation();
     const rect = event.currentTarget.getBoundingClientRect();
-    blockSelectStore.contextMenuOpen(path, index, { x: event.clientX - rect.left, y: event.clientY - rect.top });
+    // the rendered block stands for the model only when no text of it is pending
+    const isModelShown = textPending === undefined && !editStore.docEditIsStale(path);
+    const found = isModelShown ? blockPartAtGet(event.target, event.currentTarget, block, editStore.atomKindByName) : undefined;
+    const isFoundWritable = found && (!found.itemPath || structStore);
+    const part = isFoundWritable ? {
+      label: found.label,
+      isTyped: false,
+      remove: () => (found.itemPath
+        ? structStore.itemPartRemove({ path, blockIndex: index, itemPath: found.itemPath }, found)
+        : editStore.blockAtomRemove(path, index, found.atomKind, found.index)),
+    } : undefined;
+    blockSelectStore.contextMenuOpen(path, index, { x: event.clientX - rect.left, y: event.clientY - rect.top }, part);
   };
 
   // the geometry lock keeps the wrapper at the height the block had in view
@@ -531,6 +548,11 @@ function useFloatHeightFollow(anchorRef, floatElement) {
 function clickIsNotOwn(event) {
   if (!event.currentTarget.contains(event.target)) return true;
   return targetClosestWithin(event.target, EDIT_CLICK_OWN_SELECTOR, event.currentTarget) !== null;
+}
+
+function contextIsNotOwn(event) {
+  if (!event.currentTarget.contains(event.target)) return true;
+  return targetClosestWithin(event.target, EDIT_CONTEXT_OWN_SELECTOR, event.currentTarget) !== null;
 }
 
 // a click with Ctrl/⌘ on a link follows the link instead of entering the

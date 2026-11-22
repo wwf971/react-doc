@@ -1,11 +1,13 @@
-import { createElement, Fragment, useEffect, useLayoutEffect, useRef } from 'react';
+import { createElement, Fragment, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { caretPlaceAtEdge, caretPlaceInitial, caretRectGet } from './caret-place.js';
 import { useEditSlash } from '../slash/use-edit-slash.js';
-import { itemAtomCharStrip, itemAtomTextSourceGet } from '../../frontend/src/lib/doc-edit-item-atom.js';
+import { atomRemoveSpanGet, itemAtomCharStrip, itemAtomOf, itemAtomTextSourceGet } from '../../frontend/src/lib/doc-edit-item-atom.js';
+import { StoreContext } from '../../frontend/src/store/context.js';
 import {
   surfaceAtomCaretIsAtEdgeLine, surfaceAtomCaretNormalize, surfaceAtomContentWrite, surfaceAtomDoubleClick, surfaceAtomKeyDown, surfaceAtomPointerDown,
-  surfaceAtomSelectionGet, surfaceAtomSelectionMark, surfaceAtomSelectionSet, surfaceAtomShapeKeep, surfaceAtomTextRead,
-  ATOM_LINES_EVENT, surfaceAtomBlockLineGet,
+  surfaceAtomKindRender, surfaceAtomSelectionGet, surfaceAtomSelectionMark, surfaceAtomSelectionSet, surfaceAtomShapeKeep, surfaceAtomTextRead,
+  ATOM_LINES_EVENT, ATOM_MENU_EVENT, ATOM_SPACER, surfaceAtomBlockLineGet, surfaceAtomKindChipAt, surfaceAtomThingLabel,
+  surfaceAtomRowLock, surfaceAtomRowLockFollow, surfaceAtomRowUnlock,
 } from './surface-atom.js';
 import './DocEdit.css';
 
@@ -78,6 +80,20 @@ import './DocEdit.css';
 //                       optional: a block a slash action puts at the caret
 //                       (an MDX block): the editor around the surface writes it
 //                       there; without it its source is typed as lines
+//   onAtomValueChange(char, value, source)
+//                       optional: the value of an atom of a kind
+//                       (lib/doc-edit-atom-kind.js: a formula of the component
+//                       math) typed in its field below its chip, and how its
+//                       kind writes it: the editor around the surface keeps it
+//                       in its atoms (the text typed here does not change). a
+//                       click on the chip, or Enter with the chip selected,
+//                       opens the field (the Editor of the kind)
+//   atomOpenRequest     optional: { char, version }: the field of the atom of
+//                       char opens (one just added by a slash action)
+//   onAtomInsert(atomKind, isRow, offset, text)
+//                       optional: an atom of a kind a slash action puts at the
+//                       caret (slashEffect.atom): the editor around the surface
+//                       adds it; without it the action's text is typed
 //   onSubmitRequest()   Ctrl/Cmd + Enter
 //   onCancelRequest()   Escape
 //   onFocusShiftRequest(direction, { point, rectSurface })
@@ -108,12 +124,22 @@ export function EditSourceSurface({
   onCancelRequest,
   onFocusShiftRequest,
   onBlockInsert,
+  onAtomValueChange,
+  atomOpenRequest,
+  onAtomInsert,
   ariaLabel = 'Block source',
 }) {
   const elementRef = useRef(null);
+  // the kinds of atoms of the page (DocPageMdx: the registry of atom kinds)
+  const atomKindByName = useContext(StoreContext)?.editStore?.atomKindByName ?? {};
+  const atomKindByNameRef = useRef(atomKindByName);
+  atomKindByNameRef.current = atomKindByName;
+  // the atom of a kind whose value is being typed below it: { char, value, isRow, message }
+  const [atomFieldState, atomFieldStateSet] = useState(undefined);
   // the text of the surface goes along: the slash text is gone from it already
   const blockInsert = onBlockInsert ? (source, offset) => onBlockInsert(source, offset, surfaceTextGet(elementRef.current)) : undefined;
-  const slashBinding = useEditSlash(elementRef, slash, { textBeforeCaretGet, blockInsert });
+  const atomInsert = onAtomInsert ? (atomKind, isRow, offset) => onAtomInsert(atomKind, isRow, offset, surfaceTextGet(elementRef.current)) : undefined;
+  const slashBinding = useEditSlash(elementRef, slash, { textBeforeCaretGet, charAfterCaretGet, blockInsert, atomInsert });
   const onSelectionChangeRef = useRef(onSelectionChange);
   onSelectionChangeRef.current = onSelectionChange;
   const isSelectionReported = Boolean(onSelectionChange);
@@ -146,7 +172,7 @@ export function EditSourceSurface({
   useLayoutEffect(() => {
     const element = elementRef.current;
     if (!element) return;
-    surfaceContentWrite(element, text, lineSpaceListGet, atomModelRef.current);
+    surfaceContentWrite(element, text, lineSpaceListGet, atomModelRef.current, atomKindByNameRef.current);
     // text set by code happens when the author is already working here
     if (textVersion > 0 && document.activeElement !== element) element.focus();
     caretPlaceAtEdge(element, 'end');
@@ -163,12 +189,97 @@ export function EditSourceSurface({
       caretPlaceInitial(element, selectionInitial);
       // a place on a chip goes to its side nearer to the point (or the x the caret keeps on a line)
       if (isAtom) surfaceAtomCaretNormalize(element, ['point', 'line'].includes(selectionInitial?.type) ? selectionInitial : undefined);
+      // the block was entered by a click on a formula (the chip of an atom of a
+      // kind): its field opens at once, as a click on the chip opens it
+      const chip = isAtom && selectionInitial?.type === 'point' ? surfaceAtomKindChipAt(element, selectionInitial) : null;
+      if (chip) atomFieldOpen(chip.getAttribute('data-atom'));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // the field of an atom of a kind opens under its chip
+  const atomFieldOpen = (char) => {
+    const element = elementRef.current;
+    const atom = itemAtomOf(atomModelRef.current, char);
+    const atomKind = atom?.atomKind ? atomKindByNameRef.current[atom.atomKind] : undefined;
+    if (!element || !atomKind?.Editor) return false;
+    const chip = atomKindChipGet(element, char);
+    if (!chip) return false;
+    chip.setAttribute('data-editing', '');
+    // a row keeps its room while its value is typed: nothing after it moves
+    surfaceAtomRowLock(chip);
+    // the chip selected (a click on it, Enter on it) would stay painted as an
+    // inactive selection while the field has the focus: the caret after it
+    const offset = surfaceTextGet(element).indexOf(char);
+    if (offset >= 0) surfaceAtomSelectionSet(element, offset + 1);
+    atomFieldStateSet({ char, value: atom.value, isRow: atom.kind === 'row', message: chip.hasAttribute('data-error') ? surfaceAtomKindRender(element, char, atom.value, atomKind) : '' });
+    return true;
+  };
+
+  // the field closes: the caret goes on before or after the atom; an empty
+  // one is taken out of the text, as a typed delete (Undo brings it back)
+  const atomFieldClose = (how) => {
+    const element = elementRef.current;
+    const open = atomFieldState;
+    atomFieldStateSet(undefined);
+    if (!element || !open) return;
+    const chip = atomKindChipGet(element, open.char);
+    chip?.removeAttribute('data-editing');
+    surfaceAtomRowUnlock(chip);
+    const atom = itemAtomOf(atomModelRef.current, open.char);
+    const isEmpty = String(atom?.value ?? '').trim() === '';
+    if (how === 'blur' && !isEmpty) return;
+    element.focus({ preventScroll: true });
+    const offset = surfaceTextGet(element).indexOf(open.char);
+    if (offset < 0) return;
+    if (how === 'remove' || isEmpty) {
+      surfaceAtomSelectionSet(element, offset, offset + 1);
+      document.execCommand('delete');
+      return;
+    }
+    surfaceAtomSelectionSet(element, how === 'before' ? offset : offset + 1);
+  };
+
+  // an atom taken out by its menu: a typed delete of its chip, as Backspace
+  // twice is (Undo brings it back), with the space an atom of the line takes
+  // along (atomRemoveSpanGet: as the menu of a block not being edited writes
+  // it); a field open below a chip closes
+  const atomRemove = (char) => {
+    const element = elementRef.current;
+    if (!element) return;
+    atomFieldStateSet(undefined);
+    for (const chip of element.querySelectorAll('[data-editing]')) {
+      chip.removeAttribute('data-editing');
+      surfaceAtomRowUnlock(chip);
+    }
+    element.focus({ preventScroll: true });
+    const text = surfaceTextGet(element);
+    const offset = text.indexOf(char);
+    if (offset < 0) return;
+    const atom = itemAtomOf(atomModelRef.current, char);
+    const span = atom?.kind === 'inline' ? atomRemoveSpanGet(text, offset, offset + 1, false) : { start: offset, end: offset + 1 };
+    surfaceAtomSelectionSet(element, span.start, span.end);
+    document.execCommand('delete');
+  };
+
+  // an atom just added: its field opens once the surface shows its chip
+  useEffect(() => {
+    if (atomOpenRequest?.char) atomFieldOpen(atomOpenRequest.char);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [atomOpenRequest?.version]);
+
   const keyDownHandle = (event) => {
     if (event.nativeEvent?.isComposing) return;
+    // Enter on the chip of an atom of a kind, selected: its field opens below it
+    if (isAtom && event.key === 'Enter' && !event.shiftKey && !event.metaKey && !event.ctrlKey && !event.altKey) {
+      const range = surfaceAtomSelectionGet(event.currentTarget);
+      const char = range && range.end - range.start === 1 ? surfaceAtomTextRead(event.currentTarget)[range.start] : '';
+      if (char && itemAtomOf(atomModelRef.current, char)?.atomKind) {
+        event.preventDefault();
+        atomFieldOpen(char);
+        return;
+      }
+    }
     if (slashBinding.keyDown(event)) return;
     if (onKeyDownFirst) {
       const range = selectionRangeGet(event.currentTarget);
@@ -272,11 +383,63 @@ export function EditSourceSurface({
     onPaste: pasteHandle,
     onCopy: isAtom ? (event) => copyHandle(event, false) : undefined,
     onCut: isAtom ? (event) => copyHandle(event, true) : undefined,
-    onPointerDown: isAtom ? (event) => surfaceAtomPointerDown(event, event.currentTarget) : undefined,
-    onDoubleClick: isAtom ? (event) => surfaceAtomDoubleClick(event, event.currentTarget) : undefined,
+    onPointerDown: isAtom ? (event) => {
+      if (!surfaceAtomPointerDown(event, event.currentTarget)) return;
+      // a click on an atom of a kind opens its field below it
+      const char = event.target?.closest?.('[data-atom]')?.getAttribute('data-atom');
+      if (char && itemAtomOf(atomModelRef.current, char)?.atomKind) atomFieldOpen(char);
+    } : undefined,
+    // a right click on a chip: the menu of its thing (ATOM_MENU_EVENT), when
+    // the page has one; else the browser's
+    onContextMenu: isAtom ? (event) => {
+      const chip = event.target?.closest?.('[data-atom]');
+      if (!chip || !event.currentTarget.contains(chip)) return;
+      const char = chip.getAttribute('data-atom');
+      const atom = itemAtomOf(atomModelRef.current, char);
+      if (!atom) return;
+      const request = new CustomEvent(ATOM_MENU_EVENT, {
+        bubbles: true,
+        cancelable: true,
+        detail: { label: surfaceAtomThingLabel(atom), clientX: event.clientX, clientY: event.clientY, remove: () => atomRemove(char) },
+      });
+      if (!event.currentTarget.dispatchEvent(request)) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    } : undefined,
+    onDoubleClick: isAtom ? (event) => {
+      const char = event.target?.closest?.('[data-atom]')?.getAttribute('data-atom');
+      if (char && itemAtomOf(atomModelRef.current, char)?.atomKind) {
+        event.preventDefault();
+        return;
+      }
+      surfaceAtomDoubleClick(event, event.currentTarget);
+    } : undefined,
   });
-  // the menu of the slash mode is a portal: nothing is added to the flow
-  return slashBinding.menu ? createElement(Fragment, null, surface, slashBinding.menu) : surface;
+  const atomOpen = atomFieldState ? itemAtomOf(atomModelRef.current, atomFieldState.char) : undefined;
+  const atomKindOpen = atomOpen?.atomKind ? atomKindByName[atomOpen.atomKind] : undefined;
+  const atomField = atomFieldState && atomKindOpen?.Editor ? createElement(atomKindOpen.Editor, {
+    key: atomFieldState.char,
+    anchorGet: () => (elementRef.current ? atomKindChipGet(elementRef.current, atomFieldState.char) : null),
+    value: atomFieldState.value,
+    isRow: atomFieldState.isRow,
+    message: atomFieldState.message,
+    onChange: (value) => {
+      onAtomValueChange?.(atomFieldState.char, value, atomKindOpen.sourceBuild(value, atomFieldState.isRow));
+      const message = elementRef.current ? surfaceAtomKindRender(elementRef.current, atomFieldState.char, value, atomKindOpen) : '';
+      if (elementRef.current) surfaceAtomRowLockFollow(atomKindChipGet(elementRef.current, atomFieldState.char));
+      atomFieldStateSet((open) => (open && open.char === atomFieldState.char ? { ...open, message } : open));
+    },
+    onLeave: atomFieldClose,
+  }) : null;
+  // the menu of the slash mode and the field of an atom are portals: nothing is added to the flow
+  if (!slashBinding.menu && !atomField) return surface;
+  return createElement(Fragment, null, surface, slashBinding.menu, atomField);
+}
+
+// the chip of an atom in the surface, by its character
+function atomKindChipGet(element, char) {
+  return [...element.querySelectorAll('[data-atom]')].find((chip) => chip.getAttribute('data-atom') === char) ?? null;
 }
 
 // innerText turns line breaks of the editable element into "\n" (the surface
@@ -300,9 +463,9 @@ function surfaceTextGet(element) {
 // are the lines built again, with the caret put back at the same place of
 // the text.
 
-function surfaceContentWrite(element, text, lineSpaceListGet, atomModel) {
+function surfaceContentWrite(element, text, lineSpaceListGet, atomModel, atomKindByName) {
   if (atomModel) {
-    surfaceAtomContentWrite(element, text, atomModel);
+    surfaceAtomContentWrite(element, text, atomModel, atomKindByName);
     return;
   }
   if (!lineSpaceListGet) {
@@ -412,6 +575,43 @@ function textBeforeCaretGet(element) {
   if (element.hasAttribute('data-atoms')) return surfaceAtomTextRead(rangeBefore.cloneContents());
   if (!element.hasAttribute('data-lines')) return rangeBefore.toString();
   return surfaceLineListRead(rangeBefore.cloneContents()).join('\n');
+}
+
+// the character after the caret on its line, as the surface reads it: a
+// chip its character, '' at the end of a line (a line break, a line of its
+// own, the end of the surface); spacers are not read
+function charAfterCaretGet(element) {
+  const selection = window.getSelection?.();
+  if (!selection || selection.rangeCount === 0) return undefined;
+  const range = selection.getRangeAt(0);
+  const node = range.endContainer;
+  if (!element.contains(node)) return undefined;
+  if (node.nodeType === Node.TEXT_NODE) {
+    const rest = node.nodeValue.slice(range.endOffset).replaceAll(ATOM_SPACER, '');
+    if (rest) return rest[0];
+  }
+  // the first node after the caret, in the order of the text
+  let next = node.nodeType !== Node.TEXT_NODE ? node.childNodes[range.endOffset] : undefined;
+  if (!next) {
+    let current = node;
+    while (current !== element && !current.nextSibling) current = current.parentNode;
+    next = current === element ? undefined : current.nextSibling;
+  }
+  if (!next) return '';
+  const walker = document.createTreeWalker(element, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT);
+  walker.currentNode = next;
+  for (let current = next; current; current = walker.nextNode()) {
+    if (current.nodeType === Node.TEXT_NODE) {
+      const value = current.nodeValue.replaceAll(ATOM_SPACER, '');
+      if (value) return value[0];
+    } else if (current.hasAttribute('data-atom')) {
+      return current.getAttribute('data-atom');
+    } else if (current.nodeName === 'BR' || current.nodeName === 'DIV' || current.nodeName === 'P') {
+      // a line goes on from here
+      return '';
+    }
+  }
+  return '';
 }
 
 function caretPlaceAtLineOffset(element, offset) {

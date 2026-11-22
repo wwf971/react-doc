@@ -43,6 +43,20 @@ import { CODE_COMPONENT_NAME, codeBlockTextParse, codeBlockValueTextSet, codeTex
 //
 // A code block of another view that is the whole text of the item is no atom:
 // its item is edited as the lines of the block (an item that is a text block).
+//
+// A component may bring atoms of a kind of its own (lib/doc-edit-atom-kind.js,
+// a formula of LaTeX: the built-in component math), of two kinds of place:
+//
+//   inline   in the line ($x^2$): a chip in the text, written back in its
+//            place, nothing around it changed
+//   row      on lines of its own ($$ … $$): a chip as wide as the item, on a
+//            line of its own, as a block is
+//
+// the chip is drawn by the kind; its value is edited in a field below it,
+// which changes the atom (itemAtomValueSet), not the text the editor types.
+// the atoms of code come first in the numbering (atom n of code is the code
+// block n of the text, as the parts of an item count them), those of the
+// kinds after them; atomOrderList holds every atom in the order of the text.
 
 export const ITEM_ATOM_CHAR_FIRST = 0xe000;
 
@@ -154,15 +168,33 @@ export function itemCodeBlockListGet(text) {
 //   labelResolve(block) -> what its chip says, when the block does not say it
 //                 (the language of the item a block of Code reads)
 //   iconAlign     'bottom' | 'top': where an icon stands in its line (CodeBlockIconAlign)
+//   atomKindList  the kinds of atoms of the page (lib/doc-edit-atom-kind.js): the
+//                 things of each kind in the text are atoms too
 /**
  * @param {string} text
  * @param {{ viewResolve?: (block: { viewAuthored: string, place: string, form: string }) => string,
- *   labelResolve?: (block: any) => string, iconAlign?: string }} [options]
+ *   labelResolve?: (block: any) => string, iconAlign?: string, atomKindList?: any[] }} [options]
  */
-export function itemAtomModelBuild(text, { viewResolve, labelResolve, iconAlign = 'bottom' } = {}) {
+export function itemAtomModelBuild(text, { viewResolve, labelResolve, iconAlign = 'bottom', atomKindList = [] } = {}) {
   const source = String(text ?? '');
   const blockList = itemCodeBlockListGet(source);
-  if (blockList.length === 0) return undefined;
+  // the things of the kinds, outside the code blocks and outside each other
+  const spanKindList = [];
+  for (const atomKind of atomKindList) {
+    let spanList = [];
+    try {
+      spanList = atomKind.spanListGet(source) ?? [];
+    } catch (error) {
+      console.warn(`[doc-atom-kind] ${atomKind.name}: spanListGet failed`, error);
+    }
+    for (const span of spanList) {
+      const isFree = !blockList.some((block) => span.start < block.end && span.end > block.start)
+        && !spanKindList.some((other) => span.start < other.end && span.end > other.start);
+      if (isFree) spanKindList.push({ ...span, atomKind });
+    }
+  }
+  spanKindList.sort((a, b) => a.start - b.start);
+  if (blockList.length === 0 && spanKindList.length === 0) return undefined;
   const atomList = [];
   for (const block of blockList) {
     const place = block.isWhole ? CODE_PLACE_LIST_ITEM : CODE_PLACE_IN_LIST_ITEM;
@@ -185,16 +217,34 @@ export function itemAtomModelBuild(text, { viewResolve, labelResolve, iconAlign 
       align: iconAlign === 'top' ? 'top' : 'bottom',
     });
   }
+  for (const span of spanKindList) {
+    atomList.push({
+      char: String.fromCodePoint(ITEM_ATOM_CHAR_FIRST + atomList.length),
+      kind: span.isRow ? 'row' : 'inline',
+      atomKind: span.atomKind.name,
+      value: String(span.value ?? ''),
+      source: source.slice(span.start, span.end),
+      start: span.start,
+      end: span.end,
+      form: 'kind',
+      lang: '',
+      title: '',
+      label: span.atomKind.label,
+    });
+  }
   if (atomList.length === 0) return undefined;
-  // each atom takes the line break before it and the one after it, which
-  // only Markdown needs: the text runs on around the chip
+  const atomOrderList = [...atomList].sort((a, b) => a.start - b.start);
+  // each atom of a block takes the line break before it and the one after
+  // it, which only Markdown needs: the text runs on around the chip. an atom
+  // in the line takes nothing but itself
   let display = '';
   let cursor = 0;
-  for (const atom of atomList) {
+  for (const atom of atomOrderList) {
+    const isInline = atom.kind === 'inline';
     let cutStart = atom.start;
-    if (cutStart > cursor && source[cutStart - 1] === '\n') cutStart -= 1;
+    if (!isInline && cutStart > cursor && source[cutStart - 1] === '\n') cutStart -= 1;
     let cutEnd = atom.end;
-    if (source[cutEnd] === '\n') cutEnd += 1;
+    if (!isInline && source[cutEnd] === '\n') cutEnd += 1;
     display += source.slice(cursor, cutStart);
     atom.displayIndex = display.length;
     display += atom.char;
@@ -203,7 +253,44 @@ export function itemAtomModelBuild(text, { viewResolve, labelResolve, iconAlign 
     cursor = cutEnd;
   }
   display += source.slice(cursor);
-  return { text: source, display, atomList };
+  return { text: source, display, atomList, atomOrderList };
+}
+
+// the value of an atom of a kind changed in its field: the atom of the char
+// now stands for it (source: how the kind writes that value, sourceBuild).
+// the text the editor types does not change; the text written back does
+// (isEdited)
+export function itemAtomValueSet(model, char, value, source) {
+  const atom = itemAtomOf(model, char);
+  if (!atom?.atomKind) return false;
+  atom.value = String(value ?? '');
+  atom.source = String(source ?? '');
+  model.isEdited = true;
+  return true;
+}
+
+// a new atom of a kind, empty, its value to be typed in its field: an atom of
+// the next character (a model is made for a text without one), placed in the
+// text the editor types by whoever asked for it. -> { model, atom }
+export function itemAtomKindAdd(modelGiven, atomKind, { isRow = false, display = '', label = '' } = {}) {
+  const model = modelGiven ?? { text: String(display ?? ''), display: String(display ?? ''), atomList: [], atomOrderList: [] };
+  const atom = {
+    char: String.fromCodePoint(ITEM_ATOM_CHAR_FIRST + model.atomList.length),
+    kind: isRow ? 'row' : 'inline',
+    atomKind: String(atomKind),
+    value: '',
+    source: '',
+    start: model.text.length,
+    end: model.text.length,
+    form: 'kind',
+    lang: '',
+    title: '',
+    label: label || String(atomKind),
+  };
+  model.atomList.push(atom);
+  model.atomOrderList = [...(model.atomOrderList ?? []), atom];
+  model.isEdited = true;
+  return { model, atom };
 }
 
 // the atom a character of the typed text is, or undefined
@@ -221,15 +308,24 @@ export function itemAtomOf(model, char) {
 // gave it by its place keeps that view where its place changes (a block that
 // was the whole item gets text beside it, or the other way round): the view is
 // written into it. a character of no atom of the item is dropped.
-export function itemAtomTextBuild(display, model) {
+//   pieceGap  what stands between the pieces written ('\n': the lines of the text
+//             of an item; '\n\n' in a paragraph: an atom of its own lines is a
+//             block of its own, between the paragraphs before and after it)
+export function itemAtomTextBuild(display, model, { pieceGap = '\n' } = {}) {
   const typed = String(display ?? '');
   if (!model) return typed;
-  if (typed === model.display) return model.text;
+  if (typed === model.display && !model.isEdited) return model.text;
   const partList = [];
   let run = '';
   for (const char of typed) {
     const atom = itemAtomOf(model, char);
-    if (atom) {
+    if (atom?.kind === 'inline') {
+      // an atom of the line is written where it stands; an empty one is not written
+      if (atom.value.trim() !== '') run += atom.source;
+    } else if (atom?.kind === 'row' && atom.value.trim() === '') {
+      // an empty atom of its own lines is not written: the lines around it stay lines
+      if (run !== '' && !run.endsWith('\n')) run += '\n';
+    } else if (atom) {
       partList.push({ text: run }, { atom });
       run = '';
     } else if (!itemAtomCharIs(char)) {
@@ -249,11 +345,11 @@ export function itemAtomTextBuild(display, model) {
     if (text !== '') pieceList.push({ text });
   });
   const placeNew = pieceList.length === 1 && pieceList[0].atom ? CODE_PLACE_LIST_ITEM : CODE_PLACE_IN_LIST_ITEM;
-  return pieceList.map((piece) => (piece.atom ? atomSourceGet(piece.atom, placeNew) : piece.text)).join('\n');
+  return pieceList.map((piece) => (piece.atom ? atomSourceGet(piece.atom, placeNew) : piece.text)).join(pieceGap);
 }
 
 function atomSourceGet(atom, place) {
-  if (atom.viewAuthored || place === atom.place) return atom.source;
+  if (atom.atomKind || atom.viewAuthored || place === atom.place) return atom.source;
   const built = codeTextViewSet(atom.source, atom.view);
   return built.code === 0 ? built.data : atom.source;
 }
@@ -265,7 +361,8 @@ export function itemAtomOffsetDisplayGet(model, offset) {
   const offsetSource = Math.max(0, Number(offset) || 0);
   if (!model) return offsetSource;
   let shift = 0;
-  for (const atom of model.atomList) {
+  for (const atom of model.atomOrderList ?? model.atomList) {
+    if (!Number.isInteger(atom.cutStart)) continue;
     if (offsetSource <= atom.cutStart) break;
     if (offsetSource < atom.cutEnd) return atom.displayIndex + 1;
     shift += atom.cutEnd - atom.cutStart - 1;
@@ -278,10 +375,51 @@ export function itemAtomTextSourceGet(display, model) {
   let text = '';
   for (const char of String(display ?? '')) {
     const atom = itemAtomOf(model, char);
-    if (atom) text += `${text === '' || text.endsWith('\n') ? '' : '\n'}${atom.source}\n`;
+    if (atom?.kind === 'inline') text += atom.source;
+    else if (atom) text += `${text === '' || text.endsWith('\n') ? '' : '\n'}${atom.source}\n`;
     else if (!itemAtomCharIs(char)) text += char;
   }
   return text.replace(/\n$/, '');
+}
+
+// ---------- a thing taken out by its menu ----------
+// (doc_page_impl_edit_structure.md#deleting-a-thing) a right click on a thing
+// drawn as one unit, in a block not being edited, names it by its place among
+// the things of its sort in the rendered block: a formula among the formulas
+// of a paragraph or an item, a code block (or MDX block) among the code
+// blocks of an item (itemPartTextWrite, isRemoved). the text without it is
+// written as the editor writes it once its chip is deleted.
+
+// the text without the atom of a kind at index (among the things of that kind
+// in the text, outside its code blocks): one in the line with a space next to
+// it, one on lines of its own with the line break after it (or before it).
+// undefined when there is no such thing
+export function itemAtomKindTextRemove(text, atomKind, index) {
+  const source = String(text ?? '');
+  if (!atomKind) return undefined;
+  const model = itemAtomModelBuild(source, { atomKindList: [atomKind] });
+  const atom = (model?.atomOrderList ?? []).filter((one) => one.atomKind === atomKind.name)[index];
+  if (!atom) return undefined;
+  const span = atomRemoveSpanGet(source, atom.start, atom.end, atom.kind === 'row');
+  return source.slice(0, span.start) + source.slice(span.end);
+}
+
+// what goes with a thing of a text taken out (start, end: the thing), so the
+// text around it reads as before: one in the line takes a space next to it
+// (the one before it when a space, a punctuation mark or the end follows,
+// else the one after it at the start of a line), one on lines of its own
+// the line break after it (or before it). the menu of a chip being typed
+// takes the same (EditSourceSurface). -> { start, end }
+export function atomRemoveSpanGet(text, start, end, isRow) {
+  const source = String(text ?? '');
+  if (isRow) {
+    if (source[end] === '\n') return { start, end: end + 1 };
+    if (start > 0 && source[start - 1] === '\n') return { start: start - 1, end };
+    return { start, end };
+  }
+  if (source[start - 1] === ' ' && (end >= source.length || /[\s.,;:!?)]/.test(source[end]))) return { start: start - 1, end };
+  if ((start === 0 || source[start - 1] === '\n') && source[end] === ' ') return { start, end: end + 1 };
+  return { start, end };
 }
 
 // ---------- a part of an item: one code block among its text ----------

@@ -36,7 +36,14 @@ import './text-block.css';
 //                                  optional: what the editor around this one
 //                                  hands to the surface (onKeyDownFirst,
 //                                  onSelectionChange, atomModel of
-//                                  EditSourceSurface)
+//                                  EditSourceSurface); a paragraph's atoms are
+//                                  its session's (session.blockAtom)
+//
+// the atoms of a kind (lib/doc-edit-atom-kind.js, a formula of the component
+// math) are typed in a paragraph and in the text of a list item: a slash action
+// puts one at the caret (editAtomAdd), its field below its chip changes its
+// value (editAtomValueChange). in a paragraph, one on lines of its own is a
+// block of its own when the paragraph is saved
 //   focusShift(direction, point, rectSurface)   optional: what ↑ on the first line and ↓ on
 //                                  the last do instead of editFocusShiftRequest
 //                                  (the lines of a part of a list item lead back
@@ -53,6 +60,8 @@ import './text-block.css';
 //   editTextSetRequest { text }   text set by a control; the surface is rewritten
 //   editSubmitRequest             Save
 //   editCancelRequest             Cancel
+//   editAtomAdd { atomKind, isRow, offset, text }   an atom of a kind put at the caret
+//   editAtomValueChange { char, value, source }     the value typed in its field
 //   editFocusShiftRequest { direction: 'previous' | 'next' }
 //                                 ArrowUp on the first line / ArrowDown on
 //                                 the last line: go on to the neighbor block.
@@ -90,6 +99,16 @@ export const TextBlockEdit = observer(function TextBlockEdit({
       }
     : undefined;
 
+  // the atoms of a kind are typed in a text: a paragraph, the text of an item
+  // (not the lines of a block of it)
+  const isAtomTyped = !edit.isSurfaceFloating && (kind === 'paragraph' || kind === 'listItem');
+  const atomInsert = isAtomTyped
+    ? (atomKind, isRow, offset, text) => {
+        if (isLocked) return;
+        void onEvent?.('editAtomAdd', { atomKind, isRow, offset, text });
+      }
+    : undefined;
+
   const surface = (
     <EditSourceSurface
       tag={tag}
@@ -99,7 +118,10 @@ export const TextBlockEdit = observer(function TextBlockEdit({
       selectionInitial={session.selectionInitial ?? 'end'}
       // a list keeps the gaps between its items while its source is edited
       lineSpaceListGet={kind === 'list' && !edit.isSurfaceFloating ? listLineSpaceListGet : undefined}
-      atomModel={atomModel}
+      atomModel={atomModel ?? session.blockAtom}
+      atomOpenRequest={session.atomOpenRequest}
+      onAtomInsert={atomInsert}
+      onAtomValueChange={(char, value, source) => void onEvent?.('editAtomValueChange', { char, value, source })}
       slash={edit.slash}
       isLocked={isLocked}
       ariaLabel={`${label} source`}

@@ -883,6 +883,67 @@
   margin: 1.25em 0;
 }
 
+/* ---------- atoms of a kind: chips a component draws (surface-atom.js) ----------
+   the place of a chip of an atom of a kind (lib/doc-edit-atom-kind.js, a
+   formula of the component math, which draws it and gives it its look): in the
+   line, as the thing it is drawn as stands in a line of the document; or a row,
+   as wide as the surface, so the text before it ends a line and the text after
+   it starts one. the caret right beside a row is drawn as tall as the row, as
+   beside a code block among a text (code-fence.css) */
+.doc-edit-atom-kind {
+  position: relative;
+}
+
+.doc-edit-atom-row {
+  display: inline-block;
+  box-sizing: border-box;
+  width: 100%;
+  vertical-align: top;
+  white-space: normal;
+}
+
+/* a row whose value is typed in its field keeps the room it had when the
+   field opened (surface-atom.js surfaceAtomRowLock: its margins and its
+   height inline, a value drawn taller taken from its bottom margin): drawn
+   taller, it extends over the lines after it, above them, on the page
+   background, as the root of a block being edited extends over the next
+   block. a kind whose chip paints a background of its own while edited
+   paints the page background there too (math.css) */
+.doc-edit-atom-row[data-locked] {
+  z-index: 2;
+  background: var(--color-fd-background);
+}
+
+.doc-edit-surface:focus .doc-edit-atom-row[data-caret]::before {
+  content: '';
+  position: absolute;
+  z-index: 1;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--color-fd-primary);
+  animation: doc-edit-atom-caret-blink 1.06s steps(1, end) infinite;
+  pointer-events: none;
+}
+
+.doc-edit-surface:focus .doc-edit-atom-row[data-caret='after']::before {
+  right: -5px;
+}
+
+.doc-edit-surface:focus .doc-edit-atom-row[data-caret='before']::before {
+  left: -5px;
+}
+
+.doc-edit-surface:focus:has(.doc-edit-atom-row[data-caret]) {
+  caret-color: transparent;
+}
+
+@keyframes doc-edit-atom-caret-blink {
+  0% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
 /* a surface in line mode: one element per source line, with the space its
    rendered counterpart has above it (comp-mdx/text/ListData.js
    listLineSpaceListGet). the values are those of the lists of the page

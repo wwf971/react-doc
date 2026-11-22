@@ -276,7 +276,8 @@ const DocEditItemEditor = observer(function DocEditItemEditor({ bodyRef, layoutK
       const element = itemElementGet(body, blockIndex, itemPath);
       const surface = holder.querySelector('.doc-edit-surface');
       if (!element || !surface) return;
-      const atomList = [...surface.querySelectorAll('[data-atom]')];
+      // the chips of code, not those of the kinds of atoms (a formula among the text)
+      const atomList = [...surface.querySelectorAll('[data-atom]:not([data-atom-kind])')];
       const codeList = itemCodeElementListGet(element);
       // the chips stand for the code blocks of the item in order; anything else is not trusted
       if (codeList.length !== atomList.length) return;
