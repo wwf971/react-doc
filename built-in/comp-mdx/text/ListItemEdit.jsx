@@ -45,8 +45,10 @@ import { TextBlockEdit } from './TextBlockEdit.jsx';
 // (doc_page_impl_edit_structure.md#code-blocks-in-the-text-of-an-item).
 //
 // the lines of a code block among the text of the item (a part,
-// config.edit.session.itemPart) are edited where they are drawn: Enter and
-// Shift + Enter are line breaks; ← at their start, → at their end, ↑ on their
+// config.edit.session.itemPart) are edited where they are drawn: Shift +
+// Enter is a line break, Enter takes the lines after the caret out of the
+// block as text of the item after it (so does Enter in a block of code that
+// is the whole item); ← at their start, → at their end, ↑ on their
 // first line and ↓ on their last lead back into the text of the item, beside
 // the chip of the block; Backspace in empty lines takes the block out.
 // Shift + Enter in the text of an item with chips makes the segment of text at
@@ -106,6 +108,7 @@ export const ListItemEdit = observer(function ListItemEdit({ data = {}, config =
     if (isBlock) return codeTextJoin(text) === '' ? 'the block has no text' : '';
     if (!chipAtom) return 'select a code block of the text first (a click on its chip)';
     if (chipAtom.isReference) return 'the lines are an item of the asset store';
+    if (chipAtom.isEmbed) return 'an MDX block is a document of its own: double-click it to open it';
     return codeTextJoin(chipAtom.raw) === '' ? 'the block has no text' : '';
   })();
   const textJoinRequest = () => {
@@ -133,6 +136,15 @@ export const ListItemEdit = observer(function ListItemEdit({ data = {}, config =
       return true;
     }
     if (event.key === 'Enter') {
+      // in the lines of a code block (a part, or a block of code that is the
+      // whole item): Enter takes the lines after the caret out of the block,
+      // as text of the item after it; Shift + Enter is a line break of the block
+      const isCodeLines = isPart || (isBlock && !itemBlockInfoIsText(session?.itemBlockInfo));
+      if (isCodeLines && !event.shiftKey) {
+        event.preventDefault();
+        void onEvent?.('editItemBlockSplitRequest', { offsetStart: selectionStart, offsetEnd: selectionEnd });
+        return true;
+      }
       // a text of lines left whole: a line break, with or without Shift
       if (isLinesWhole && !event.shiftKey) return false;
       // Shift + Enter in a text that has lines already: one more. in the text
@@ -210,6 +222,9 @@ export const ListItemEdit = observer(function ListItemEdit({ data = {}, config =
       atomModel={atomModel}
       surfaceKeyDown={keyDownHandle}
       surfaceSelectionChange={selectionChange}
+      // a block a slash action puts at the caret (an MDX block): written into
+      // the item there, a chip of its text
+      blockInsert={(source, offset, textNow) => void onEvent?.('editItemBlockInsertRequest', { source, offset, text: textNow })}
       // ↑ on the first line of a part, ↓ on its last: back into the text of the item
       focusShift={isPart ? (direction, point, rectSurface) => partLeaveRequest(direction === 'previous' ? 'before' : 'after', false, point, rectSurface) : undefined}
     >

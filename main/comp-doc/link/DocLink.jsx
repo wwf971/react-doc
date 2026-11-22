@@ -1,11 +1,15 @@
 import { useContext, useEffect, useId, useRef, useState } from 'react';
 import { observer } from 'mobx-react-lite';
 import { useDocStores } from '../../frontend/src/store/context.js';
+import { useDocEditLineGet } from '../edit/DocEditDocContext.js';
 import { eventResultIsAccepted, resultNormalize } from '../../frontend/src/lib/doc-event.js';
 import { LinkDocRender } from './LinkDocRender.jsx';
 import { LinkWarning } from './LinkWarning.jsx';
 import { DocNavScopeContext } from './DocNavScope.js';
 import { SourceLinkRenderPopup } from '../../../built-in/comp-mdx/source-link/SourceLinkRenderPopup.jsx';
+
+// the body of a document being edited (DocEditBody)
+const EDIT_BODY_SELECTOR = '.doc-edit-body';
 
 // renders one recognized doc link (from remark-doc-link).
 // resolution against the doc index happens here, at render time:
@@ -31,6 +35,8 @@ export const DocLink = observer(function DocLink({
   children,
 }) {
   const { configStore, docStore, sourceStore, navStore, compConfigHost, linkConfig, onEvent: onEventPage, tagStore } = useDocStores();
+  // the line of the link now, in the edit body (its block may have moved since it was drawn)
+  const lineNow = useDocEditLineGet(from)(line);
   const id = useId();
   const refWrap = useRef(null);
   const [warningText, setWarningText] = useState('');
@@ -147,11 +153,16 @@ export const DocLink = observer(function DocLink({
       docStore.navigate(itemPlaygroundMissing.route);
       return { code: 0, message: '' };
     }
+    // a modified click is the browser's (a new tab), except in a document
+    // being edited, where a plain click edits the text and Ctrl/⌘ + click
+    // follows the link as a plain click does in reading mode
+    // (doc_page_impl_edit.md#floating-controls)
     if (
       eventType === 'activateRequest'
       && !isMultiple
       && !isPopup
       && (event?.metaKey || event?.ctrlKey || event?.shiftKey || event?.altKey)
+      && !((event?.metaKey || event?.ctrlKey) && event?.target?.closest?.(EDIT_BODY_SELECTOR))
     ) return;
     event?.preventDefault();
     const eventForward = {
@@ -234,7 +245,7 @@ export const DocLink = observer(function DocLink({
       ref={refWrap}
       className="doc-link-controller"
       data-doc-link-target={target ?? ''}
-      data-doc-link-line={line || undefined}
+      data-doc-link-line={lineNow || undefined}
     >
       <CompRender data={data} config={config} onEvent={eventHandle} />
       <LinkWarning text={warningText} anchorRef={refWrap} onDismiss={() => setWarningText('')} />

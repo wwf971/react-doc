@@ -1,4 +1,4 @@
-import { makeAutoObservable, runInAction } from 'mobx';
+import { makeAutoObservable, runInAction, untracked } from 'mobx';
 import type { DocSourceStore } from './DocSourceStore.js';
 import { buildPageTreeModel } from '../lib/page-tree.js';
 import { textLocalizedGet } from '../lib/text-localized.js';
@@ -219,13 +219,25 @@ export class DocStore {
     return this.textDisplayGet(item?.textLocalized ?? item?.text).text;
   }
 
+  // built again only when what it shows changed (a title, a document added or
+  // moved, the side panel), not on every write of a document, which replaces
+  // the manifest for a content hash the tree does not show (manifestKey); every
+  // node of the side panel is drawn from it
   get treeModel() {
     void this.compByIdVersion;
-    return buildPageTreeModel(
-      this.sourceStore.configDoc,
+    void this.sourceStore.manifestKey;
+    const configDoc = this.sourceStore.configDoc;
+    return untracked(() => buildPageTreeModel(
+      configDoc,
       this.sourceStore.fileManifest,
       this.compById,
-    );
+    ));
+  }
+
+  // the title of the site, as the header of the layout shows it (a string: a
+  // new configuration with the same title draws nothing again)
+  get siteTitle(): string {
+    return this.sourceStore.configDoc.siteTitle ?? 'Docs';
   }
 
   get treePage() {

@@ -1,4 +1,4 @@
-import { LinkIcon } from '../../frontend/UICommon.js';
+import { LinkIcon, PanelTop } from '../../frontend/UICommon.js';
 import { linkDirParamGet, linkItemListGet, linkMarkdownBuild, LINK_DOC_EXT_LIST } from '../../frontend/src/lib/doc-link-complete.js';
 import { slashEffect } from '../../frontend/src/lib/doc-slash.js';
 import { slashActionDefine } from '../slash/slash-define.js';
@@ -20,13 +20,16 @@ import { slashActionDefine } from '../slash/slash-define.js';
 //   isTargetFull   the target is written in the full form (~page:root/a.md)
 //                  whatever document is edited: for a text that does not belong
 //                  to one document (a cell of a frontend object, link-cell.jsx)
-export function linkSlashActionBuild({ isTargetFull = false } = {}) {
+//   isPopup        an inline link (/inline): the target written with ?nav=popup,
+//                  so a click shows it in the inline popup of the page, where
+//                  it is edited in edit mode
+export function linkSlashActionBuild({ isTargetFull = false, isPopup = false } = {}) {
   return slashActionDefine({
-    name: 'link',
-    aliasList: ['ln'],
-    label: 'Link',
-    description: 'a link to a document of the workspace',
-    icon: LinkIcon,
+    name: isPopup ? 'inline' : 'link',
+    aliasList: isPopup ? ['popup'] : ['ln'],
+    label: isPopup ? 'Inline link' : 'Link',
+    description: isPopup ? 'a link to a document of the workspace, opened in a popup over the page' : 'a link to a document of the workspace',
+    icon: isPopup ? PanelTop : LinkIcon,
     param: {
       placeholder: 'a document name or title, or a path (~root/, ./)',
       emptyText: 'No document matches',
@@ -36,10 +39,11 @@ export function linkSlashActionBuild({ isTargetFull = false } = {}) {
       }),
       itemChoose: (item, param, context) => (item.kind === 'dir'
         ? slashEffect.paramSet(linkDirParamGet(item, param))
-        : slashEffect.replace(linkMarkdownBuild(item, param, isTargetFull ? '' : context.sourcePath))),
+        : slashEffect.replace(linkMarkdownBuild(item, param, isTargetFull ? '' : context.sourcePath, { isPopup }))),
     },
   });
 }
 
-// the action of the page's registry: what a paragraph or a list offers
+// the actions of the page's registry: what a paragraph or a list offers
 export const linkSlashAction = linkSlashActionBuild();
+export const linkInlineSlashAction = linkSlashActionBuild({ isPopup: true });

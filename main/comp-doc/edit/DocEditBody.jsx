@@ -46,19 +46,23 @@ import './DocEdit.css';
 //   docEdit    DocEditStore.docEditActiveGet(path)
 //   mdxComps   the component mapping of the reading body
 
-// the model while the document does not compile
-const modelEmpty = { blockList: [], lineList: [], lineCount: 0 };
-
 export const DocEditBody = observer(function DocEditBody({ path, docEdit, mdxComps }) {
   const { editStore, sourceStore, pasteStore, blockSelectStore, structStore, compConfigHost } = useDocStores();
   const isPasteReviewable = Boolean(pasteStore && compConfigHost.panelComponent);
   const entry = sourceStore.entryByInternalPath.get(path);
   const format = entry?.ext === 'mdx' ? 'mdx' : 'md';
-  const model = docEdit.model ?? modelEmpty;
-  const contextValue = useMemo(() => ({ path, model, format }), [path, model, format]);
   const mdxCompsEdit = useMemo(() => ({ ...mdxComps, DocEditBlock }), [mdxComps]);
+  // the same on every write: the blocks read their model from the store
+  const contextValue = useMemo(() => ({ path, format, mdxComps: mdxCompsEdit }), [path, format, mdxCompsEdit]);
   const isTopSession = editStore.sessionIs(path, 'frontmatter') || editStore.sessionIs(path, 'document');
   const Body = docEdit.Body;
+  // the same element until the compiled body changes: this body is drawn
+  // again by the session, the stale mark, the selection of the page (several
+  // times a write); the blocks are compared again only for a new body
+  const bodyElement = useMemo(
+    () => (Body ? <MdxBody key={path} Body={Body} components={mdxCompsEdit} /> : null),
+    [path, Body, mdxCompsEdit],
+  );
   const bodyRef = useRef(null);
 
   useEffect(() => {
@@ -112,6 +116,8 @@ export const DocEditBody = observer(function DocEditBody({ path, docEdit, mdxCom
       <div
         ref={bodyRef}
         className="doc-edit-body"
+        // the document of the body: a page can show more than one (a popup)
+        data-edit-path={path}
         data-stale={editStore.docEditIsStale(path) ? '' : undefined}
         data-select-mode={isSelectMode ? '' : undefined}
         data-struct-selected={selectionStruct ? (selectionStruct.scope === 'block' ? 'block' : 'item') : undefined}
@@ -131,7 +137,7 @@ export const DocEditBody = observer(function DocEditBody({ path, docEdit, mdxCom
             ) : Body ? (
               // the stable adapter keeps the mounted blocks across a save:
               // only the changed block renders anew (lib/MdxBody.jsx)
-              <MdxBody key={path} Body={Body} components={mdxCompsEdit} />
+              bodyElement
             ) : null}
             {!isSelectMode && Body && !docEdit.isContentEmpty ? <DocEditStructLayer bodyRef={bodyRef} /> : null}
           </>

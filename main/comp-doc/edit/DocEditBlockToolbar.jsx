@@ -6,7 +6,7 @@ import {
 import { useDocStores } from '../../frontend/src/store/context.js';
 import { assetRefLangIs, assetRefParse } from '../../frontend/src/lib/doc-asset-ref.js';
 import { useAssetPanelIsAvailable } from '../asset/AssetPanelPopup.jsx';
-import { useDocEditDoc } from './DocEditDocContext.js';
+import { useDocEditDoc, useDocEditModel } from './DocEditDocContext.js';
 import { DocEditBlockModeButton } from './DocEditBlockModeButton.jsx';
 import { DocEditInsertMenu } from './DocEditInsertMenu.jsx';
 import { clickAfterPointerDownSuppress, useEditOutsidePointer } from './use-edit-outside-pointer.js';
@@ -75,7 +75,8 @@ const ICON_SIZE = 14;
 
 export const DocEditBlockToolbar = observer(function DocEditBlockToolbar({ blockIndex, label, labelTitle = '' }) {
   const { assetStore, editStore, eventRouter, onEvent: onEventPage, structStore } = useDocStores();
-  const { path, model } = useDocEditDoc();
+  const { path } = useDocEditDoc();
+  const model = useDocEditModel();
   const toolbarRef = useRef(null);
   const isAssetPanelAvailable = useAssetPanelIsAvailable();
   const component = model?.blockList?.[blockIndex]?.component;

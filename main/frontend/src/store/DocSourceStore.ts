@@ -142,6 +142,10 @@ export type DocPageInfo = {
   mentionList: { alias: string; isAliasGiven: boolean; fromAlias: string; file: string; place: string }[];
 };
 
+// how long the writes of a document edited must pause before its reading
+// compile, put off, is done (refreshDeferredAdd)
+const REFRESH_DEFERRED_PAUSE_MS = 1000;
+
 export class DocSourceStore {
   configDoc: any;
   fileManifest: FileEntry[];
@@ -161,6 +165,14 @@ export class DocSourceStore {
   // as the vite plugin collected them (fileUrlByPath of the virtual module)
   fileUrlByPath: Record<string, string>;
   compiledByPath: Record<string, CompileState> = {};
+  // the refresh of a document put off while it is edited (refreshDeferIs, set
+  // by the edit layer): its reading compile is not shown then, and runs when
+  // the page is idle, once for a run of writes, not on the way of the typing
+  // (doc_page_impl_edit.md#a-write-draws-only-what-changed). the result it had
+  // is kept meanwhile; leaving edit mode runs them all (refreshDeferredFlush)
+  refreshDeferIs: ((path: string) => boolean) | undefined = undefined;
+  refreshDeferredSet = new Set<string>();
+  refreshDeferredHandle: any = 0;
   rawByPath: Record<string, { status: 'loading' | 'done' | 'error'; content?: string; message?: string }> = {};
   structuredDataByPath: Record<string, any> = {};
   // source version of every path, not observable. it increases when the
@@ -233,6 +245,9 @@ export class DocSourceStore {
       sourceService: false,
       osPathCompleter: false,
       versionByPath: false,
+      refreshDeferIs: false,
+      refreshDeferredSet: false,
+      refreshDeferredHandle: false,
     });
   }
 
@@ -380,7 +395,10 @@ export class DocSourceStore {
     const isConfigChanged = JSON.stringify(configPrevious) !== JSON.stringify(sourceData.configDoc);
     const isFileDisplayChanged = isConfigChanged
       && JSON.stringify(configPrevious?.fileDisplay ?? null) !== JSON.stringify(sourceData.configDoc?.fileDisplay ?? null);
-    this.configDoc = sourceData.configDoc;
+    // the same configuration is kept as it is: a write of a document sends it
+    // again, a new object, and whatever reads it (the side panel, the tree,
+    // the config of a document) would be drawn again for nothing
+    if (isConfigChanged) this.configDoc = sourceData.configDoc;
     this.fileManifest = sourceData.fileManifest;
     if (sourceData.dirManifest) this.dirManifest = sourceData.dirManifest;
     if (sourceData.linkIndex !== undefined) this.linkIndex = sourceData.linkIndex ?? undefined;
@@ -416,15 +434,55 @@ export class DocSourceStore {
     for (const path of pathsChanged) {
       this.versionBump(path);
       delete this.structuredDataByPath[path];
-      if (this.compiledByPath[path]) refreshList.push(this.loadDoc(path, { isRefresh: true }));
+      if (this.compiledByPath[path]) {
+        if (this.refreshDeferIs?.(path)) this.refreshDeferredAdd(path);
+        else refreshList.push(this.loadDoc(path, { isRefresh: true }));
+      }
       if (this.rawByPath[path]) refreshList.push(this.loadRaw(path, { isRefresh: true }));
     }
     return Promise.all(refreshList).then(() => undefined);
   }
 
+  // a refresh put off: run once the writes paused for a second, when the page
+  // is idle then (a run of writes, a word typed after another, compiles once)
+  private refreshDeferredAdd(path: string) {
+    this.refreshDeferredSet.add(path);
+    this.refreshDeferredCancel();
+    this.refreshDeferredHandle = setTimeout(() => {
+      const idleRequest = (globalThis as any).requestIdleCallback;
+      this.refreshDeferredHandle = idleRequest
+        ? { idle: idleRequest(() => void this.refreshDeferredFlush(), { timeout: 1000 }) }
+        : 0;
+      if (!idleRequest) void this.refreshDeferredFlush();
+    }, REFRESH_DEFERRED_PAUSE_MS);
+  }
+
+  private refreshDeferredCancel() {
+    const handle = this.refreshDeferredHandle;
+    if (handle && typeof handle === 'object' && 'idle' in handle) (globalThis as any).cancelIdleCallback?.(handle.idle);
+    else if (handle) clearTimeout(handle);
+    this.refreshDeferredHandle = 0;
+  }
+
+  // every refresh put off, now (edit mode left, the page idle); resolves once they are compiled
+  refreshDeferredFlush(): Promise<void> {
+    this.refreshDeferredCancel();
+    const pathList = [...this.refreshDeferredSet];
+    this.refreshDeferredSet.clear();
+    return Promise.all(pathList.map((path) => this.loadDoc(path, { isRefresh: true }))).then(() => undefined);
+  }
+
   // isRefresh: the path is loaded again after its source changed; the
   // previous result stays until the new one replaces it
-  async loadDoc(internalPath: string, options: { isRefresh?: boolean } = {}): Promise<void> {
+  async loadDoc(internalPath: string, optionsGiven: { isRefresh?: boolean } = {}): Promise<void> {
+    // a refresh put off stays put off while the document is shown by its edit
+    // body (a navigation loads the document of the page after every write):
+    // the result it has is kept until the writes pause or edit mode is left.
+    // put off no longer, it is run now for whoever asks for the document
+    const isRefreshDeferred = this.refreshDeferredSet.has(internalPath);
+    if (isRefreshDeferred && !optionsGiven.isRefresh && this.refreshDeferIs?.(internalPath) && this.compiledByPath[internalPath]?.status === 'done') return;
+    if (isRefreshDeferred) this.refreshDeferredSet.delete(internalPath);
+    const options = isRefreshDeferred ? { ...optionsGiven, isRefresh: true } : optionsGiven;
     const stateExisting = this.compiledByPath[internalPath];
     if (!options.isRefresh && stateExisting && stateExisting.status !== 'error') return;
     const version = this.versionGet(internalPath);
@@ -744,6 +802,15 @@ export class DocSourceStore {
   }
 
   // ---------- playground documents (doc_page_impl_test.md) ----------
+
+  // the manifest as far as what is built from it reads it: the page tree, the
+  // tags. a write of a document replaces the manifest, for its content hash and
+  // the loaders of the entries, which neither shows: what is built from the
+  // manifest keyed on this is built again only when something it reads changed
+  // (a title, a tag in a frontmatter, a document added or moved)
+  get manifestKey(): string {
+    return JSON.stringify(this.fileManifest, (key, value) => (key === 'contentHash' || typeof value === 'function' ? undefined : value));
+  }
 
   get playgroundList(): any[] {
     const list = this.configDoc?.playgroundList;

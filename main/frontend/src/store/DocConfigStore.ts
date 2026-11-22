@@ -1,4 +1,4 @@
-import { makeAutoObservable } from 'mobx';
+import { makeAutoObservable, untracked } from 'mobx';
 import type { DocSourceStore } from './DocSourceStore.js';
 import type { DocEnvStore } from './DocEnvStore.js';
 import type { DocStore } from './DocStore.js';
@@ -199,7 +199,12 @@ export class DocConfigStore {
     return compConfigDefineByCompIdBuild(this.docStore.compById);
   }
 
+  // built again when a config can have changed, not on every write of a
+  // document, which replaces the manifest for a content hash no config reads
+  // (manifestKey): every value of a config read on the page (the side panel,
+  // the blocks) is read from it, and would be drawn again on every keystroke
   get configModel() {
+    void this.sourceStore.manifestKey;
     return configModelBuild({
       configDefineByKey: this.configDefineByKey,
       configDoc: this.sourceStore.configDoc,
@@ -212,7 +217,7 @@ export class DocConfigStore {
         isCompKeyedById: layer.isCompKeyedById,
         isAboveDocLevels: layer.define.isAboveDocLevels,
       })),
-      fileManifest: this.sourceStore.fileManifest,
+      fileManifest: untracked(() => this.sourceStore.fileManifest),
       declarationListSidePanel: this.docStore.treeModel.configDeclarationList,
       declarationListPartIndex: [...this.docStore.treeModel.partById.values()]
         .filter((part: any) => part.index?.config !== undefined)

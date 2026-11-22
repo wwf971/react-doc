@@ -35,7 +35,13 @@ import { EditSlashMenu } from './EditSlashMenu.jsx';
 // surface calls inputAfter after it reported an input, offers every key
 // to keyDown before its own keys, and renders menu (a portal, nothing in
 // the flow).
-export function useEditSlash(elementRef, slash, { textBeforeCaretGet }) {
+//   blockInsert(source, offset)  optional: what the editor does with a block an
+//                    action puts at the caret (slashEffect.block): offset is
+//                    where the caret is, the slash text gone (a list item: a
+//                    block of its text; a paragraph: a block between two
+//                    paragraphs). without it the source of the block is typed
+//                    as lines at the caret (the source of a whole list)
+export function useEditSlash(elementRef, slash, { textBeforeCaretGet, blockInsert }) {
   const surfaceId = useId();
   const slashStore = slash?.store;
 
@@ -81,6 +87,10 @@ export function useEditSlash(elementRef, slash, { textBeforeCaretGet }) {
   const apply = (result) => {
     if (!result || result.textNew === undefined || !elementRef.current) return;
     slashTextReplace(elementRef.current, result.lengthOld, result.textNew);
+    if (result.blockSource === undefined) return;
+    const offset = textBeforeCaretGet(elementRef.current)?.length;
+    if (blockInsert && offset !== undefined) blockInsert(result.blockSource, offset);
+    else document.execCommand('insertText', false, `\n${result.blockSource}\n`);
   };
 
   const inputAfter = (event) => {
@@ -134,7 +144,8 @@ export function useEditSlash(elementRef, slash, { textBeforeCaretGet }) {
     }
     if (event.key === 'Enter' || event.key === 'Tab') {
       event.preventDefault();
-      apply(slashStore.itemChoose());
+      // Tab goes on to the optional parameter of an action; Enter runs it as it is
+      apply(slashStore.itemChoose(undefined, { isParamOpen: event.key === 'Tab' }));
       return true;
     }
     return false;
@@ -145,6 +156,7 @@ export function useEditSlash(elementRef, slash, { textBeforeCaretGet }) {
         slashStore,
         surfaceId,
         onChoose: (index) => apply(slashStore.itemChoose(index)),
+        onChoiceChoose: (index, choiceIndex) => apply(slashStore.rowChoiceChoose(index, choiceIndex)),
       })
     : null;
 

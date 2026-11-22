@@ -68,8 +68,10 @@ const blockKindByNodeType = {
 
 // options.onBlockList(blockList): the groups, positions relative to the
 // parsed content
+// options.docKey: what the document is besides its parsed content (a hash of
+// its frontmatter), part of every block key
 export function remarkEditBlock(options = {}) {
-  return (tree) => {
+  return (tree, file) => {
     if (!Array.isArray(tree?.children)) return;
     const groupList = rootGroupListBuild(tree.children);
     const blockList = groupList.map((group, index) => blockDescribe(group, index));
@@ -77,14 +79,144 @@ export function remarkEditBlock(options = {}) {
     groupList.forEach((group, index) => {
       if (blockList[index].kind === 'list') listAnnotate(group.nodeList[group.nodeList.length - 1]);
     });
+    const source = typeof file?.value === 'string' ? file.value : '';
+    const keyList = source ? blockKeyListBuild(groupList, source, String(options.docKey ?? '')) : [];
     tree.children = groupList.map((group, index) => ({
       type: 'mdxJsxFlowElement',
       name: BLOCK_WRAPPER_NAME,
-      attributes: [{ type: 'mdxJsxAttribute', name: 'blockIndex', value: String(index) }],
+      attributes: [
+        { type: 'mdxJsxAttribute', name: 'blockIndex', value: String(index) },
+        ...(keyList[index] ? [{ type: 'mdxJsxAttribute', name: 'blockKey', value: keyList[index] }] : []),
+        // the line the block starts on in this compile: what the lines its
+        // drawing carries are counted from (DocEditLineShiftContext)
+        ...(group.nodeList[0]?.position?.start?.line ? [{ type: 'mdxJsxAttribute', name: 'blockLine', value: String(group.nodeList[0].position.start.line) }] : []),
+      ],
       children: group.nodeList,
     }));
     options.onBlockList?.(blockList);
   };
+}
+
+// ---------- the key of the drawing of a block ----------
+// (doc_page_impl_edit.md#a-write-draws-only-what-changed) a write compiles the
+// whole document again; a block whose index and key did not change is not
+// drawn again (DocEditBlock). the key is everything its drawing comes from:
+//
+//   its text
+//   not its line: the lines its drawing carries (a link, remarkDocLink; a code
+//     block, rehypeCodeLine; a component, its sourceLine) are counted from the
+//     line it starts on in the compile that made them (blockLine); a block
+//     moved by lines added above it is not drawn again, its readers of lines
+//     add how far it moved (DocEditLineShiftContext)
+//   what of the document it is drawn from beyond its text: definitions of
+//     links and footnotes, the order of footnote references, the headings (an
+//     id follows the ids before it), the esm of an mdx file, the frontmatter
+//     (docKey)
+//   for a block with a component: the text of every block with one (the data
+//     of a block can be reused by another, remarkCommentComp)
+const BLOCK_COMPONENT_NODE_TYPE_LIST = ['html', 'mdxJsxFlowElement', 'mdxJsxTextElement'];
+
+export function blockKeyListBuild(groupList, source, docKey = '') {
+  const textOf = (nodeList) => {
+    const start = nodeList[0]?.position?.start?.offset;
+    const end = nodeList[nodeList.length - 1]?.position?.end?.offset;
+    return Number.isInteger(start) && Number.isInteger(end) ? source.slice(start, end) : undefined;
+  };
+  const documentPartList = [docKey];
+  const componentTextList = [];
+  const typeSetByGroup = groupList.map((group) => {
+    const typeSet = new Set();
+    const walk = (node) => {
+      typeSet.add(node.type);
+      if (node.type === 'definition' || node.type === 'footnoteDefinition' || node.type === 'mdxjsEsm') documentPartList.push(textOf([node]) ?? '');
+      if (node.type === 'footnoteReference') documentPartList.push(`^${node.identifier ?? ''}`);
+      if (node.type === 'heading') documentPartList.push(`#${node.depth}:${textOf([node]) ?? ''}`);
+      (node.children ?? []).forEach(walk);
+    };
+    group.nodeList.forEach(walk);
+    return typeSet;
+  });
+  groupList.forEach((group, index) => {
+    if (BLOCK_COMPONENT_NODE_TYPE_LIST.some((type) => typeSetByGroup[index].has(type))) componentTextList.push(textOf(group.nodeList) ?? '');
+  });
+  const documentHash = textHashShort(documentPartList.join('\u0000'));
+  const componentHash = textHashShort(componentTextList.join('\u0000'));
+  return groupList.map((group, index) => {
+    const text = textOf(group.nodeList);
+    if (text === undefined) return '';
+    const hasComponent = BLOCK_COMPONENT_NODE_TYPE_LIST.some((type) => typeSetByGroup[index].has(type));
+    return `${textHashShort(text)}.${documentHash}${hasComponent ? `.${componentHash}` : ''}`;
+  });
+}
+
+// ---------- the content of a block made when the block is drawn ----------
+// (doc_page_impl_edit.md#a-write-draws-only-what-changed) the compiled body is
+// one function, run on every write: it would make the elements of every
+// block, those of the blocks not drawn again (DocEditBlock skips them) too.
+// after the JSX of the document is built into calls, the children of every
+// block wrapper are given as a function instead (renderChildren), called by
+// the wrapper when it is drawn:
+//
+//   _jsx(_components.DocEditBlock, { blockIndex: "3", blockKey: "…", children: X })
+//   _jsx(_components.DocEditBlock, { blockIndex: "3", blockKey: "…", renderChildren: () => X })
+//
+// what X reads (the components, the props of the body, the exports of an mdx
+// file) is in the scope of the arrow as it was in the call. the reading body
+// is not compiled with it.
+export function recmaEditBlockChildrenLazy() {
+  return (tree) => {
+    const walk = (node) => {
+      if (Array.isArray(node)) {
+        node.forEach(walk);
+        return;
+      }
+      if (!node || typeof node !== 'object' || typeof node.type !== 'string') return;
+      if (node.type === 'CallExpression' && blockWrapperReferenceIs(node.arguments?.[0]) && node.arguments?.[1]?.type === 'ObjectExpression') {
+        const propertyList = node.arguments[1].properties;
+        const index = propertyList.findIndex((property) => property.type === 'Property' && !property.computed && propertyKeyNameGet(property) === 'children');
+        if (index >= 0) {
+          const property = propertyList[index];
+          walk(property.value);
+          propertyList[index] = {
+            ...property,
+            key: { type: 'Identifier', name: 'renderChildren' },
+            shorthand: false,
+            method: false,
+            value: { type: 'ArrowFunctionExpression', params: [], body: property.value, expression: true, async: false, generator: false },
+          };
+          return;
+        }
+      }
+      for (const key of Object.keys(node)) {
+        if (key === 'position' || key === 'loc' || key === 'range' || key === 'data') continue;
+        const value = node[key];
+        if (value && typeof value === 'object') walk(value);
+      }
+    };
+    walk(tree);
+  };
+}
+
+function blockWrapperReferenceIs(node) {
+  if (node?.type === 'Identifier') return node.name === BLOCK_WRAPPER_NAME;
+  return node?.type === 'MemberExpression' && !node.computed && node.property?.type === 'Identifier' && node.property.name === BLOCK_WRAPPER_NAME;
+}
+
+function propertyKeyNameGet(property) {
+  if (property.key?.type === 'Identifier') return property.key.name;
+  if (property.key?.type === 'Literal') return String(property.key.value);
+  return '';
+}
+
+// a short hash of a text (FNV-1a, 32 bits, base 36): a key, never a check
+export function textHashShort(text) {
+  let hash = 0x811c9dc5;
+  const value = String(text ?? '');
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return hash.toString(36);
 }
 
 // groups the root children: markers join the node after them; a paragraph
@@ -310,6 +442,12 @@ export function componentBlockTextBuild(block, change = {}) {
     ? fencedCodeTextBuild(component.nodeText, raw, change.lang)
     : raw;
   return component.textBefore + markerText + component.textBetween + nodeText;
+}
+
+// a text as a value of a marker prop can hold it: on one line, no comma (the
+// separator of the props) and no run of dashes (which could end the comment)
+export function markerValueNormalize(text) {
+  return String(text ?? '').replace(/\s+/g, ' ').replace(/,/g, ' ').replace(/-{2,}/g, '-').replace(/>/g, ' ').replace(/\s{2,}/g, ' ').trim();
 }
 
 export function markerTextBuild(compName, props = {}) {

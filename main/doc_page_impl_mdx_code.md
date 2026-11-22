@@ -160,6 +160,22 @@ Source             [default, built-in]
 
 **By config** removes the block's own view, so the config of the document decides by where the block stands; its label says what that gives (`By config (plain)` for a list item). A fence that names no language gets `text` before its view, since the first word of an info string is the language (`codeBlockViewTextSet`). The write is one replacement of the block (`DocEditStore.blockCodeViewWrite`) or of the item (`DocEditStructStore.itemCodeViewSet`, through the event `editItemCodeViewRequest`), with the history of every edit of the page; the text helpers are `lib/doc-edit-code.js` (`codeTextViewGet`, `codeTextViewSet`), which read and write the view of both forms.
 
+## Adding a block
+
+`/code` (`/fence`) in the [slash mode](doc_page_impl_edit_slash.md) puts a fenced code block at the caret, its view an optional parameter ([A block and its view](doc_page_impl_edit_slash.md#the-action-interface)):
+
+<!--renderComp=DiagramText-->
+```text
+/code  Enter               the view the config gives a block where the caret
+                           is, written nowhere: card in a document, plain in
+                           the text of a list item (the defaults)
+/code  Tab, "/code ␣"      the three views listed, that default first
+/code  a chip of its row   that view, by a click
+/code ic                   the view icon, typed
+```
+
+A view chosen is written in the info string (`text view=icon`: an info string with attributes names its language first). In the text of a list item the new block is a block of the item's text, and its lines are open at once for the author to type them, unless it is an icon (the caret is then after its chip, and its lines are in its dialog); in a paragraph it is a block of its own between the text before and after the caret. The block has no language (`text` when a view is written), so it is drawn as a block of text until one is written in it.
+
 ## The lines as text
 
 A code block can be turned into text of the document: its lines joined into **one line of text**, the line breaks removed, in the place of the block (`codeTextJoin`, `lib/doc-edit-code.js`). Each line is trimmed and the empty ones dropped; two lines are joined with a space, but between two CJK characters, where text has no space. The line is text from then on: a start Markdown would read as another block (`#`, `>`, `- `, `1.`, a fence, html) is escaped, the rest is left as it is. **To text** is where the other actions on a block are:

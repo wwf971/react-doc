@@ -7,6 +7,8 @@ import { COMP_EDIT_MODE_SOURCE_ID, compBlockLabelGet, compMetaGet } from '../reg
 import { RegisteredComp } from '../registry/RegisteredComp.jsx';
 import { useDocEditDoc } from './DocEditDocContext.js';
 import { assetRefLangIs } from '../../frontend/src/lib/doc-asset-ref.js';
+import { embedPathParse } from '../../frontend/src/lib/doc-edit-embed.js';
+import { CODE_PLACE_IN_LIST_ITEM } from '../../frontend/src/lib/rehype-code-view.js';
 
 // The editor of the open session, chosen by the edit mode the session was
 // opened in (session.editModeId, doc_page_impl_edit.md#component-edit-mode):
@@ -63,7 +65,7 @@ import { assetRefLangIs } from '../../frontend/src/lib/doc-asset-ref.js';
 //                 rendered part in the flow
 export const DocEditBlockEditor = observer(function DocEditBlockEditor({ block, viewRendered }) {
   const stores = useDocStores();
-  const { compById, editStore, objectStore, slashStore, sourceStore } = stores;
+  const { compById, configStore, editStore, objectStore, slashStore, sourceStore } = stores;
   const { path, format } = useDocEditDoc();
   const session = editStore.session;
   if (!session || session.path !== path) return null;
@@ -121,8 +123,17 @@ export const DocEditBlockEditor = observer(function DocEditBlockEditor({ block, 
   if (slashStore && (session.type === 'block' || isItem) && slashIsEnabled(compById, sourceStore.configDoc, component?.compName ?? compName)) {
     configEdit.edit.slash = {
       store: slashStore,
-      // what the slash actions are given (slash-define.js)
-      context: { sourcePath: path, docPageAlias: sourceStore.docPageAliasOfPath(path), source: sourceStore.sourceService, object: objectStore },
+      // what the slash actions are given (slash-define.js): where a block put
+      // at the caret stands, and the config of the document (an embedded
+      // document has the config of its host), for the default view of a block
+      context: {
+        sourcePath: path,
+        docPageAlias: sourceStore.docPageAliasOfPath(path),
+        source: sourceStore.sourceService,
+        object: objectStore,
+        place: isItem ? CODE_PLACE_IN_LIST_ITEM : undefined,
+        configValueGet: (key) => configStore?.valueDocGet?.(embedPathParse(path)?.hostPath ?? path, key),
+      },
     };
   }
   return (

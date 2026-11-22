@@ -163,6 +163,34 @@ The items of a list with blank lines between them keep their blank lines when on
 
 Some things Markdown does not let a list be. An item without text cannot be the first sub-item right under a line of text; the page writes such an item with an empty comment as its text, which renders nothing. A code fence opened in the text of an item and never closed would take the sub-items of the item as code; the page reads every result back before it writes it, so it refuses that text and says why, with the item still open.
 
+## A document inside a document
+
+An item can hold a whole document of its own, kept out of the way behind a tile: an **MDX block**. A click on the tile opens it in a popup; in edit mode the popup edits it as any document, and every change is written into the block, in this file. Its header is that of the dialog of a code block: **Copy**, **View | Edit**, and in Edit the title is a field (rename it there, and the tile follows). Type `/mdx` in the text of an item to add one at the caret, or choose **MDX block** in the insert menu of a block.
+
+- the weekly check
+  <!--renderComp=Mdx,view=icon,title=Checklist-->
+  ```md
+  ## How to check
+
+  Run the check **once a week**, on Monday morning.
+
+  - read the report
+  - answer every warning in it
+  ```
+  and its report after it
+- an item without a document
+
+**Choosing the view as you add it.** `/mdx` and `/code` put a block in its default view on Enter. Press Tab instead (or type a space after the name) to list the views and choose one, type it (`/mdx card`, `/code ic`), or click one of the views shown on the row of the action. Try `/code` at the end of the item above: in a list item the default is the view `plain`, and you go on typing in its lines.
+
+In the view `card` the document is drawn in place, and a click on it in edit mode opens it to edit it:
+
+<!--renderComp=Mdx,view=card-->
+```md
+A note drawn **in place**: in edit mode, click it to edit it in its popup.
+```
+
+A link written with `?nav=popup` opens its document in the same popup, and that document is edited there too: [the playground of content edits](./mdx-doc-edit-in-place.md?nav=popup). In edit mode a click on a link edits the text it stands in, so the link is followed by Ctrl/⌘ + click. `/inline` writes such a link.
+
 ## The spacing of a list
 
 The space between two lines of a list and the space between a bullet and its text are config keys of the document, `ListItemGap` and `ListMarkerGap`, in px. Change them in the settings panel and every list of the page follows at once; a doc page sets them for all its documents, and one document in its frontmatter:

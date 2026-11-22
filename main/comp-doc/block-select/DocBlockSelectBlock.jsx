@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { observer } from 'mobx-react-lite';
 import { useDocStores } from '../../frontend/src/store/context.js';
-import { DocEditBlockContext, useDocEditDoc } from '../edit/DocEditDocContext.js';
+import { DocEditBlockContext, useDocEditDoc, useDocEditModel } from '../edit/DocEditDocContext.js';
 import './DocBlockSelect.css';
 
 // A root-level block of the edit body in block selection mode
@@ -21,7 +21,8 @@ import './DocBlockSelect.css';
 // which is selected like the block.
 export const DocBlockSelectBlock = observer(function DocBlockSelectBlock({ blockIndex, children }) {
   const { blockSelectStore } = useDocStores();
-  const { path, model } = useDocEditDoc();
+  const { path } = useDocEditDoc();
+  const model = useDocEditModel();
   const index = Number(blockIndex);
   const block = model.blockList[index];
   const blockContextValue = useMemo(() => ({ path, blockIndex: index }), [path, index]);

@@ -123,6 +123,26 @@ export function codeTextViewSet(text, view) {
   return { code: 0, message: '', data: lineList.join('\n') };
 }
 
+// the props of the comment marker right before the fence of a block changed,
+// whatever its component (the title of an MDX block): a value '' or undefined
+// removes the prop, the others are kept in their order
+export function codeMarkerPropsSet(text, propsPatch = {}) {
+  const parsed = codeBlockTextParse(text);
+  if (!parsed) return { code: -1, message: 'the block is not one fenced code block' };
+  const indexMarker = parsed.linePrefixList.length - 1;
+  const line = parsed.linePrefixList[indexMarker];
+  const marker = line === undefined ? undefined : commentMarkerParse(line.trim());
+  if (!marker) return { code: -1, message: 'the block has no marker to write on' };
+  const props = { ...marker.props };
+  for (const [key, value] of Object.entries(propsPatch)) {
+    if (value === undefined || value === null || String(value) === '') delete props[key];
+    else props[key] = String(value);
+  }
+  const lineList = String(text).split('\n');
+  lineList[indexMarker] = `${/^\s*/.exec(line)[0]}${markerTextBuild(marker.compName, props)}`;
+  return { code: 0, message: '', data: lineList.join('\n') };
+}
+
 // the marker of the component Code right before the fence, with its props
 function codeMarkerGet(parsed) {
   const line = parsed.linePrefixList[parsed.linePrefixList.length - 1];

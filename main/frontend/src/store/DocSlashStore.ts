@@ -233,9 +233,11 @@ export class DocSlashStore {
   }
 
   // an item chosen (Enter, Tab, a click): in the action mode, an action with
-  // a parameter becomes "/name " (its param mode) and one without runs; in
-  // the param mode the action answers. the answer is what the surface does
-  itemChoose(index?: number): SlashApply | undefined {
+  // a parameter becomes "/name " (its param mode) and one without runs; one
+  // whose parameter is optional runs, unless the param mode is asked for
+  // (isParamOpen: Tab). in the param mode the action answers. the answer is
+  // what the surface does
+  itemChoose(index?: number, { isParamOpen = false }: { isParamOpen?: boolean } = {}): SlashApply | undefined {
     const slash = this.slash;
     if (!slash) return undefined;
     const item = this.itemList[index ?? slash.itemIndexActive];
@@ -243,7 +245,7 @@ export class DocSlashStore {
     const parsed = this.parsed;
     if (parsed.mode === SLASH_MODE_ACTION) {
       const action = item.action;
-      if (action.param) return { textNew: `/${action.name} `, isEnded: false, lengthOld: slash.text.length };
+      if (action.param && (!action.param.isOptional || isParamOpen)) return { textNew: `/${action.name} `, isEnded: false, lengthOld: slash.text.length };
       return this.effectApply(this.effectRun(action, () => action.run(slash.context)), action.name);
     }
     if (parsed.mode !== SLASH_MODE_PARAM) return undefined;
@@ -252,6 +254,34 @@ export class DocSlashStore {
       parsed.actionName,
       parsed.trigger,
     );
+  }
+
+  // the items of an optional parameter drawn on the row of its action in the
+  // action mode (param.isListedOnRow): the items for an empty parameter
+  rowChoiceListGet(action: any): any[] {
+    const slash = this.slash;
+    if (!slash || !action?.param?.isListedOnRow) return [];
+    const itemList = this.effectRun(action, () => action.param.itemListGet('', slash.context));
+    return Array.isArray(itemList) ? itemList : [];
+  }
+
+  // one of them chosen (a click on it): as if it were chosen in the param mode
+  rowChoiceChoose(index: number, choiceIndex: number): SlashApply | undefined {
+    const slash = this.slash;
+    const action = this.itemList[index]?.action;
+    const choice = this.rowChoiceListGet(action)[choiceIndex];
+    if (!slash || !choice) return undefined;
+    return this.effectApply(this.effectRun(action, () => action.param.itemChoose(choice, '', slash.context)), action.name);
+  }
+
+  // what Enter does on an action with an optional parameter, said in the
+  // foot of the menu: the label of its default item, '' when none is marked
+  choiceDefaultLabelGet(action: any): string {
+    const slash = this.slash;
+    if (!slash || !action?.param?.isOptional) return '';
+    const itemList = this.effectRun(action, () => action.param.itemListGet('', slash.context));
+    const item = Array.isArray(itemList) ? itemList.find((one: any) => one?.isDefault) : undefined;
+    return item ? String(item.label ?? item.id ?? '') : '';
   }
 
   // the line the menu shows beside the name of the action of the param mode:

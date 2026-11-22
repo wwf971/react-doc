@@ -1,15 +1,17 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { reaction } from 'mobx';
 import { observer } from 'mobx-react-lite';
 import { useDocStores } from '../../frontend/src/store/context.js';
 import { BlockRender } from '../../../built-in/comp-mdx/text/BlockRender.jsx';
-import { DocEditBlockContext, DocEditBlockFloatContext, useDocEditDoc } from './DocEditDocContext.js';
+import { DocEditBlockContext, DocEditBlockFloatContext, DocEditLineShiftContext, useDocEditDoc } from './DocEditDocContext.js';
 import { DocEditBlockToolbar } from './DocEditBlockToolbar.jsx';
 import { DocEditBlockEditor, blockLabelInfoGet } from './DocEditBlockEditor.jsx';
 import { DocBlockSelectBlock } from '../block-select/DocBlockSelectBlock.jsx';
 import { itemCodeElementListGet, itemPathAtPoint } from '../edit-structure/struct-geometry.js';
+import { keyedComputedCreate } from '../../frontend/src/lib/keyed-computed.js';
 import {
   EDIT_CLICK_OWN_SELECTOR,
+  targetClosestWithin,
   clickAfterPointerDownSuppress,
   editFocusRelease,
   useEditOutsidePointer,
@@ -68,42 +70,166 @@ import './DocEdit.css';
 // in block selection mode (doc_page_impl_edit_structure.md#block-selection-mode)
 // the same body shows, and every block is selectable instead of editable
 // (DocBlockSelectBlock).
-export const DocEditBlock = observer(function DocEditBlock({ blockIndex, children }) {
-  const { editStore } = useDocStores();
-  if (editStore.isBlockSelectMode) return <DocBlockSelectBlock blockIndex={blockIndex}>{children}</DocBlockSelectBlock>;
-  return <DocEditBlockEditable blockIndex={blockIndex}>{children}</DocEditBlockEditable>;
+//
+// a write draws only what changed (doc_page_impl_edit.md#a-write-draws-only-what-changed).
+// every write compiles the whole document again, and the body gives every
+// block new elements; three things keep a block that did not change from
+// being drawn again:
+//
+//   its key       remarkEditBlock gives every block a key of what its drawing
+//                 comes from (its text, its line where it draws lines, what of
+//                 the document it reads); with the same index and key the
+//                 block is not drawn again (blockPropsAreEqual)
+//   its answers   what it draws from the store (is it edited, is its menu
+//                 open, its text just saved, its label) is one value per
+//                 block (blockDrawStateGet), which changes only when one of
+//                 its answers does, not whenever the session or the model of
+//                 the page changes; the block it shows is the same as long
+//                 as its text is: what writes reads the block of the store
+//                 at the time (the events carry the index only)
+//   its toolbar   drawn only while it can be seen: the block hovered or
+//                 focused, its menu or confirmation open, the block selected
+//                 (useToolbarMount); some twenty components a block
+//
+// the content of the block comes as a function (renderChildren,
+// recmaEditBlockChildrenLazy): made here, when the block is drawn, so the
+// body made on every write makes no element of a block that is not drawn
+//
+// a block moved by lines added above it keeps its elements: the lines they
+// say (blockLine is the line the block started on when they were made) are
+// read with the shift it moved by (DocEditLineShiftContext, DocEditBlockMode)
+export const DocEditBlock = memo(function DocEditBlock({ blockIndex, blockLine, children, renderChildren }) {
+  // the components the body is drawn with are in the context: when they
+  // change, the block is drawn again although its key did not
+  useDocEditDoc();
+  const content = typeof renderChildren === 'function' ? renderChildren() : children;
+  return <DocEditBlockMode blockIndex={blockIndex} lineCompiled={Number(blockLine)}>{content}</DocEditBlockMode>;
+}, blockPropsAreEqual);
+
+// the same index and key: the same drawing. a block without a key (a body
+// the edit layer did not compile) is drawn again when its content is new
+function blockPropsAreEqual(propsBefore, propsNext) {
+  if (propsBefore.blockIndex !== propsNext.blockIndex) return false;
+  if (!propsNext.blockKey) return propsBefore.children === propsNext.children && propsBefore.renderChildren === propsNext.renderChildren;
+  return propsBefore.blockKey === propsNext.blockKey;
+}
+
+// the block in edit mode or in block selection mode, and how far it moved
+// since its elements were made: the line it starts on now (in the content,
+// the frontmatter left out, as the compile counts) less lineCompiled. a value
+// of its own, so a block that moved draws only the readers of lines again
+const DocEditBlockMode = observer(function DocEditBlockMode({ blockIndex, lineCompiled, children }) {
+  const stores = useDocStores();
+  const { editStore } = stores;
+  const { path } = useDocEditDoc();
+  const lineNow = blockLineContentGet(stores, path, Number(blockIndex));
+  const shift = Number.isFinite(lineNow) && Number.isFinite(lineCompiled) ? lineNow - lineCompiled : 0;
+  const shiftValue = useMemo(() => ({ path, shift }), [path, shift]);
+  const block = editStore.isBlockSelectMode
+    ? <DocBlockSelectBlock blockIndex={blockIndex}>{children}</DocBlockSelectBlock>
+    : <DocEditBlockEditable blockIndex={blockIndex}>{children}</DocEditBlockEditable>;
+  return <DocEditLineShiftContext.Provider value={shiftValue}>{block}</DocEditLineShiftContext.Provider>;
 });
+
+// the line a block starts on now, counted in the content (the frontmatter
+// left out), as remarkEditBlock and the lines of the elements count it
+function blockLineContentGet(stores, path, index) {
+  const { editStore } = stores;
+  return keyedGetFor(editStore)(`line\u0000${path}\u0000${index}`, () => {
+    const model = editStore.docEditByPath[path]?.model;
+    const block = model?.blockList[index];
+    return block ? block.lineStart - (model.frontmatter?.lineEnd ?? 0) : undefined;
+  });
+}
+
+// the answers a block draws from, one value per block of a document (a
+// keyed computed value of the edit store): an observer reading it is drawn
+// again only when one of them changed
+const keyedGetByStore = new WeakMap();
+
+function keyedGetFor(editStore) {
+  let keyedGet = keyedGetByStore.get(editStore);
+  if (!keyedGet) {
+    keyedGet = keyedComputedCreate();
+    keyedGetByStore.set(editStore, keyedGet);
+  }
+  return keyedGet;
+}
+
+function blockDrawStateGet(stores, path, index) {
+  return keyedGetFor(stores.editStore)(`${path}\u0000${index}`, () => blockDrawStateBuild(stores, path, index), blockDrawStateEqual);
+}
+
+function blockDrawStateBuild(stores, path, index) {
+  const { editStore, structStore } = stores;
+  const blockList = editStore.docEditByPath[path]?.model?.blockList;
+  const block = blockList?.[index];
+  if (!block) return undefined;
+  const isDeletePending = editStore.deleteConfirmIs(path, index);
+  const label = blockLabelInfoGet(block, stores);
+  return {
+    block,
+    isLast: index === blockList.length - 1,
+    isEditing: editStore.sessionIs(path, 'block', index),
+    isDeletePending,
+    isOpen: isDeletePending
+      || editStore.insertMenuIs(path, index)
+      || editStore.blockMoveIs(path, index)
+      || editStore.blockAssetMoveIs(path, index)
+      || editStore.blockModeMenuIs(path, index),
+    // a read-only component cannot be entered, by a click or otherwise; a
+    // component declared isEditEnterButtonOnly is entered by its Edit button only
+    isEnterByClick: editStore.blockEnterMode === 'click'
+      && !editStore.blockIsReadOnly(path, index)
+      && !editStore.blockIsEditEnterButtonOnly(path, index),
+    textPending: editStore.blockTextPendingGet(path, index),
+    isStructSelected: structStore?.selectionIsBlock(path, index) === true,
+    labelText: label.text,
+    labelTitle: label.title ?? '',
+  };
+}
+
+// the same answers, and the block the same as far as it is drawn: its kind,
+// its text. not its lines: they move with every line added above it, which
+// draws nothing; the block kept is then the one of an older model, read for
+// what it shows only
+function blockDrawStateEqual(stateBefore, stateNext) {
+  if (!stateBefore || !stateNext) return stateBefore === stateNext;
+  const blockBefore = stateBefore.block;
+  const blockNext = stateNext.block;
+  return stateBefore.isLast === stateNext.isLast
+    && stateBefore.isEditing === stateNext.isEditing
+    && stateBefore.isDeletePending === stateNext.isDeletePending
+    && stateBefore.isOpen === stateNext.isOpen
+    && stateBefore.isEnterByClick === stateNext.isEnterByClick
+    && stateBefore.textPending === stateNext.textPending
+    && stateBefore.isStructSelected === stateNext.isStructSelected
+    && stateBefore.labelText === stateNext.labelText
+    && stateBefore.labelTitle === stateNext.labelTitle
+    && blockBefore.kind === blockNext.kind
+    && blockBefore.depth === blockNext.depth
+    && blockBefore.text === blockNext.text
+    && Boolean(blockBefore.list) === Boolean(blockNext.list);
+}
 
 const DocEditBlockEditable = observer(function DocEditBlockEditable({ blockIndex, children }) {
   const stores = useDocStores();
-  const { blockPopupStore, editStore, eventRouter, onEvent: onEventPage, structStore } = stores;
-  const { path, model, format } = useDocEditDoc();
+  const { blockPopupStore, blockSelectStore, componentConfig, editStore, eventRouter, onEvent: onEventPage, structStore } = stores;
+  const { path, format } = useDocEditDoc();
   const elementRef = useRef(null);
   const anchorRef = useRef(null);
   const [floatElement, floatElementSet] = useState(null);
   const index = Number(blockIndex);
-  const block = model.blockList[index];
-  const isEditing = Boolean(block) && editStore.sessionIs(path, 'block', index);
+  const draw = blockDrawStateGet(stores, path, index);
+  const isEditing = Boolean(draw?.isEditing);
   const geometryLock = useGeometryLock(elementRef, editStore, path, index);
   useEditOutsidePointer(elementRef, isEditing && !blockPopupStore.isOpen, () => void editStore.sessionLeave());
   useFloatHeightFollow(anchorRef, floatElement);
   const blockContextValue = useMemo(() => ({ path, blockIndex: index }), [path, index]);
-  if (!block) return children;
-  const isDeletePending = editStore.deleteConfirmIs(path, index);
-  const isOpen = isDeletePending
-    || editStore.insertMenuIs(path, index)
-    || editStore.blockMoveIs(path, index)
-    || editStore.blockAssetMoveIs(path, index)
-    || editStore.blockModeMenuIs(path, index);
+  const toolbarMount = useToolbarMount(Boolean(draw?.isOpen) || Boolean(draw?.isStructSelected));
+  if (!draw) return children;
+  const { block, isDeletePending, isOpen, isEnterByClick, textPending, isStructSelected } = draw;
   const isInvisible = block.kind === 'html' || block.kind === 'marker';
-  // a read-only component cannot be entered, by a click or otherwise; a
-  // component declared isEditEnterButtonOnly is entered by its Edit button only
-  const isEnterByClick = editStore.blockEnterMode === 'click'
-    && !editStore.blockIsReadOnly(path, index)
-    && !editStore.blockIsEditEnterButtonOnly(path, index);
-  const textPending = editStore.blockTextPendingGet(path, index);
-  const labelInfo = blockLabelInfoGet(block, stores);
-  const isStructSelected = structStore?.selectionIsBlock(path, index) === true;
 
   // entering the block's session is reported as an event; point is where
   // the pointer was (a pointer event can be passed), undefined for a report
@@ -126,7 +252,7 @@ const DocEditBlockEditable = observer(function DocEditBlockEditable({ blockIndex
   // the React tree to here.
   const clickCaptureHandle = (event) => {
     if (!isEnterByClick || isEditing) return;
-    if (event.target.closest?.(EDIT_CLICK_OWN_SELECTOR)) return;
+    if (clickIsNotOwn(event) || clickIsLinkFollow(event)) return;
     event.preventDefault();
     event.stopPropagation();
     if (block.list) {
@@ -159,6 +285,19 @@ const DocEditBlockEditable = observer(function DocEditBlockEditable({ blockIndex
       point,
     });
     void eventRouter.dispatch(event, { onEventHost: onEventPage });
+  };
+
+  // a right click on the block, while it is not being edited: the menu of the
+  // selection with this block alone selected (DocBlockSelectMenu, the menu of
+  // block selection mode: duplicate, move, copy / move to, delete). in a
+  // control or an editor the browser keeps its own menu (spelling, paste)
+  const contextMenuHandle = (event) => {
+    if (isEditing || !blockSelectStore?.isContextMenuAvailable || !componentConfig.Menu) return;
+    if (clickIsNotOwn(event)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const rect = event.currentTarget.getBoundingClientRect();
+    blockSelectStore.contextMenuOpen(path, index, { x: event.clientX - rect.left, y: event.clientY - rect.top });
   };
 
   // the geometry lock keeps the wrapper at the height the block had in view
@@ -205,7 +344,9 @@ const DocEditBlockEditable = observer(function DocEditBlockEditable({ blockIndex
 
   let content;
   if (isEditing) {
-    content = <DocEditBlockEditor block={block} viewRendered={children} />;
+    // the editor writes by the lines of the block: the block of the model now
+    const blockCurrent = editStore.docEditByPath[path]?.model?.blockList[index] ?? block;
+    content = <DocEditBlockEditor block={blockCurrent} viewRendered={children} />;
   } else if (textPending !== undefined) {
     content = (
       <BlockRender data={{ text: textPending }} config={{ format, sourcePath: path }}>
@@ -235,7 +376,7 @@ const DocEditBlockEditable = observer(function DocEditBlockEditable({ blockIndex
         className="doc-edit-block"
         data-block-index={index}
         data-first={index === 0 ? '' : undefined}
-        data-last={index === model.blockList.length - 1 ? '' : undefined}
+        data-last={draw.isLast ? '' : undefined}
         data-kind={block.kind}
         data-depth={block.depth}
         data-editing={isEditing ? '' : undefined}
@@ -249,10 +390,13 @@ const DocEditBlockEditable = observer(function DocEditBlockEditable({ blockIndex
         onClickCapture={clickCaptureHandle}
         onKeyDown={keyDownHandle}
         onPointerDown={pointerDownHandle}
+        onContextMenu={contextMenuHandle}
+        onPointerEnter={toolbarMount.pointerEnter}
+        onPointerLeave={toolbarMount.pointerLeave}
       >
-        <div ref={anchorRef} className="doc-edit-block-anchor not-prose">
+        <div ref={anchorRef} className="doc-edit-block-anchor not-prose" onFocus={toolbarMount.focusIn} onBlur={toolbarMount.focusOut}>
           <div ref={floatElementSet} className="doc-edit-block-float">
-            {isEditing ? null : <DocEditBlockToolbar blockIndex={index} label={labelInfo.text} labelTitle={labelInfo.title} />}
+            {isEditing || !toolbarMount.isMounted ? null : <DocEditBlockToolbar blockIndex={index} label={draw.labelText} labelTitle={draw.labelTitle} />}
           </div>
         </div>
         {content}
@@ -261,6 +405,40 @@ const DocEditBlockEditable = observer(function DocEditBlockEditable({ blockIndex
     </DocEditBlockFloatContext.Provider>
   );
 });
+
+// the toolbar of a block is drawn while it can be seen: the block hovered (a
+// nested block's toolbar shows instead of its holder's, DocEdit.css; both are
+// drawn), focus in the toolbar, or isWanted (its menu or a confirmation open,
+// the block selected). it stays drawn for its fade-out after that (DocEdit.css:
+// 180 ms, then 120 ms). a touch leaves no hover: the toolbar of a block touched
+// stays drawn, and the css decides whether it shows, as it did before
+const TOOLBAR_KEEP_MS = 400;
+
+function useToolbarMount(isWanted) {
+  const [isHovered, hoveredSet] = useState(false);
+  const [isFocused, focusedSet] = useState(false);
+  const [isKept, keptSet] = useState(false);
+  const isShown = isWanted || isHovered || isFocused;
+  useEffect(() => {
+    if (isShown) {
+      keptSet(true);
+      return undefined;
+    }
+    const timer = setTimeout(() => keptSet(false), TOOLBAR_KEEP_MS);
+    return () => clearTimeout(timer);
+  }, [isShown]);
+  return {
+    isMounted: isShown || isKept,
+    pointerEnter: () => hoveredSet(true),
+    pointerLeave: (event) => {
+      if (event.pointerType !== 'touch') hoveredSet(false);
+    },
+    focusIn: () => focusedSet(true),
+    focusOut: (event) => {
+      if (!event.currentTarget.contains(event.relatedTarget)) focusedSet(false);
+    },
+  };
+}
 
 // the inline styles that keep the wrapper at the geometry its block had in
 // view mode while the block is edited, or null while it is not. the mobx
@@ -322,22 +500,46 @@ function blockGeometryMeasure(wrapper) {
 
 // keeps --doc-edit-float-height of the anchor equal to the height of what
 // floats in it (the toolbar, or the editor bar with its fields), which is
-// the distance the anchor sticks below the sticky rows of the layout
+// the distance the anchor sticks below the sticky rows of the layout.
+// followed by a ResizeObserver only, which reports the height when it is
+// observed and whenever it changes (the toolbar and the editor bar replacing
+// each other, a message, a field, a wrapped row), measured with the layout of
+// the frame: no measure after every commit of the block, which would make the
+// browser lay the page out again for every block drawn on a write
 function useFloatHeightFollow(anchorRef, floatElement) {
-  const heightApply = () => {
-    const anchor = anchorRef.current;
-    if (!anchor || !floatElement) return;
-    anchor.style.setProperty('--doc-edit-float-height', `${floatElement.offsetHeight}px`);
-  };
-  // after every commit of the block: the toolbar and the editor bar replace
-  // each other when a session starts or ends
-  useLayoutEffect(heightApply);
-  // between commits: the bar grows with a message, a field, a wrapped row
   useLayoutEffect(() => {
     if (!floatElement) return undefined;
-    const observer = new ResizeObserver(heightApply);
+    const observer = new ResizeObserver((entryList) => {
+      const anchor = anchorRef.current;
+      const entry = entryList[entryList.length - 1];
+      if (!anchor || !entry) return;
+      const height = entry.borderBoxSize?.[0]?.blockSize ?? entry.contentRect.height;
+      anchor.style.setProperty('--doc-edit-float-height', `${height}px`);
+    });
     observer.observe(floatElement);
     return () => observer.disconnect();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [floatElement]);
+  }, [anchorRef, floatElement]);
+}
+
+// a click the block leaves alone: on one of its own controls (buttons, values,
+// fields, its floating area), or on something that is not inside it on the
+// page though React hands its events to the block (a popup portaled to the
+// body: the mode menu, the dialog of an icon, the popup of an MDX block, whose
+// own blocks take their clicks). the controls are asked within the block
+// only: a document edited in a popup is inside the popup, which is no
+// control of its blocks
+function clickIsNotOwn(event) {
+  if (!event.currentTarget.contains(event.target)) return true;
+  return targetClosestWithin(event.target, EDIT_CLICK_OWN_SELECTOR, event.currentTarget) !== null;
+}
+
+// a click with Ctrl/⌘ on a link follows the link instead of entering the
+// block, as in a code editor: a popup link opens its popup (whose document is
+// edited there in edit mode), another link does what that click does in
+// reading mode (a new tab)
+const LINK_FOLLOW_SELECTOR = 'a[href], .doc-link-render';
+
+function clickIsLinkFollow(event) {
+  if (!(event.metaKey || event.ctrlKey)) return false;
+  return targetClosestWithin(event.target, LINK_FOLLOW_SELECTOR, event.currentTarget) !== null;
 }

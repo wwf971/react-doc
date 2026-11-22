@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { observer } from 'mobx-react-lite';
 import { GripVertical } from '../../frontend/UICommon.js';
 import { useDocStores } from '../../frontend/src/store/context.js';
-import { DocEditBlockContext, DocEditBlockFloatContext, useDocEditDoc } from '../edit/DocEditDocContext.js';
+import { DocEditBlockContext, DocEditBlockFloatContext, useDocEditDoc, useDocEditModel } from '../edit/DocEditDocContext.js';
 import { DocEditBlockEditor } from '../edit/DocEditBlockEditor.jsx';
 import { useEditOutsidePointer } from '../edit/use-edit-outside-pointer.js';
 import { DocEditItemToolbar } from './DocEditItemToolbar.jsx';
@@ -47,7 +47,8 @@ import './DocEditStruct.css';
 export const DocEditStructLayer = observer(function DocEditStructLayer({ bodyRef }) {
   const stores = useDocStores();
   const { editStore, structStore } = stores;
-  const { path, model } = useDocEditDoc();
+  const { path } = useDocEditDoc();
+  const model = useDocEditModel();
   useStructPointer(bodyRef, { path, stores, model });
   const layoutVersion = useLayoutVersion(bodyRef);
   if (!structStore || !structStore.isActive(path)) return null;
@@ -198,7 +199,8 @@ const StructItemToolbarPlace = observer(function StructItemToolbarPlace({ bodyRe
 // text being typed.
 const DocEditItemEditor = observer(function DocEditItemEditor({ bodyRef, layoutKey }) {
   const { editStore, structStore } = useDocStores();
-  const { path, model } = useDocEditDoc();
+  const { path } = useDocEditDoc();
+  const model = useDocEditModel();
   const session = editStore.session;
   const ownRef = useRef(null);
   const surfaceHolderRef = useRef(null);
@@ -361,26 +363,48 @@ const DocEditItemEditor = observer(function DocEditItemEditor({ bodyRef, layoutK
   // itemRoomOpen): a text block as high as its lines, a text that needs more
   // lines than it had with that room below it. what follows the item moves,
   // as it will stand once the text is saved; nothing is laid over it.
+  //
+  // the rendered item can be drawn anew while it is typed: a document edited
+  // in a popup is compiled again after the write that opened this session
+  // (Shift + Enter made the item a text block: its <pre> comes after the
+  // session), and a write of its host draws it again. the room is then opened
+  // again on the item as it is drawn now, never left on an element that is gone
   useLayoutEffect(() => {
     const body = bodyRef.current;
     const holder = surfaceHolderRef.current;
-    const element = body ? itemElementGet(body, blockIndex, itemPath) : null;
-    if (!isPlaced || !holder || !element) return undefined;
-    const room = itemRoomOpen(element, {
-      isBlockFormat,
-      heightBase: heightBaseRef.current ?? 0,
-      blockElement: partIndex === undefined ? undefined : itemPartBlockElementGet(element, partIndex) ?? undefined,
-    });
+    if (!isPlaced || !body || !holder || !itemElementGet(body, blockIndex, itemPath)) return undefined;
+    const targetGet = () => {
+      const element = itemElementGet(body, blockIndex, itemPath);
+      if (!element) return undefined;
+      const blockElement = partIndex === undefined ? undefined : itemPartBlockElementGet(element, partIndex) ?? undefined;
+      return { element, blockElement, blockFormatElement: isBlockFormat ? blockElement ?? itemBlockElementGet(element) : undefined };
+    };
+    let target;
+    let room;
     // the source is in the holder one render after the holder: until then there is no height to follow
     const roomApply = () => {
-      if (holder.querySelector('.doc-edit-surface')) room.heightSet(holder.offsetHeight);
+      const targetNow = targetGet();
+      if (targetNow && (!target || targetNow.element !== target.element || targetNow.blockFormatElement !== target.blockFormatElement)) {
+        room?.close();
+        target = targetNow;
+        room = itemRoomOpen(target.element, { isBlockFormat, heightBase: heightBaseRef.current ?? 0, blockElement: target.blockElement });
+      }
+      if (room && holder.querySelector('.doc-edit-surface')) room.heightSet(holder.offsetHeight);
     };
     roomApply();
     const observer = new ResizeObserver(roomApply);
     observer.observe(holder);
+    // the item drawn anew: the elements of the body change (what is typed in
+    // the holder is no change of the item)
+    const observerDraw = new MutationObserver((recordList) => {
+      if (recordList.every((record) => holder.contains(record.target))) return;
+      roomApply();
+    });
+    observerDraw.observe(body, { childList: true, subtree: true });
     return () => {
       observer.disconnect();
-      room.close();
+      observerDraw.disconnect();
+      room?.close();
     };
   }, [bodyRef, blockIndex, itemPath, isBlockFormat, partIndex, isPlaced]);
 

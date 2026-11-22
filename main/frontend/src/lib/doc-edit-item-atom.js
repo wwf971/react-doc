@@ -45,6 +45,16 @@ import { CODE_COMPONENT_NAME, codeBlockTextParse, codeBlockValueTextSet, codeTex
 // its item is edited as the lines of the block (an item that is a text block).
 
 export const ITEM_ATOM_CHAR_FIRST = 0xe000;
+
+// the component blocks the editor of an item types as chips, beside the
+// fenced code blocks: the component Code (lines of code, its views those of a
+// code block, by the config of their place), and the component Mdx (a
+// document embedded in this one, doc_page_impl_mdx_embed.md: views of its own,
+// icon by default; its text is not lines to edit in place, it opens in a popup)
+const ITEM_BLOCK_COMPONENT_BY_NAME = {
+  [CODE_COMPONENT_NAME]: { viewList: CODE_VIEW_LIST },
+  Mdx: { viewList: ['icon', 'card'], viewDefault: 'icon', isEmbed: true, labelDefault: 'mdx' },
+};
 const ITEM_ATOM_CHAR_LAST = 0xf8ff;
 const LANG_TEXT_LIST = ['', 'text', 'txt', 'plaintext', 'plain'];
 
@@ -96,7 +106,8 @@ export function itemCodeBlockListGet(text) {
     const end = lineStartList[indexClose] + lineList[indexClose].length;
     const raw = lineList.slice(index + 1, indexClose).join('\n');
     lineIndexFree = indexClose + 1;
-    const isComponent = marker?.compName === CODE_COMPONENT_NAME;
+    const componentKind = marker ? ITEM_BLOCK_COMPONENT_BY_NAME[marker.compName] : undefined;
+    const isComponent = Boolean(componentKind);
     // an Anchor of the block stays text before it; the marker of another
     // component makes the fence its data
     const isCode = isComponent || ((!marker || marker.compName === 'Anchor') && lang !== 'asset');
@@ -104,20 +115,26 @@ export function itemCodeBlockListGet(text) {
       index = indexClose;
       continue;
     }
-    const viewMarker = isComponent && CODE_VIEW_LIST.includes(marker.props.view) ? marker.props.view : '';
+    const viewMarker = isComponent && componentKind.viewList.includes(marker.props.view) ? marker.props.view : '';
     const startBlock = isComponent ? start : lineStartList[index];
     blockList.push({
       start: startBlock,
       end,
       source: source.slice(startBlock, end),
       form: isComponent ? 'component' : 'fence',
+      compName: isComponent ? marker.compName : '',
       lang: isComponent && lang === 'asset' ? '' : lang,
       title: isComponent ? String(marker.props.title ?? '') : codeInfoTitleGet(info),
       viewAuthored: isComponent ? viewMarker : codeInfoViewGet(info),
+      // a component with views of its own decides without the config
+      viewDefault: componentKind?.viewDefault ?? '',
       lineCount: isComponent && lang === 'asset' ? undefined : indexClose - index - 1,
       // the lines of the block; for a block of Code reading an item, the reference
       raw,
       isReference: isComponent && lang === 'asset',
+      // a document of its own (an MDX block): opened in its popup, not edited as lines
+      isEmbed: componentKind?.isEmbed === true,
+      labelDefault: componentKind?.labelDefault ?? '',
       lineIndex: index,
     });
     index = indexClose;
@@ -149,10 +166,15 @@ export function itemAtomModelBuild(text, { viewResolve, labelResolve, iconAlign 
   const atomList = [];
   for (const block of blockList) {
     const place = block.isWhole ? CODE_PLACE_LIST_ITEM : CODE_PLACE_IN_LIST_ITEM;
-    const view = (viewResolve ? viewResolve({ viewAuthored: block.viewAuthored, place, form: block.form }) : block.viewAuthored) || CODE_VIEW_LIST[0];
-    if (view !== 'icon' && block.isWhole) continue;
+    const view = block.viewDefault
+      ? (block.viewAuthored || block.viewDefault)
+      : ((viewResolve ? viewResolve({ viewAuthored: block.viewAuthored, place, form: block.form }) : block.viewAuthored) || CODE_VIEW_LIST[0]);
+    // a block of another view that is the whole item is edited as its lines;
+    // a document of its own never is
+    if (view !== 'icon' && block.isWhole && !block.isEmbed) continue;
     const isText = !block.isReference && LANG_TEXT_LIST.includes(block.lang.toLowerCase());
-    const label = block.title || (block.isReference ? (labelResolve?.(block) || 'code') : (isText ? 'text' : block.lang));
+    const label = block.title || block.labelDefault
+      || (block.isReference ? (labelResolve?.(block) || 'code') : (isText ? 'text' : block.lang));
     atomList.push({
       ...block,
       char: String.fromCodePoint(ITEM_ATOM_CHAR_FIRST + atomList.length),
@@ -276,15 +298,16 @@ export function itemAtomTextSourceGet(display, model) {
 // an item of the asset store (its lines are not in the document)
 export function itemPartGet(text, index) {
   const block = itemCodeBlockListGet(text)[index];
-  if (!block || block.isWhole || block.isReference) return undefined;
+  if (!block || block.isWhole || block.isReference || block.isEmbed) return undefined;
   const parsed = codeBlockTextParse(block.source);
   if (!parsed) return undefined;
   return { index, info: parsed.info, textInner: parsed.value, block };
 }
 
-// the own text of the item with the lines of a part written: inside its fence
-// (its info kept), or, for a block of text down to one line, as a line of text
-// among the others. isRemoved: the part taken out, with a line break around it.
+// the own text of the item with the lines of a part written inside its fence
+// (its info kept): a block among text stays a block, whatever its lines (To
+// text turns it into text). isRemoved: the part taken out, with a line break
+// around it.
 // -> { text, start, end }: the text and where the part stands in it now
 // (start = end where it was taken out); undefined when there is no such part
 export function itemPartTextWrite(textOwn, index, textInner, { isRemoved = false } = {}) {
@@ -293,15 +316,9 @@ export function itemPartTextWrite(textOwn, index, textInner, { isRemoved = false
   if (!block) return undefined;
   let replacement = '';
   if (!isRemoved) {
-    const parsed = codeBlockTextParse(block.source);
-    const typed = String(textInner ?? '');
-    if (parsed && LANG_TEXT_LIST.includes(parsed.lang.toLowerCase()) && !typed.includes('\n')) {
-      replacement = typed;
-    } else {
-      const built = codeBlockValueTextSet(block.source, typed);
-      if (built.code !== 0) return undefined;
-      replacement = built.data;
-    }
+    const built = codeBlockValueTextSet(block.source, String(textInner ?? ''));
+    if (built.code !== 0) return undefined;
+    replacement = built.data;
   }
   if (replacement !== '') {
     return { text: source.slice(0, block.start) + replacement + source.slice(block.end), start: block.start, end: block.start + replacement.length };
@@ -319,4 +336,44 @@ export function itemPartTextWrite(textOwn, index, textInner, { isRemoved = false
 export function itemPartOffsetGet(text, start, side) {
   if (side === 'before') return start > 0 && String(text)[start - 1] === '\n' ? start - 1 : start;
   return start;
+}
+
+// Enter in the lines of a block of an item (a part, or a code block that is
+// the whole item): the lines after the caret leave the block and become text
+// of the item right after it, joined into one line (codeTextJoin) and joined
+// to the line of text that follows the block, when there is one. the block
+// keeps the lines before the caret; it is taken out when none are left.
+//   textOwn   the own text of the item; index: the block among its code blocks
+//   textInner the lines of the block as typed; offsetStart / offsetEnd: the
+//             caret or the selection in them (a selection goes)
+// -> { text, offset }: the own text, and where the text after the block starts
+//    in it (an offset into the text as written); undefined when no such block
+export function itemBlockSplitOut(textOwn, index, textInner, offsetStart, offsetEnd = offsetStart, { textJoin, spaceIs }) {
+  const source = String(textOwn ?? '');
+  const block = itemCodeBlockListGet(source)[index];
+  if (!block) return undefined;
+  const typed = String(textInner ?? '');
+  const linesBefore = typed.slice(0, Math.min(offsetStart, offsetEnd)).replace(/\s+$/, '');
+  const rest = textJoin(typed.slice(Math.max(offsetStart, offsetEnd)));
+  let head = source.slice(0, block.start);
+  let tail = source.slice(block.end);
+  if (linesBefore !== '') {
+    const built = codeBlockValueTextSet(block.source, linesBefore);
+    if (built.code !== 0) return undefined;
+    head += built.data;
+  } else {
+    head = head.replace(/\n$/, '');
+  }
+  // the line of text after the block takes the rest at its start
+  const lineAfter = tail.startsWith('\n') ? tail.slice(1).split('\n')[0] : undefined;
+  const isLineAfterText = lineAfter !== undefined && lineAfter.trim() !== '' && !/^\s*(`{3,}|~{3,}|<!--)/.test(lineAfter);
+  if (rest !== '') {
+    if (isLineAfterText) tail = `\n${rest}${spaceIs(rest, lineAfter) ? ' ' : ''}${tail.slice(1)}`;
+    else tail = `\n${rest}${tail}`;
+  }
+  const separator = head === '' ? '' : '\n';
+  const tailText = tail.startsWith('\n') ? tail.slice(1) : tail;
+  const text = head === '' ? tailText : `${head}${tailText === '' ? '' : separator}${tailText}`;
+  const offset = head === '' ? 0 : head.length + (tailText === '' ? 0 : 1);
+  return { text, offset };
 }

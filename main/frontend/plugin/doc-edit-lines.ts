@@ -1,5 +1,10 @@
 import { createHash } from 'node:crypto';
 
+export {
+  lineOperationApply, lineOperationIsValid, lineOperationListApply, operationLineListGet, textLineListGet,
+} from '../src/lib/doc-line-operation.ts';
+export type { LineOperation } from '../src/lib/doc-line-operation.ts';
+
 // Line operations of the edit api (doc-edit-server.ts). A document is edited
 // as a list of lines, 1-based and inclusive, so the browser never sends the
 // whole file: it names the lines of one root-level block and the text that
@@ -18,107 +23,8 @@ import { createHash } from 'node:crypto';
 //
 // the line ending and the trailing newline of the file are kept as they are.
 
-export type LineOperation =
-  | { action: 'replaceLines'; lineStart: number; lineEnd: number; text: string }
-  | { action: 'insertLines'; lineAt: number; text: string }
-  | { action: 'deleteLines'; lineStart: number; lineEnd: number }
-  | { action: 'replaceAll'; text: string };
-
-export function lineOperationApply(textCurrent: string, operation: LineOperation): string {
-  const eol = textCurrent.includes('\r\n') ? '\r\n' : '\n';
-  const isTrailingNewline = textCurrent === '' || textCurrent.endsWith('\n');
-  const lineList = textLineListGet(textCurrent);
-  const lineCount = lineList.length;
-
-  let lineListNext: string[];
-  if (operation.action === 'replaceAll') {
-    lineListNext = textLineListGet(String(operation.text ?? ''));
-  } else if (operation.action === 'replaceLines') {
-    lineRangeCheck(operation.lineStart, operation.lineEnd, lineCount);
-    lineListNext = [
-      ...lineList.slice(0, operation.lineStart - 1),
-      ...operationLineListGet(String(operation.text ?? '')),
-      ...lineList.slice(operation.lineEnd),
-    ];
-  } else if (operation.action === 'insertLines') {
-    if (!lineNumberIs(operation.lineAt) || operation.lineAt > lineCount + 1) {
-      throw new Error(`insertLines: lineAt must be between 1 and ${lineCount + 1}, got ${operation.lineAt}`);
-    }
-    lineListNext = [
-      ...lineList.slice(0, operation.lineAt - 1),
-      ...operationLineListGet(String(operation.text ?? '')),
-      ...lineList.slice(operation.lineAt - 1),
-    ];
-  } else if (operation.action === 'deleteLines') {
-    lineRangeCheck(operation.lineStart, operation.lineEnd, lineCount);
-    lineListNext = [
-      ...lineList.slice(0, operation.lineStart - 1),
-      ...lineList.slice(operation.lineEnd),
-    ];
-  } else {
-    throw new Error(`unknown line operation: ${String((operation as any)?.action)}`);
-  }
-
-  if (lineListNext.length === 0) return '';
-  return lineListNext.join(eol) + (isTrailingNewline ? eol : '');
-}
-
-// several operations built against the same text, applied together. their
-// line numbers are those of textCurrent, so a caller never shifts them for
-// one another. they must not overlap: a range (replaceLines, deleteLines)
-// shares no line with another range, and an insertion point lies before,
-// after, or at the start of a range, never inside it. insertions at the
-// same point keep the order of the list. replaceAll is not accepted here.
-//
-// applied from the bottom of the file up, so every operation still finds its
-// lines where it was built: at the same line, a range goes before an
-// insertion (the insertion then lands before what replaced the range).
-export function lineOperationListApply(textCurrent: string, operationList: LineOperation[]): string {
-  const entryList = operationList.map((operation, index) => {
-    if (operation.action === 'replaceAll') throw new Error('replaceAll cannot be combined with other operations');
-    const isInsert = operation.action === 'insertLines';
-    return {
-      operation,
-      index,
-      isInsert,
-      lineStart: isInsert ? operation.lineAt : operation.lineStart,
-      lineEnd: isInsert ? operation.lineAt - 1 : operation.lineEnd,
-    };
-  });
-  for (const entryA of entryList) {
-    for (const entryB of entryList) {
-      if (entryA === entryB || entryA.isInsert) continue;
-      const isOverlap = entryB.isInsert
-        ? entryB.lineStart > entryA.lineStart && entryB.lineStart <= entryA.lineEnd
-        : entryB.lineStart <= entryA.lineEnd && entryB.lineEnd >= entryA.lineStart;
-      if (isOverlap) throw new Error(`line operations overlap at lines ${entryA.lineStart}..${entryA.lineEnd}`);
-    }
-  }
-  const entryListOrdered = [...entryList].sort((entryA, entryB) => {
-    if (entryA.lineStart !== entryB.lineStart) return entryB.lineStart - entryA.lineStart;
-    if (entryA.isInsert !== entryB.isInsert) return entryA.isInsert ? 1 : -1;
-    return entryB.index - entryA.index;
-  });
-  let text = textCurrent;
-  for (const entry of entryListOrdered) text = lineOperationApply(text, entry.operation);
-  return text;
-}
-
-// lines of a replaceLines / insertLines text: every "\n" separates two lines,
-// so "a\n" is ["a", ""]; "" is [].
-export function operationLineListGet(text: string): string[] {
-  if (text === '') return [];
-  return text.split(/\r?\n/);
-}
-
-// lines of a file. a trailing newline ends the last line instead of starting
-// an empty one, so "a\nb\n" is ["a", "b"] and "" is [].
-export function textLineListGet(text: string): string[] {
-  if (text === '') return [];
-  const lineList = text.split(/\r?\n/);
-  if (lineList[lineList.length - 1] === '') lineList.pop();
-  return lineList;
-}
+// the operations themselves are applied by src/lib/doc-line-operation.ts,
+// which the page uses too; this file adds what only the server has.
 
 // identity of one file version. the browser sends the hash it edited against,
 // so a change made elsewhere since then is detected instead of overwritten.
@@ -126,27 +32,3 @@ export function textHashGet(text: string): string {
   return createHash('sha1').update(text, 'utf-8').digest('hex');
 }
 
-export function lineOperationIsValid(operation: any): operation is LineOperation {
-  if (!operation || typeof operation !== 'object') return false;
-  if (operation.action === 'replaceAll') return typeof operation.text === 'string';
-  if (operation.action === 'insertLines') {
-    return lineNumberIs(operation.lineAt) && typeof operation.text === 'string';
-  }
-  if (operation.action === 'replaceLines') {
-    return lineNumberIs(operation.lineStart) && lineNumberIs(operation.lineEnd) && typeof operation.text === 'string';
-  }
-  if (operation.action === 'deleteLines') {
-    return lineNumberIs(operation.lineStart) && lineNumberIs(operation.lineEnd);
-  }
-  return false;
-}
-
-function lineRangeCheck(lineStart: number, lineEnd: number, lineCount: number) {
-  if (!lineNumberIs(lineStart) || !lineNumberIs(lineEnd) || lineStart > lineEnd || lineEnd > lineCount) {
-    throw new Error(`line range ${lineStart}..${lineEnd} is not inside the ${lineCount} lines of the file`);
-  }
-}
-
-function lineNumberIs(value: unknown): value is number {
-  return Number.isInteger(value) && (value as number) >= 1;
-}

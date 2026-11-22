@@ -29,7 +29,7 @@ import {
   pathDepthGet,
   pathIsWithin,
 } from '../lib/doc-edit-list.js';
-import { itemAtomCharIs, itemAtomTextBuild, itemCodeBlockListGet, itemPartOffsetGet, itemPartTextWrite } from '../lib/doc-edit-item-atom.js';
+import { itemAtomCharIs, itemAtomTextBuild, itemBlockSplitOut, itemCodeBlockListGet, itemPartGet, itemPartOffsetGet, itemPartTextWrite } from '../lib/doc-edit-item-atom.js';
 import { codeBlockAssetTextBuild, codeBlockTextParse, codeTextJoin, codeTextViewGet, codeTextViewSet, textJoinSpaceIs } from '../lib/doc-edit-code.js';
 import { assetRefParse } from '../lib/doc-asset-ref.js';
 
@@ -128,6 +128,8 @@ export const structEventTypeList = [
   'editItemPartEnterRequest',
   'editItemPartLeaveRequest',
   'editItemTextJoinRequest',
+  'editItemBlockSplitRequest',
+  'editItemBlockInsertRequest',
   'editItemCodeTextRequest',
   'editStructDropRequest',
 ];
@@ -607,6 +609,12 @@ export class DocEditStructStore {
         });
       }
       if (event.type === 'editItemTextJoinRequest') return this.sessionItemTextJoin();
+      if (event.type === 'editItemBlockSplitRequest') return this.sessionItemBlockSplitOut(offsetGet('offsetStart', textLength), offsetGet('offsetEnd', textLength));
+      if (event.type === 'editItemBlockInsertRequest') {
+        // the text of the surface, the slash text gone from it
+        if (typeof event.data.text === 'string') this.editStore.sessionDraftSet(event.data.text);
+        return this.sessionItemBlockInsert(String(event.data.source ?? ''), offsetGet('offset', textLength));
+      }
       if (event.type === 'editItemMergeRequest') return this.sessionItemMerge(event.data.direction === 'next' ? 'next' : 'previous');
       if (event.type === 'editItemFormatRequest') return this.sessionItemBlockFormat(offsetGet('offsetStart', textLength), offsetGet('offsetEnd', textLength));
       if (event.type === 'editItemLevelRequest') {
@@ -869,6 +877,56 @@ export class DocEditStructStore {
       result: listItemTextSet(list, ref.itemPath, textItem),
       next: { partIndex, selectionInitial: selectionInitial ?? ('end' as EditSelectionInitial) },
     }));
+  }
+
+  // Enter in the lines of a code block of an item (a part, or a block of code
+  // that is the whole item): the lines after the caret leave the block and
+  // become text of the item right after it, joined to the text that follows
+  // it there (itemBlockSplitOut); the author goes on at the start of that text
+  sessionItemBlockSplitOut(offsetStart: number, offsetEnd: number): Promise<EditResult> {
+    return this.sessionItemEdit((list, { ref, textDraft, session }) => {
+      if (session.itemFormat !== 'block') return { result: { code: -1, message: 'the item is not edited as the lines of a block' } };
+      const split = itemBlockSplitOut(listItemTextGet(list, ref.itemPath), session.itemPart?.index ?? 0, textDraft, offsetStart, offsetEnd, {
+        textJoin: codeTextJoin,
+        spaceIs: textJoinSpaceIs,
+      });
+      if (!split) return { result: { code: -1, message: 'the block is not in the item anymore' } };
+      return {
+        result: listItemTextSet(list, ref.itemPath, split.text),
+        next: { selectionInitial: { type: 'offset', offset: split.offset, isSource: true } as EditSelectionInitial },
+      };
+    });
+  }
+
+  // a block put at the caret of the text of an item (an MDX block chosen with
+  // the slash mode): written there, on lines of its own between the text
+  // before and after the caret, and the author goes on after its chip
+  sessionItemBlockInsert(source: string, offset: number): Promise<EditResult> {
+    return this.sessionItemEdit((list, { ref, textDraft, session }) => {
+      if (session.itemPart) return { result: { code: -1, message: 'a block goes into the text of the item, not into the lines of a block' } };
+      if (session.itemFormat === 'block') return { result: { code: -1, message: 'the item is a block: add the block in an item of text' } };
+      const offsetCut = Math.max(0, Math.min(offset, textDraft.length));
+      const textWrite = (text: string) => (session.itemAtom ? itemAtomTextBuild(text, session.itemAtom) : text);
+      const sourceBefore = textWrite(textDraft.slice(0, offsetCut)).replace(/\s+$/, '');
+      const sourceAfter = textWrite(textDraft.slice(offsetCut)).replace(/^\s+/, '');
+      const textNew = [sourceBefore, source, sourceAfter].filter((text) => text !== '').join('\n');
+      const offsetAfter = (sourceBefore === '' ? 0 : sourceBefore.length + 1) + source.length;
+      // a block whose lines are edited where they are drawn (a code block in a
+      // view other than icon): the author goes on in its lines at once. an
+      // icon, an MDX block: the caret after its chip
+      const partIndex = itemCodeBlockListGet(sourceBefore).length;
+      const isPart = Boolean(itemPartGet(textNew, partIndex))
+        && this.editStore.itemAtomModelGet(ref.path, textNew)?.atomList[partIndex]?.kind === 'block';
+      return {
+        result: listItemTextSet(list, ref.itemPath, textNew),
+        // the block alone, the whole item: its lines (a code block) or after its chip
+        next: isPart
+          ? { partIndex, selectionInitial: 'start' as EditSelectionInitial }
+          : sourceBefore === '' && sourceAfter === ''
+            ? { selectionInitial: 'end' as EditSelectionInitial }
+            : { selectionInitial: { type: 'offset', offset: offsetAfter, isSource: true } as EditSelectionInitial },
+      };
+    });
   }
 
   // the new-item button above of the bar: the item written as it is typed,

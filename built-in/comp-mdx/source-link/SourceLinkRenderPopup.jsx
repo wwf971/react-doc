@@ -4,10 +4,12 @@ import { DocsBody, DocsDescription, DocsTitle } from '../../../main/frontend/UIC
 import { buildMdxComps } from '../../../main/frontend/src/lib/mdx-comps.js';
 import { useDocStores } from '../../../main/frontend/src/store/context.js';
 import { DocLanguageProvider } from '../multi-lang/MultiLangContext.jsx';
+import { DocPopupBody } from '../../../main/comp-doc/edit/DocPopupBody.jsx';
 import './SourceLink.css';
 
 // render-mode popup for SourceLink: shows the compiled document instead of its
-// source text. the target is compiled through the normal DocSourceStore
+// source text, and edits it in edit mode where the page can write it
+// (DocPopupBody: the edit body of the document, as on the page). the target is compiled through the normal DocSourceStore
 // pipeline; components inside the popup receive the target as their source
 // path so registered-component configuration and identity stay scoped to it.
 const SourceLinkRenderPopup = observer(function SourceLinkRenderPopup({ Panel, store }) {
@@ -23,7 +25,8 @@ const SourceLinkRenderPopup = observer(function SourceLinkRenderPopup({ Panel, s
 	useEffect(() => {
 		if (!store.isPopupOpen) return undefined;
 		const keyDownHandle = (event) => {
-			if (event.key === 'Escape') store.popupClose();
+			// an editor of the document in the popup takes Escape first (cancel)
+			if (event.key === 'Escape' && !event.defaultPrevented) store.popupClose();
 		};
 		window.addEventListener('keydown', keyDownHandle);
 		return () => window.removeEventListener('keydown', keyDownHandle);
@@ -38,7 +41,8 @@ const SourceLinkRenderPopup = observer(function SourceLinkRenderPopup({ Panel, s
 			config={{
 				isPopup: true,
 				isCloseVisible: true,
-				className: 'doc-code-block-compact-popup doc-source-link-render-popup',
+				// a popup of the edit layer: a click in it is not a click on the block it belongs to
+				className: 'doc-code-block-compact-popup doc-source-link-render-popup doc-edit-popup',
 				bodyClassName: 'doc-source-link-render-popup-body',
 			}}
 			content={(
@@ -51,9 +55,12 @@ const SourceLinkRenderPopup = observer(function SourceLinkRenderPopup({ Panel, s
 							? <DocsDescription className="doc-page-description">{compiled.description}</DocsDescription>
 							: null}
 						<DocsBody>
-							{compiled.isContentEmpty
-								? <p className="doc-content-empty">This Markdown file is empty. Content can be added later.</p>
-								: <Body components={mdxComps} />}
+							{/* in edit mode, where the page can write it, the document is edited here */}
+							<DocPopupBody path={pathPopup}>
+								{compiled.isContentEmpty
+									? <p className="doc-content-empty">This Markdown file is empty. Content can be added later.</p>
+									: <Body components={mdxComps} />}
+							</DocPopupBody>
 						</DocsBody>
 					</div>
 				</DocLanguageProvider>

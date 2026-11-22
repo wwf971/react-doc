@@ -7,8 +7,10 @@ import '../edit/DocEdit.css';
 import './DocBlockSelect.css';
 
 // The right-click menu of the selected blocks
-// (doc_page_impl_edit_structure.md#block-selection-mode). Open state lives in
-// DocBlockSelectStore.contextMenu, set by DocBlockSelectBlock; the menu is
+// (doc_page_impl_edit_structure.md#block-selection-mode), in block selection
+// mode and in edit mode (a right click on a block that is not being edited:
+// that block alone). Open state lives in DocBlockSelectStore.contextMenu,
+// set by DocBlockSelectBlock and DocEditBlock; the menu is
 // the Menu of @wwf971/react-comp-misc injected as config.components.Menu,
 // at the point of the click, styled like the mode menu of a block.
 //   Copy Blocks To…        the dialog that copies or moves them, Copy first
@@ -72,8 +74,9 @@ export const DocBlockSelectMenu = observer(function DocBlockSelectMenu() {
     else blockSelectStore.contextMenuClose();
   };
 
+  // the block right-clicked: its wrapper in block selection mode, or in edit mode
   const blockElementGet = () => document.querySelector(
-    `.doc-edit-body .doc-block-select-block[data-block-index="${menu.blockIndex}"]`,
+    `.doc-edit-body[data-edit-path="${CSS.escape(menu.path)}"] .doc-edit-block[data-block-index="${menu.blockIndex}"]`,
   );
 
   return (

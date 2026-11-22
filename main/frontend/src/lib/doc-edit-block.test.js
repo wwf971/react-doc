@@ -74,7 +74,7 @@ test('the wrapper elements carry the block index and keep the grouped nodes', ()
   remarkEditBlock()(tree);
   assert.equal(tree.children.length, 7);
   assert.ok(tree.children.every((node) => node.type === 'mdxJsxFlowElement' && node.name === 'DocEditBlock'));
-  assert.deepEqual(tree.children[3].attributes, [{ type: 'mdxJsxAttribute', name: 'blockIndex', value: '3' }]);
+  assert.deepEqual(tree.children[3].attributes.find((attribute) => attribute.name === 'blockIndex'), { type: 'mdxJsxAttribute', name: 'blockIndex', value: '3' });
   assert.deepEqual(tree.children[3].children.map((node) => node.type), ['html', 'html', 'code']);
   assert.deepEqual(tree.children[6].children.map((node) => node.type), ['paragraph', 'table']);
 });
@@ -410,3 +410,76 @@ test('a confirmation closed while its files are listed is never filled', async (
   }
 });
 
+
+test('the key of a block: what its drawing comes from, so an unchanged block is not drawn again', () => {
+  const keysOf = (text, docKey = '') => {
+    const tree = remark().use(remarkGfm).parse(text);
+    remarkEditBlock({ docKey })(tree, { value: text });
+    return tree.children.map((node) => node.attributes.find((attribute) => attribute.name === 'blockKey')?.value);
+  };
+  const before = keysOf('A plain paragraph.\n\n- one\n- two\n\nSee [a](./a.md).\n\n```js\nx\n```\n');
+  // a line added in the list: the list changed; the blocks below it moved and
+  // keep their keys, the link and the code block too (the lines they carry are
+  // read with how far their block moved, DocEditLineShiftContext)
+  const after = keysOf('A plain paragraph.\n\n- one\n- two\n- three\n\nSee [a](./a.md).\n\n```js\nx\n```\n');
+  assert.equal(after[0], before[0]);
+  assert.notEqual(after[1], before[1]);
+  assert.equal(after[2], before[2]);
+  assert.equal(after[3], before[3]);
+  // every wrapper says the line it starts on in this compile
+  const treeLine = remark().use(remarkGfm).parse('Para.\n\n- one\n');
+  remarkEditBlock()(treeLine, { value: 'Para.\n\n- one\n' });
+  assert.deepEqual(treeLine.children.map((node) => node.attributes.find((attribute) => attribute.name === 'blockLine')?.value), ['1', '3']);
+  // a plain block below a change keeps its key, its line is not drawn
+  const lower = keysOf('- one\n\nA plain paragraph.\n');
+  const lowerMoved = keysOf('- one\n- two\n\nA plain paragraph.\n');
+  assert.equal(lowerMoved[1], lower[1]);
+  // a definition elsewhere, the frontmatter: every block is drawn again
+  assert.notEqual(keysOf('Text.\n\n[x]: ./a.md\n')[0], keysOf('Text.\n\n[x]: ./b.md\n')[0]);
+  assert.notEqual(keysOf('Text.\n', 'f1')[0], keysOf('Text.\n', 'f2')[0]);
+  // no file text (a tree parsed without one): no key, the block is always drawn
+  const tree = remark().parse('Text.\n');
+  remarkEditBlock()(tree);
+  assert.equal(tree.children[0].attributes.find((attribute) => attribute.name === 'blockKey'), undefined);
+});
+
+test('a keyed computed value notifies only when its value changes', async () => {
+  const { keyedComputedCreate } = await import('./keyed-computed.js');
+  const { autorun, observable, runInAction: run } = await import('mobx');
+  const state = observable({ session: { index: 1 }, other: 0 });
+  const keyedGet = keyedComputedCreate();
+  const isEditingGet = (index) => keyedGet(`editing:${index}`, () => state.session.index === index);
+  let runCount = 0;
+  const dispose = autorun(() => { isEditingGet(3); runCount += 1; });
+  assert.equal(runCount, 1);
+  run(() => { state.session = { index: 2 }; });
+  assert.equal(runCount, 1);
+  run(() => { state.session = { index: 3 }; });
+  assert.equal(runCount, 2);
+  dispose();
+});
+
+test('the content of a block wrapper is made when the wrapper is drawn', async () => {
+  const { compile, run } = await import('@mdx-js/mdx');
+  const { recmaEditBlockChildrenLazy: lazy } = await import('./doc-edit-block.js');
+  const code = String(await compile('<DocEditBlock blockIndex="0" blockKey="k">hello *there*</DocEditBlock>\n\n<Other>kept</Other>\n', {
+    outputFormat: 'function-body',
+    recmaPlugins: [lazy],
+  }));
+  const propsByName = {};
+  const jsx = (type, props) => {
+    const name = typeof type === 'string' ? type : type?.displayName ?? '';
+    if (name) propsByName[name] = props;
+    return { type, props };
+  };
+  const named = (name) => Object.assign(() => null, { displayName: name });
+  const { default: Content } = await run(code, { jsx, jsxs: jsx, Fragment: named('Fragment') });
+  Content({ components: { DocEditBlock: named('DocEditBlock'), Other: named('Other') } });
+  assert.equal(propsByName.DocEditBlock.children, undefined);
+  assert.equal(typeof propsByName.DocEditBlock.renderChildren, 'function');
+  assert.equal(propsByName.DocEditBlock.blockKey, 'k');
+  const content = propsByName.DocEditBlock.renderChildren();
+  assert.ok(JSON.stringify(content).includes('hello'));
+  // another component keeps its children
+  assert.equal(propsByName.Other.children.props?.children ?? propsByName.Other.children, 'kept');
+});

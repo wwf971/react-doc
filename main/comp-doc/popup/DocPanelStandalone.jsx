@@ -23,6 +23,13 @@ import './DocPanelStandalone.css';
 //                       asked on every pointer move of a drag, isEnd on the
 //                       last one. a maximized panel neither moves nor resizes
 const resizeEdgeList = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'];
+// what in the header is no handle of the panel: controls, and the lists and
+// menus they open there
+const HEADER_DRAG_SKIP_SELECTOR = [
+	'button', 'a', 'input', 'textarea', 'select', 'label', '[contenteditable]',
+	'[role="button"]', '[role="combobox"]', '[role="listbox"]', '[role="option"]',
+	'[role="menu"]', '[role="menuitem"]', '[role="alertdialog"]',
+].join(', ');
 const sizeMin = { width: 320, height: 180 };
 // what of a moved panel stays in the window: the header can always be grabbed
 const keepVisible = { x: 80, y: 32 };
@@ -65,9 +72,12 @@ export function DocPanelStandalone({ data = {}, config = {}, headerRightContent,
 		onPointerCancel: (event) => dragMove(event, true),
 	};
 
+	// a drag starts on the empty parts of the header only: never on a control,
+	// nor on a list or menu a control opened in it (the languages of a field:
+	// captured by the header, the pointer would never click an entry)
 	const headerPointerDown = (event) => {
 		if (!isMovable || event.button !== 0) return;
-		if (event.target.closest('button, a, input, textarea, select, [role="button"], [contenteditable]')) return;
+		if (event.target.closest(HEADER_DRAG_SKIP_SELECTOR)) return;
 		dragStart(event, 'move');
 	};
 

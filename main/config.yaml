@@ -160,6 +160,7 @@ compRegistry:
   ImageGrid: common/ImageGrid
   DiagramText: common/DiagramText
   Code: common/Code                    # a code block whose lines are in the asset service layer
+  Mdx: common/Mdx                      # an MDX block: a document embedded in this one (doc_page_impl_mdx_embed.md)
   DiagramMermaid: common/DiagramMermaid
   # DiagramER, DiagramDataverseEntity, DiagramPowerAutomate, DiagramBusinessRule
   # and CardDiagram are components of the package cloud-dev-vis, which the

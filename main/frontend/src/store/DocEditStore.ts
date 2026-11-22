@@ -10,10 +10,13 @@ import { lineShiftListGet } from '../lib/doc-comp-state.js';
 import { docEditApiCreate } from '../lib/doc-edit-api.js';
 import { ASSET_REF_LANG, ASSET_STORE_ID_LOCAL, assetRefLangIs, assetRefParse, assetRefTextBuild } from '../lib/doc-asset-ref.js';
 import {
-  CODE_COMPONENT_NAME, codeBlockAssetDataGet, codeBlockAssetTextBuild, codeBlockInTextReplace, codeBlockTextParse, codeBlockValueTextSet, codeTextJoin,
+  CODE_COMPONENT_NAME, codeBlockAssetDataGet, codeBlockAssetTextBuild, codeBlockInTextReplace, codeBlockTextParse, codeBlockValueTextSet, codeMarkerPropsSet, codeTextJoin,
   codeTextViewGet, codeTextViewSet,
 } from '../lib/doc-edit-code.js';
 import { itemAtomModelBuild, itemAtomOffsetDisplayGet, itemAtomTextBuild, itemPartGet, itemPartTextWrite } from '../lib/doc-edit-item-atom.js';
+import { embedPathParse, embedTextHashGet } from '../lib/doc-edit-embed.js';
+import { keyedComputedCreate } from '../lib/keyed-computed.js';
+import { lineOperationApply, lineOperationListApply } from '../lib/doc-line-operation';
 import { CODE_VIEW_LIST, codeViewConfigKeyGet } from '../lib/rehype-code-view.js';
 import { compDefinitionNormalize, compIdResolve, compInputNormalize } from '../../../comp-doc/registry/comp-registry.js';
 import { compDefinitionGet } from '../../../comp-doc/registry/comp-definition.js';
@@ -36,7 +39,10 @@ import {
   componentTemplateTextBuild,
   editDocModelBuild,
   frontmatterReplaceOperationBuild,
+  markerValueNormalize,
+  recmaEditBlockChildrenLazy,
   remarkEditBlock,
+  textHashShort,
 } from '../lib/doc-edit-block.js';
 import {
   itemBlockFormatGet,
@@ -369,6 +375,8 @@ export class DocEditStore {
   isBlockSelectMode = false;
   sourceByPath: Record<string, EditSource> = {};
   docEditByPath: Record<string, EditDocState> = {};
+  // computed values per key, made on first use (lib/keyed-computed.js)
+  keyedGet = keyedComputedCreate();
   compilePendingByPath: Record<string, { hash: string; promise: Promise<void> }> = {};
   session: EditSession | undefined = undefined;
   blockViewModeById: Record<string, string> = {};
@@ -435,6 +443,7 @@ export class DocEditStore {
       docStore: false,
       sourceStore: false,
       docEditByPath: observable.shallow,
+      keyedGet: false,
       sourceByPath: observable.shallow,
       compilePendingByPath: false,
       leavePromise: false,
@@ -450,6 +459,9 @@ export class DocEditStore {
   }
 
   init() {
+    // the reading compile of a document shown by its edit body waits for the
+    // page to be idle after a write (DocSourceStore.refreshDeferIs)
+    this.sourceStore.refreshDeferIs = (path: string) => (this.isEditMode || this.isBlockSelectMode) && this.docEditByPath[path]?.status === 'done';
     if (!this.api) return;
     this.reactionDispose = reaction(
       () => ({
@@ -457,15 +469,21 @@ export class DocEditStore {
         path: this.docStore.docCurrentPath,
         fileManifest: this.sourceStore.fileManifest,
       }),
-      ({ isBodyEdit, path }) => {
-        // leaving the page is leaving the session: the draft is saved
-        if (this.session && this.session.path !== path) void this.sessionLeave();
-        runInAction(() => {
-          if (this.insertMenu && this.insertMenu.path !== path) this.insertMenu = undefined;
-          if (this.deleteConfirm && this.deleteConfirm.path !== path) this.deleteConfirm = undefined;
-          if (this.blockMove && this.blockMove.path !== path) this.blockMove = undefined;
-          if (this.blockAssetMove && this.blockAssetMove.path !== path) this.blockAssetMove = undefined;
-        });
+      ({ isBodyEdit, path }, previous) => {
+        // leaving the page is leaving the session: the draft is saved. only
+        // a change of the page: a document edited in a popup or in a block of
+        // the page (an MDX block, a linked document, a zettel) is not the
+        // page's, and a write of a file (a new manifest) leaves nothing
+        const isPageLeft = previous !== undefined && previous.path !== path;
+        if (isPageLeft && this.session && this.session.path !== path) void this.sessionLeave();
+        if (isPageLeft) {
+          runInAction(() => {
+            if (this.insertMenu && this.insertMenu.path !== path) this.insertMenu = undefined;
+            if (this.deleteConfirm && this.deleteConfirm.path !== path) this.deleteConfirm = undefined;
+            if (this.blockMove && this.blockMove.path !== path) this.blockMove = undefined;
+            if (this.blockAssetMove && this.blockAssetMove.path !== path) this.blockAssetMove = undefined;
+          });
+        }
         if (isBodyEdit && this.docIsEditable(path)) void this.docEditEnsure(path);
       },
       { fireImmediately: true },
@@ -503,6 +521,9 @@ export class DocEditStore {
       const isLeft = await this.sessionLeave();
       if (!isLeft) return false;
     }
+    // the reading body is shown again: the reading compiles put off are done
+    // first, so it never shows the text before the edits
+    if (!isEditMode) await this.sourceStore.refreshDeferredFlush?.();
     runInAction(() => {
       this.isEditMode = isEditMode;
       if (isEditMode) this.isBlockSelectMode = false;
@@ -530,6 +551,8 @@ export class DocEditStore {
       const isLeft = await this.editModeSet(false);
       if (!isLeft) return false;
     }
+    // back to reading: the reading compiles put off are done first (editModeSet)
+    if (!isBlockSelectMode && this.isBlockSelectMode) await this.sourceStore.refreshDeferredFlush?.();
     runInAction(() => {
       this.isBlockSelectMode = isBlockSelectMode;
     });
@@ -584,8 +607,18 @@ export class DocEditStore {
 
   // an md/mdx file of the collected source. inline items, component panels
   // and synthesized source-file pages have no file of their own.
+  // one value per path (keyed computed): every code block and component of a
+  // page asks it, and the map of the entries it reads is new with every file
+  // written; they are drawn again only when the answer changes
   docIsEditable(path: string): boolean {
+    return this.keyedGet(`docIsEditable\u0000${path}`, () => this.docIsEditableDerive(path));
+  }
+
+  private docIsEditableDerive(path: string): boolean {
     if (!this.isAvailable || !path) return false;
+    // a document embedded in a block of another one: as its host
+    const embed = embedPathParse(path);
+    if (embed) return this.docIsEditable(embed.hostPath);
     if (this.sourceStore.pathReadOnlyReasonGet(path) !== '') return false;
     const entry = this.sourceStore.entryByInternalPath.get(path);
     return Boolean(entry) && (entry.ext === 'md' || entry.ext === 'mdx');
@@ -619,6 +652,10 @@ export class DocEditStore {
   // reads the file from disk and compiles it when its text changed
   async docEditEnsure(path: string): Promise<void> {
     if (!this.api) return;
+    if (embedPathParse(path)) {
+      await this.embedEnsure(path);
+      return;
+    }
     const sourceKnown = this.sourceByPath[path];
     if (!sourceKnown) {
       runInAction(() => {
@@ -677,7 +714,8 @@ export class DocEditStore {
   }
 
   private async docEditCompile(path: string, text: string, hash: string): Promise<void> {
-    const entry = this.sourceStore.entryByInternalPath.get(path);
+    // an embedded document is written in the dialect of its host
+    const entry = this.sourceStore.entryByInternalPath.get(embedPathParse(path)?.hostPath ?? path);
     const format = entry?.ext === 'mdx' ? 'mdx' : 'md';
     const compileConfig = this.sourceStore.compileConfig ?? {};
     let blockListCompiled: any[] = [];
@@ -689,19 +727,27 @@ export class DocEditStore {
         format,
         config: {
           ...compileConfig,
+          // the content of a block made when the block is drawn, not on every write
+          recmaPlugins: [...(compileConfig.recmaPlugins ?? []), recmaEditBlockChildrenLazy],
           remarkPluginsFirst: [
             ...(compileConfig.remarkPluginsFirst ?? []),
-            [remarkEditBlock, { onBlockList: (blockList: any[]) => { blockListCompiled = blockList; } }],
+            // the frontmatter is not in what the plugin parses: it is part of every block key
+            [remarkEditBlock, { docKey: textHashShort(/^---\r?\n[\s\S]*?\r?\n---\r?\n/.exec(text)?.[0] ?? ''), onBlockList: (blockList: any[]) => { blockListCompiled = blockList; } }],
           ],
         },
       });
       const model = editDocModelBuild({ source: text, blockListCompiled, format });
+      // the table of contents kept when its entries are the same: the toc of
+      // the page is drawn again for a new list only
+      const tocPrevious = this.docEditByPath[path]?.toc;
+      const tocNext = Array.isArray(compiled.toc) ? compiled.toc : [];
+      const toc = tocPrevious && tocListIsSame(tocPrevious, tocNext) ? tocPrevious : tocNext;
       stateNext = {
         status: 'done',
         hash,
         model,
         Body: compiled.Body,
-        toc: Array.isArray(compiled.toc) ? compiled.toc : [],
+        toc,
         titleFrontmatter: compiled.titleFrontmatter,
         description: compiled.description,
         isContentEmpty: model.blockList.length === 0,
@@ -782,6 +828,7 @@ export class DocEditStore {
     if (source?.status !== 'done' || !source.hash) {
       return { code: -1, message: 'The document source is not loaded.' };
     }
+    if (embedPathParse(path)) return this.embedOperationApply(path, operation, { messageFailure, onApplied, stateRemapList });
     const result = await this.api.sourceApply(path, source.hash, operation, filePathDeleteList);
     if (result.code !== 0) {
       return { code: result.code, message: result.code === -2 ? messageConflict : result.message || messageFailure };
@@ -2215,6 +2262,15 @@ export class DocEditStore {
     return this.codeFenceTextChange(path, sourceLine, (blockText) => codeBlockValueTextSet(blockText, value, { lang }), 'The lines of the block were not written.');
   }
 
+  // the title of an MDX block, written on its marker (line: the line of the
+  // marker, as the block has it, config.sourceLine); '' removes it. data.title:
+  // the title as written (doc_page_impl_mdx_embed.md#the-popup)
+  async mdxEmbedTitleSet(path: string, line: number, title: string): Promise<EditResult> {
+    const titleText = markerValueNormalize(title);
+    const result = await this.codeFenceTextChange(path, line + 1, (blockText) => codeMarkerPropsSet(blockText, { title: titleText }), 'The title of the block was not written.');
+    return result.code === 0 ? { code: 0, message: '', data: { ...(result.data ?? {}), title: titleText } } : result;
+  }
+
   // why the lines of a fenced code block cannot move into the asset service
   // layer from its dialog ('' when they can)
   codeFenceAssetMoveReasonGet(path: string): string {
@@ -2260,6 +2316,18 @@ export class DocEditStore {
     if (!this.docEditByPath[path]?.model || this.docEditIsStale(path)) await this.docEditEnsure(path);
     const isLeft = await this.sessionLeaveForIndexAction(path);
     if (!isLeft) return { code: -1, message: this.session?.message || 'The open edit could not be saved.' };
+    return this.codeFenceTextChangeRaw(path, sourceLine, transform, messageFailure);
+  }
+
+  // the block of codeFenceTextChange found and written, the document read and
+  // no session left (an embedded document written into its host does this
+  // while its own session is being saved)
+  private async codeFenceTextChangeRaw(
+    path: string,
+    sourceLine: number,
+    transform: (blockText: string) => EditResult | Promise<EditResult>,
+    messageFailure: string,
+  ): Promise<EditResult> {
     const model = this.docEditByPath[path]?.model;
     if (!model) return { code: -1, message: 'the document is not read' };
     const lineFile = sourceLine + (model.frontmatter?.lineEnd ?? 0);
@@ -2268,7 +2336,8 @@ export class DocEditStore {
     const messageMoved = `no code block starts at line ${sourceLine} of ${path} (the document changed: read it again)`;
     if (!block) return { code: -1, message: messageMoved };
     let text: string;
-    if (block.kind === 'code' && !block.component) {
+    if (!block.list) {
+      // a root-level block: a code block, or a component block with its data in a fence
       const changed = await codeBlockInTextReplace(block.text, lineFile - block.lineStart, transform);
       if (changed.code !== 0) return changed.message === 'no code fence starts at that line' ? { code: -1, message: messageMoved } : changed;
       text = changed.data.text;
@@ -2300,6 +2369,75 @@ export class DocEditStore {
         this.blockTextPending = { path, blockIndex, text };
       },
     });
+  }
+
+  // ---------- documents embedded in a block of another one ----------
+  // (doc_page_impl_mdx_embed.md) the text of an MDX block is a document of its
+  // own (embedPathBuild: its host and the line of its block). it is read from
+  // the fence of its block, compiled and edited as any document, and every
+  // operation on it is applied here and written into that fence: one write of
+  // the host, recorded in its history.
+
+  // the text of an embedded document as its host holds it now, or undefined
+  embedTextGet(path: string): string | undefined {
+    const embed = embedPathParse(path);
+    const model = embed ? this.docEditByPath[embed.hostPath]?.model : undefined;
+    if (!embed || !model) return undefined;
+    const located = codeFenceLocate(model, embed.line + 1 + (model.frontmatter?.lineEnd ?? 0));
+    if (!located) return undefined;
+    const lineList = located.text.split('\n');
+    const parsed = codeBlockTextParse(lineList.slice(0, located.lineIndexClose + 1).slice(Math.max(0, located.lineIndex - 1)).join('\n'));
+    return parsed ? parsed.value : undefined;
+  }
+
+  private async embedEnsure(path: string): Promise<void> {
+    const embed = embedPathParse(path)!;
+    if (!this.docEditByPath[embed.hostPath]?.model || this.docEditIsStale(embed.hostPath)) await this.docEditEnsure(embed.hostPath);
+    const text = this.embedTextGet(path);
+    if (text === undefined) {
+      runInAction(() => {
+        this.sourceByPath[path] = { status: 'error', message: 'the block is not in its document anymore: open it again from there' };
+      });
+      return;
+    }
+    await this.sourceAccept(path, text, embedTextHashGet(text));
+  }
+
+  // an operation on an embedded document: applied to its text here, the text
+  // written into the fence of its block in the host (codeFenceTextChangeRaw),
+  // then accepted as the new text of the embedded document
+  private async embedOperationApply(
+    path: string,
+    operation: any,
+    { messageFailure, onApplied, stateRemapList }: { messageFailure: string; onApplied?: () => void; stateRemapList?: { lineFrom: number; lineTo: number | undefined }[] },
+  ): Promise<EditResult> {
+    const embed = embedPathParse(path)!;
+    const source = this.sourceByPath[path];
+    let textAfter: string;
+    try {
+      textAfter = Array.isArray(operation) ? lineOperationListApply(source.text ?? '', operation) : lineOperationApply(source.text ?? '', operation);
+    } catch (error: any) {
+      return { code: -1, message: String(error?.message ?? error) };
+    }
+    if (!this.docEditByPath[embed.hostPath]?.model || this.docEditIsStale(embed.hostPath)) await this.docEditEnsure(embed.hostPath);
+    // the text is unchanged in the host since it was read: else it changed elsewhere
+    if (this.embedTextGet(path) !== source.text) return { code: -2, message: messageConflict };
+    const result = await this.codeFenceTextChangeRaw(
+      embed.hostPath,
+      embed.line + 1,
+      (blockText) => codeBlockValueTextSet(blockText, textAfter.replace(/\n$/, '')),
+      messageFailure,
+    );
+    if (result.code !== 0) return result;
+    if (this.compStateStore) {
+      if (stateRemapList) this.compStateStore.docLineRemap(path, stateRemapList);
+      else this.compStateStore.docLineShift(path, lineShiftListGet(operation, 0));
+    }
+    if (onApplied) runInAction(onApplied);
+    const text = this.embedTextGet(path) ?? textAfter;
+    const hash = embedTextHashGet(text);
+    await this.sourceAccept(path, text, hash);
+    return { code: 0, message: '', data: { text, hash } };
   }
 
   // a new item of the local store holding the lines of a code block, as a
@@ -3009,4 +3147,69 @@ function eventBlockTextGet(eventData: Record<string, any>, block: any): string |
     return componentBlockTextBuild(block, { raw: eventData.raw, props });
   }
   return undefined;
+}
+
+// the code fence at a line of a document (lines of the file): the root-level
+// block holding it, or the deepest list item whose own text has that line.
+//   { block, blockIndex, item?, text, lineIndex, lineIndexClose }: text is the
+//   text of the block or the own text of the item, lineIndex the line of the
+//   fence in it, lineIndexClose the line of its closing fence
+function codeFenceLocate(model: any, lineFile: number): any {
+  const blockIndex = model.blockList.findIndex((one: any) => one.lineStart <= lineFile && lineFile <= one.lineEnd);
+  const block = model.blockList[blockIndex];
+  if (!block) return undefined;
+  let located: any;
+  if (!block.list) {
+    located = { block, blockIndex, text: block.text, lineIndex: lineFile - block.lineStart };
+  } else {
+    located = [...block.list.itemByPath.values()]
+      .map((item: any) => {
+        const lineOwnStart = item.lineStart + (item.isMarkerLineOwn ? 1 : 0);
+        const textOwn = listItemTextGet(block.list, item.path);
+        return { block, blockIndex, item, text: textOwn, lineIndex: lineFile - lineOwnStart };
+      })
+      .filter((one: any) => one.lineIndex >= 0 && one.lineIndex < one.text.split('\n').length)
+      .sort((a: any, b: any) => b.item.depth - a.item.depth)[0];
+  }
+  if (!located) return undefined;
+  const lineList = located.text.split('\n');
+  const open = /^ {0,3}(`{3,}|~{3,})/.exec(lineList[located.lineIndex] ?? '');
+  if (!open) return undefined;
+  let indexClose = located.lineIndex + 1;
+  for (; indexClose < lineList.length; indexClose += 1) {
+    const close = /^ {0,3}(`{3,}|~{3,})\s*$/.exec(lineList[indexClose]);
+    if (close && close[1][0] === open[1][0] && close[1].length >= open[1].length) break;
+  }
+  if (indexClose >= lineList.length) return undefined;
+  return { ...located, lineIndexClose: indexClose };
+}
+
+// two tables of contents with the same entries: their url, their depth and
+// their title, which is a React element (rehypeToc), compared by what it is
+// made of (its type, its props, its children); a title that cannot be read
+// so is never the same
+function tocListIsSame(listBefore: any[], listNext: any[]): boolean {
+  if (listBefore.length !== listNext.length) return false;
+  try {
+    return listBefore.every((entry, index) => {
+      const other = listNext[index];
+      return entry?.url === other?.url && entry?.depth === other?.depth && tocNodeKeyGet(entry?.title) === tocNodeKeyGet(other?.title);
+    });
+  } catch {
+    return false;
+  }
+}
+
+function tocNodeKeyGet(node: any): string {
+  if (node === null || node === undefined || typeof node === 'boolean') return '';
+  if (typeof node === 'string' || typeof node === 'number') return JSON.stringify(node);
+  if (Array.isArray(node)) return `[${node.map(tocNodeKeyGet).join(',')}]`;
+  if (typeof node === 'function') return `fn:${node.displayName || node.name || '?'}`;
+  if (typeof node !== 'object') return String(node);
+  if (node.$$typeof !== undefined) {
+    const type = typeof node.type === 'string' ? node.type : node.type?.displayName || node.type?.name || '?';
+    const { children, ...props } = node.props ?? {};
+    return `<${type} ${JSON.stringify(props, (key, value) => (typeof value === 'function' ? `fn:${value.name}` : value && typeof value === 'object' && value.$$typeof !== undefined ? tocNodeKeyGet(value) : value))}>${tocNodeKeyGet(children)}`;
+  }
+  return JSON.stringify(node);
 }

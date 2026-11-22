@@ -20,10 +20,17 @@ import './EditSlash.css';
 //   │ ↑↓ Enter Tab · Esc · two spaces end           │ ◄ the keys
 //   └──────────────────────────────────────────────┘
 //
+// an action whose parameter is optional (the view of a block) runs as it is
+// on Enter; its row shows the choices of the parameter for a pointer, the
+// default first and marked, and the foot says what Enter and Tab do:
+//
+//   │ ▤ /mdx  MDX block  a document of its…  [Icon] Card │
+//   │ ↑↓ · Enter Icon (default) · Tab choose the view   │
+//
 // it floats (a portal into document.body, fixed under the caret line) and
 // is a popup of the edit layer, so a pointer on it is not a click outside
 // the block being edited. above the line when there is no room below.
-export const EditSlashMenu = observer(function EditSlashMenu({ slashStore, surfaceId, onChoose }) {
+export const EditSlashMenu = observer(function EditSlashMenu({ slashStore, surfaceId, onChoose, onChoiceChoose }) {
   const listRef = useRef(null);
   const [heightMenu, heightMenuSet] = useState(0);
   const slash = slashStore.slash;
@@ -57,6 +64,9 @@ export const EditSlashMenu = observer(function EditSlashMenu({ slashStore, surfa
   if (parsed.mode === SLASH_MODE_ACTION && itemList.length === 0) return null;
 
   const action = parsed.mode === SLASH_MODE_PARAM ? parsed.action : undefined;
+  // the action highlighted in the action mode, when its parameter is optional
+  const actionActive = !action ? itemList[itemIndexActive]?.action : undefined;
+  const actionActiveOptional = actionActive?.param?.isOptional ? actionActive : undefined;
   const ItemRender = action?.param?.ItemRender;
   // what the parameter typed so far means (the action says); the placeholder while it says nothing
   const hint = action ? slashStore.paramHint : '';
@@ -75,6 +85,11 @@ export const EditSlashMenu = observer(function EditSlashMenu({ slashStore, surfa
         <div className="doc-edit-slash-head">
           {action.icon ? <action.icon size={13} className="doc-edit-slash-icon" /> : null}
           <span className="doc-edit-slash-head-label">{action.label}</span>
+          {action.param.label ? (
+            <span className="doc-edit-slash-muted">
+              · {action.param.label}{action.param.isOptional ? ' (optional)' : ''}
+            </span>
+          ) : null}
           {hint ? <span className="doc-edit-slash-hint" title={hint}>{hint}</span> : null}
           {!hint && parsed.param === '' ? <span className="doc-edit-slash-muted">{action.param.placeholder}</span> : null}
         </div>
@@ -98,25 +113,67 @@ export const EditSlashMenu = observer(function EditSlashMenu({ slashStore, surfa
             ? (ItemRender
                 ? <ItemRender item={item} isActive={index === itemIndexActive} param={parsed.param} />
                 : <SlashItemDefault item={item} />)
-            : <SlashActionItem action={item.action} />}
+            : (
+                <SlashActionItem
+                  action={item.action}
+                  choiceList={slashStore.rowChoiceListGet(item.action)}
+                  onChoiceChoose={(choiceIndex) => onChoiceChoose?.(index, choiceIndex)}
+                />
+              )}
         </div>
       ))}
       <div className="doc-edit-slash-foot">
-        <kbd>↑</kbd><kbd>↓</kbd> <kbd>Enter</kbd> choose · <kbd>Esc</kbd> or two spaces: plain text
+        {actionActiveOptional ? (
+          <>
+            <kbd>↑</kbd><kbd>↓</kbd> · <kbd>Enter</kbd> {slashStore.choiceDefaultLabelGet(actionActiveOptional) || 'as it is'}
+            {slashStore.choiceDefaultLabelGet(actionActiveOptional) ? ' (default)' : ''} · <kbd>Tab</kbd> choose the {actionActiveOptional.param.label || 'option'}
+          </>
+        ) : action?.param?.isOptional ? (
+          <>
+            <kbd>↑</kbd><kbd>↓</kbd> <kbd>Enter</kbd> choose · <kbd>Backspace</kbd> back · <kbd>Esc</kbd> plain text
+          </>
+        ) : (
+          <>
+            <kbd>↑</kbd><kbd>↓</kbd> <kbd>Enter</kbd> choose · <kbd>Esc</kbd> or two spaces: plain text
+          </>
+        )}
       </div>
     </div>,
     document.body,
   );
 });
 
-function SlashActionItem({ action }) {
+// an action of the action mode: its icon, name, label and description; the
+// choices of an optional parameter listed on its row (param.isListedOnRow)
+// after them, each chosen by a click of its own, the default first
+function SlashActionItem({ action, choiceList = [], onChoiceChoose }) {
   const Icon = action.icon;
   return (
     <>
       {Icon ? <Icon size={13} className="doc-edit-slash-icon" /> : <span className="doc-edit-slash-icon" />}
       <span className="doc-edit-slash-name">/{action.name}</span>
       <span className="doc-edit-slash-label">{action.label}</span>
-      {action.description ? <span className="doc-edit-slash-muted doc-edit-slash-fill">{action.description}</span> : null}
+      {action.description ? <span className="doc-edit-slash-muted doc-edit-slash-fill">{action.description}</span> : <span className="doc-edit-slash-fill" />}
+      {choiceList.length > 0 ? (
+        <span className="doc-edit-slash-choice-list" aria-label={`${action.label}: ${action.param.label || 'options'}`}>
+          {choiceList.map((choice, choiceIndex) => (
+            <span
+              key={choice.id ?? choiceIndex}
+              className="doc-edit-slash-choice"
+              data-default={choice.isDefault ? '' : undefined}
+              title={`${choice.label}${choice.isDefault ? ' (default)' : ''}${choice.detail ? `: ${choice.detail}` : ''}`}
+              onPointerDown={(event) => {
+                // the choice, not the row: the row would run the action as it is
+                event.preventDefault();
+                event.stopPropagation();
+                onChoiceChoose?.(choiceIndex);
+              }}
+            >
+              {choice.label}
+            </span>
+          ))}
+        </span>
+      ) : null}
     </>
   );
 }
@@ -128,6 +185,7 @@ function SlashItemDefault({ item }) {
     <>
       {Icon ? <Icon size={13} className="doc-edit-slash-icon" /> : null}
       <span className="doc-edit-slash-label-main">{item.label}</span>
+      {item.isDefault ? <span className="doc-edit-slash-default">default</span> : null}
       {item.detail ? <span className="doc-edit-slash-muted doc-edit-slash-fill">{item.detail}</span> : null}
     </>
   );

@@ -49,11 +49,16 @@ const SLASH_QUERY_LENGTH_MAX = 40;
 export const SLASH_EFFECT_REPLACE = 'replace';
 export const SLASH_EFFECT_PARAM_SET = 'paramSet';
 export const SLASH_EFFECT_CANCEL = 'cancel';
+export const SLASH_EFFECT_BLOCK = 'block';
 
 export const slashEffect = Object.freeze({
   replace: (text) => ({ type: SLASH_EFFECT_REPLACE, text: String(text ?? '') }),
   paramSet: (text) => ({ type: SLASH_EFFECT_PARAM_SET, text: String(text ?? '') }),
   cancel: () => ({ type: SLASH_EFFECT_CANCEL }),
+  // a block at the caret (its source: lines of a block of the document, an
+  // MDX block): the slash text goes, and the editor puts the block where the
+  // caret is. an editor that cannot take a block gets its source as lines
+  block: (source) => ({ type: SLASH_EFFECT_BLOCK, source: String(source ?? '') }),
 });
 
 // a "/" just typed starts the slash mode when it begins a word:
@@ -163,6 +168,47 @@ export function slashActionMatchList(actionList, query) {
     .map((item) => item.action);
 }
 
+// the views of a block as the items of an optional parameter
+// (slashBlockActionDefine): the default first, marked isDefault, then the
+// others in their order; a parameter typed narrows them to the views whose id
+// or label starts with it, then those holding it
+//   viewList   [{ id, label?, description? }]
+export function slashViewItemListGet(viewList, viewDefault, param) {
+  const query = String(param ?? '').trim().toLowerCase();
+  const itemList = (Array.isArray(viewList) ? viewList : []).map((view) => ({
+    id: view.id,
+    label: view.label ?? view.id,
+    detail: view.description ?? '',
+    isDefault: view.id === viewDefault,
+  }));
+  const ordered = [...itemList.filter((item) => item.isDefault), ...itemList.filter((item) => !item.isDefault)];
+  if (query === '') return ordered;
+  const scoreGet = (item) => {
+    const nameList = [item.id, item.label].map((name) => String(name).toLowerCase());
+    if (nameList.some((name) => name.startsWith(query))) return 0;
+    if (nameList.some((name) => name.includes(query))) return 1;
+    return -1;
+  };
+  return ordered
+    .map((item, index) => ({ item, index, score: scoreGet(item) }))
+    .filter((one) => one.score >= 0)
+    .sort((a, b) => a.score - b.score || a.index - b.index)
+    .map((one) => one.item);
+}
+
+// a block put at the caret of a paragraph (slashEffect.block): the paragraph
+// becomes the text before the caret, the block and the text after it, with
+// blank lines between them, so the block is one of its own and the two texts
+// stay two paragraphs (or one, or none, where the caret was at an edge).
+// spaces at the break are dropped. answers the new text of the paragraph
+export function slashBlockTextInsert(text, offset, source) {
+  const before = text.slice(0, offset).replace(/[ \t]+$/, '');
+  const after = text.slice(offset).replace(/^[ \t]+/, '');
+  const prefix = before === '' || before.endsWith('\n\n') ? '' : before.endsWith('\n') ? '\n' : '\n\n';
+  const suffix = after === '' || after.startsWith('\n\n') ? '' : after.startsWith('\n') ? '\n' : '\n\n';
+  return `${before}${prefix}${source}${suffix}${after}`;
+}
+
 // what an effect does to the surface: the text the slash text is replaced
 // with (undefined: unchanged) and whether the slash mode ends
 //   effect      one of slashEffect
@@ -177,5 +223,6 @@ export function slashEffectApplyGet(effect, actionName, trigger) {
     return { textNew: trigger ? `${trigger.text}${effect.text}` : `/${actionName} ${effect.text}`, isEnded: false };
   }
   if (effect.type === SLASH_EFFECT_CANCEL) return { textNew: undefined, isEnded: true };
+  if (effect.type === SLASH_EFFECT_BLOCK) return { textNew: '', isEnded: true, blockSource: effect.source };
   return { textNew: undefined, isEnded: false };
 }

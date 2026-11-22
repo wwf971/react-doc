@@ -5,6 +5,7 @@ import {
   SLASH_MODE_END,
   SLASH_MODE_PARAM,
   slashActionMatchList,
+  slashBlockTextInsert,
   slashEffect,
   slashEffectApplyGet,
   slashLineRead,
@@ -12,8 +13,11 @@ import {
   slashTextParse,
   slashTriggerIs,
   slashTriggerMatch,
+  slashViewItemListGet,
 } from './doc-slash.js';
-import { slashActionByIdBuild, slashActionByNameBuild, slashActionDefine } from '../../../comp-doc/slash/slash-define.js';
+import { slashActionByIdBuild, slashActionByNameBuild, slashActionDefine, slashBlockActionDefine } from '../../../comp-doc/slash/slash-define.js';
+import { codeBlockSourceBuild, codeSlashAction } from '../../../../built-in/comp-mdx/text/code-slash.js';
+import { mdxSlashAction } from '../../../../built-in/comp-mdx/text/mdx-slash.js';
 import { DocSlashStore } from '../store/DocSlashStore.js';
 
 const actionLink = slashActionDefine({
@@ -232,4 +236,74 @@ test('the store: a trigger typed in a cell walks a path and writes the token', (
   assert.equal(store.parsed.action, actionMention);
   // the closing brace typed by hand ends it
   assert.equal(store.slashUpdate('cell', { lineIndex: 0, lineBefore: '{{@a}' }), false);
+});
+
+test('a block put among the text of a paragraph stands between blank lines', () => {
+  const source = '<!--renderComp=Mdx,view=icon-->\n```md\n```';
+  assert.equal(slashBlockTextInsert('See this ', 9, source), `See this\n\n${source}`);
+  assert.equal(slashBlockTextInsert('See this and that', 8, source), `See this\n\n${source}\n\nand that`);
+  assert.equal(slashBlockTextInsert('text', 0, source), `${source}\n\ntext`);
+  assert.equal(slashBlockTextInsert('line\n\nnext', 5, source), `line\n\n${source}\n\nnext`);
+  assert.equal(slashBlockTextInsert('', 0, source), source);
+});
+
+test('the views of a block as an optional parameter: the default first, narrowed by what is typed', () => {
+  const viewList = [{ id: 'card', label: 'Card' }, { id: 'plain', label: 'Plain' }, { id: 'icon', label: 'Icon' }];
+  assert.deepEqual(slashViewItemListGet(viewList, 'plain', '').map((item) => [item.id, item.isDefault]), [['plain', true], ['card', false], ['icon', false]]);
+  assert.deepEqual(slashViewItemListGet(viewList, 'plain', 'ic').map((item) => item.id), ['icon']);
+  assert.deepEqual(slashViewItemListGet(viewList, 'plain', 'a').map((item) => item.id), ['plain', 'card']);
+  assert.deepEqual(slashViewItemListGet(viewList, 'plain', 'x'), []);
+});
+
+test('an action with run and a param has an optional parameter: Enter runs it, Tab goes on to it', () => {
+  const actionBox = slashBlockActionDefine({
+    name: 'box',
+    label: 'Box',
+    viewList: [{ id: 'small', label: 'Small' }, { id: 'large', label: 'Large' }],
+    viewDefaultGet: (context) => context.boxDefault,
+    sourceBuild: (view) => `box ${view ?? 'default'}`,
+  });
+  assert.equal(actionBox.param.isOptional, true);
+  assert.equal(actionBox.param.isListedOnRow, true);
+  assert.equal(actionLink.param.isOptional, false);
+  const store = new DocSlashStore({ slashActionById: { 'block/box': actionBox, 'nav/link': actionLink } });
+  store.isOnSet(true);
+  const lineGet = (lineBefore) => ({ lineIndex: 0, lineBefore });
+  const open = () => {
+    store.slashStart('s1', { anchor: { lineIndex: 0, column: 0 }, context: { boxDefault: 'large' } });
+    store.slashUpdate('s1', lineGet('/bo'));
+  };
+  open();
+  // Enter: the block as it is, the default view not written
+  assert.deepEqual(store.itemChoose(), { textNew: '', isEnded: true, blockSource: 'box default', lengthOld: 3 });
+  open();
+  // Tab: the param mode, the views listed, the default first
+  assert.deepEqual(store.itemChoose(undefined, { isParamOpen: true }), { textNew: '/box ', isEnded: false, lengthOld: 3 });
+  store.slashUpdate('s1', lineGet('/box '));
+  assert.deepEqual(store.itemList.map((item) => item.id), ['large', 'small']);
+  assert.deepEqual(store.itemChoose(1), { textNew: '', isEnded: true, blockSource: 'box small', lengthOld: 5 });
+  open();
+  // the views on the row of the action, a click on one chooses it
+  assert.equal(store.choiceDefaultLabelGet(actionBox), 'Large');
+  assert.deepEqual(store.rowChoiceListGet(actionBox).map((item) => item.id), ['large', 'small']);
+  assert.deepEqual(store.rowChoiceListGet(actionLink), []);
+  assert.deepEqual(store.rowChoiceChoose(0, 1), { textNew: '', isEnded: true, blockSource: 'box small', lengthOld: 3 });
+  // an action whose parameter is required enters its param mode on Enter too
+  store.slashStart('s1', { anchor: { lineIndex: 0, column: 0 }, context: {} });
+  store.slashUpdate('s1', lineGet('/li'));
+  assert.deepEqual(store.itemChoose(), { textNew: '/link ', isEnded: false, lengthOld: 3 });
+});
+
+test('/code and /mdx: the default view by the place, written only when another is chosen', () => {
+  const configValueGet = (key) => ({ CodeBlockView: 'card', CodeBlockViewInListItem: 'plain' })[key];
+  const itemsAt = (action, place) => action.param.itemListGet('', { place, configValueGet });
+  assert.deepEqual(itemsAt(codeSlashAction, undefined).map((item) => item.id), ['card', 'plain', 'icon']);
+  assert.deepEqual(itemsAt(codeSlashAction, 'inListItem').map((item) => item.id), ['plain', 'card', 'icon']);
+  assert.equal(codeBlockSourceBuild(undefined), '```\n```');
+  assert.equal(codeBlockSourceBuild('icon'), '```text view=icon\n```');
+  const itemIcon = itemsAt(codeSlashAction, undefined).find((item) => item.id === 'icon');
+  assert.deepEqual(codeSlashAction.param.itemChoose(itemIcon, '', {}), slashEffect.block('```text view=icon\n```'));
+  assert.deepEqual(mdxSlashAction.run({}), slashEffect.block('<!--renderComp=Mdx-->\n```md\n```'));
+  const itemCard = mdxSlashAction.param.itemListGet('ca', {})[0];
+  assert.deepEqual(mdxSlashAction.param.itemChoose(itemCard, 'ca', {}), slashEffect.block('<!--renderComp=Mdx,view=card-->\n```md\n```'));
 });

@@ -118,6 +118,9 @@ export async function compileDoc({ source, internalPath, format, config = {} }) 
       ...(config.rehypePlugins ?? []),
       rehypeToc,
     ],
+    // after the JSX of the document is built into calls (the edit body: the
+    // content of a block made only when the block is drawn, doc-edit-block.js)
+    recmaPlugins: [...(config.recmaPlugins ?? [])],
   };
 
   const compiled = await compile({ value: content }, options);

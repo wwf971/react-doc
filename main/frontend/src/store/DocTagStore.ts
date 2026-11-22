@@ -1,4 +1,4 @@
-import { makeAutoObservable } from 'mobx';
+import { makeAutoObservable, untracked } from 'mobx';
 import type { DocSourceStore } from './DocSourceStore.js';
 import type { DocStore } from './DocStore.js';
 import type { DocConfigStore } from './DocConfigStore.js';
@@ -48,12 +48,14 @@ export class DocTagStore {
     });
   }
 
+  // built again only when the tags of the documents can have changed, not on
+  // every write of a document (manifestKey: the manifest without its content
+  // hashes); the tags of every item of the side panel are read from it
   get tagModel() {
-    return tagModelBuild({
-      configDoc: this.sourceStore.configDoc,
-      fileManifest: this.sourceStore.fileManifest,
-      declarationListSidePanel: this.docStore.treeModel.tagDeclarationList,
-    });
+    void this.sourceStore.manifestKey;
+    const configDoc = this.sourceStore.configDoc;
+    const declarationListSidePanel = this.docStore.treeModel.tagDeclarationList;
+    return untracked(() => tagModelBuild({ configDoc, fileManifest: this.sourceStore.fileManifest, declarationListSidePanel }));
   }
 
   // every tag known to the page: defined in config, or attached somewhere

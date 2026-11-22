@@ -12,6 +12,7 @@ import { DocAssetStore, assetEventTypeList } from './store/DocAssetStore.js';
 import { DocServiceStore, serviceEventTypeList } from './store/DocServiceStore.js';
 import { DocTagStore } from './store/DocTagStore.js';
 import { DocBlockPopupStore } from './store/DocBlockPopupStore.js';
+import { DocEmbedPopupStore } from './store/DocEmbedPopupStore.js';
 import { DocNavStore } from './store/DocNavStore.js';
 import { DocSidePanelStore, sidePanelEventTypeList } from './store/DocSidePanelStore.js';
 import { DocPasteStore } from './store/DocPasteStore.js';
@@ -48,6 +49,7 @@ import { DocAuthStore } from './store/DocAuthStore.js';
 import { DocAssetRemoteStore } from './store/DocAssetRemoteStore.js';
 import { DocBlockPopup } from '../../comp-doc/popup/DocBlockPopup.jsx';
 import { DocNavPopup } from '../../comp-doc/link/DocNavPopup.jsx';
+import { DocEmbedPopup } from '../../comp-doc/popup/DocEmbedPopup.jsx';
 import { SourceFilePrompt } from '../../comp-doc/source/SourceFilePrompt.jsx';
 import { SidePanelMovePicker } from '../../comp-doc/side-panel/SidePanelMovePicker.jsx';
 import { SidePanelItemDialog } from '../../comp-doc/side-panel/SidePanelItemDialog.jsx';
@@ -200,6 +202,8 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
     const editStore = new DocEditStore(sourceStore, docStore, configStore, { envStore, assetStore, compStateStore });
     // a component block shown in a popup, in View or in Edit (doc_page_impl_popup.md)
     const blockPopupStore = new DocBlockPopupStore({ docStore, editStore, sourceStore, assetStore });
+    // the popup of an MDX block, the page's (doc_page_impl_mdx_embed.md#the-popup)
+    const embedPopupStore = new DocEmbedPopupStore({ editStore });
     // the services of the service backend; a dashboard block keeps its
     // instance and its state in its asset item. the source store tells it
     // the doc pages loaded, synced into the kernel's registry
@@ -345,6 +349,7 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
       editStore,
       assetStore,
       blockPopupStore,
+      embedPopupStore,
       serviceStore,
       objectStore,
       objectFrontendStore,
@@ -497,6 +502,7 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
               <DocAuthPopup />
               <DocBlockPopup />
               <DocNavPopup />
+              <DocEmbedPopup />
               <SourceFilePrompt />
               <SidePanelMovePicker />
               <SidePanelItemDialog />
@@ -526,7 +532,44 @@ function headingAnchorGet(target) {
 }
 
 const DocsShell = observer(function DocsShell() {
-  const { configStore, docStore, sidePanelConfig, sourceStore } = useDocStores();
+  const { docStore, sidePanelConfig } = useDocStores();
+  // the search of the side panel stands at its top, above the first doc page,
+  // after a banner the host gives (doc_page_impl_side_panel.md#searching-the-items)
+  const sidePanelProps = useMemo(() => ({
+    ...sidePanelConfig,
+    banner: <>{sidePanelConfig.banner}<DocSidePanelSearch /></>,
+    components: {
+      Folder: DocSidebarFolder,
+      ...(sidePanelConfig.components ?? {}),
+    },
+  }), [sidePanelConfig]);
+  const siteTitle = docStore.siteTitle;
+  const navProps = useMemo(() => ({ title: siteTitle, children: <><DocPaletteButton /><DocSettingsButton /></> }), [siteTitle]);
+  // what it reads is only what the layout shows (the tree, the site title):
+  // the shell draws the whole page, and an observable read here that changes
+  // on every write (the config of the document, read through the manifest)
+  // drew every block, the side panel and the table of contents again on
+  // every keystroke that writes the document (DocRootStyle reads those)
+  return (
+    <DocsLayout
+      tree={docStore.treePage}
+      nav={navProps}
+      sidebar={sidePanelProps}
+      slots={docsLayoutSlots}
+      searchToggle={searchToggleHidden}
+      themeSwitch={themeSwitchSidebarDisabled}
+    >
+      <DocRootStyle />
+      <DocPageView />
+    </DocsLayout>
+  );
+});
+
+// the config of the document shown that the root of the page carries, as css
+// variables: drawn as nothing, so that a change of the config (or of the
+// manifest it is read through) draws nothing else again
+const DocRootStyle = observer(function DocRootStyle() {
+  const { configStore, docStore } = useDocStores();
   // the code font of the document shown (FontMonoFamily), on the root so that what
   // a document opens in the top layer or a popup has it too
   const docPathCurrent = docStore.itemCurrent?.docPath;
@@ -550,28 +593,7 @@ const DocsShell = observer(function DocsShell() {
     }
     return () => Object.keys(variableByName).forEach((name) => style.removeProperty(name));
   }, [listItemGap, listMarkerGap]);
-  // the search of the side panel stands at its top, above the first doc page,
-  // after a banner the host gives (doc_page_impl_side_panel.md#searching-the-items)
-  const sidePanelProps = useMemo(() => ({
-    ...sidePanelConfig,
-    banner: <>{sidePanelConfig.banner}<DocSidePanelSearch /></>,
-    components: {
-      Folder: DocSidebarFolder,
-      ...(sidePanelConfig.components ?? {}),
-    },
-  }), [sidePanelConfig]);
-  return (
-    <DocsLayout
-      tree={docStore.treePage}
-      nav={{ title: sourceStore.configDoc.siteTitle ?? 'Docs', children: <><DocPaletteButton /><DocSettingsButton /></> }}
-      sidebar={sidePanelProps}
-      slots={docsLayoutSlots}
-      searchToggle={searchToggleHidden}
-      themeSwitch={themeSwitchSidebarDisabled}
-    >
-      <DocPageView />
-    </DocsLayout>
-  );
+  return null;
 });
 
 const docsLayoutSlots = { container: DocPageLayoutContainer };

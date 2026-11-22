@@ -3,6 +3,7 @@ import { observer } from 'mobx-react-lite';
 import { defaultMdxComponents } from '../../../main/frontend/UICommon.js';
 import { useDocStores } from '../../../main/frontend/src/store/context.js';
 import { CODE_VIEW_LIST, codeViewConfigKeyGet } from '../../../main/frontend/src/lib/rehype-code-view.js';
+import { useDocEditLineGet } from '../../../main/comp-doc/edit/DocEditDocContext.js';
 import { CodeIconView, CodeLinesDialogHost, codeTextFromChildren } from './CodeIconView.jsx';
 import './code-fence.css';
 
@@ -37,10 +38,13 @@ export function codeFenceTagCreate(sourcePath) {
   return observer(function CodeFenceTag({ 'data-view': viewAuthored, 'data-place': place, 'data-source-line': sourceLineText, ...props }) {
     const { assetStore, configStore, docStore, editStore, envStore } = useDocStores();
     const docPath = sourcePath ?? docStore?.docCurrentPath ?? '';
+    // in the edit body, the line of the compile that drew the block, read with
+    // how far the block moved since (useDocEditLineGet)
+    const sourceLineNowText = useDocEditLineGet(docPath)(sourceLineText);
     const viewConfig = configStore?.valueDocGet(docPath, codeViewConfigKeyGet(place));
     const view = [viewAuthored, viewConfig].find((value) => CODE_VIEW_LIST.includes(value)) ?? CODE_VIEW_LIST[0];
     const value = codeTextFromChildren(props.children);
-    const sourceLine = Number(sourceLineText);
+    const sourceLine = Number(sourceLineNowText);
     let editReason = '';
     if (!Number.isInteger(sourceLine) || sourceLine < 1) editReason = 'the line of the block in its document is not known';
     else if (!editStore?.docIsEditable(docPath)) {
@@ -51,7 +55,7 @@ export function codeFenceTagCreate(sourcePath) {
     // what the dialog of the lines needs, in every view: the tile of the icon
     // view opens it, and a block of another view has it too, opened from the
     // editor of a list item (a double click on its chip)
-    const stateKey = `fence:${docPath}#${sourceLineText ?? ''}`;
+    const stateKey = `fence:${docPath}#${sourceLineNowText ?? ''}`;
     const dialogProps = {
       lang: props['data-language'] ?? '',
       title: typeof props.title === 'string' ? props.title : '',

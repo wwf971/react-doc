@@ -98,9 +98,11 @@ function atomChipBuild(atom) {
   chip.setAttribute('data-kind', isBlock ? 'block' : 'icon');
   chip.setAttribute('data-label', atom.label);
   if (atom.place) chip.setAttribute('data-place', atom.place);
+  if (atom.compName) chip.setAttribute('data-comp', atom.compName);
   if (!isBlock) chip.setAttribute('data-align', atom.align === 'top' ? 'top' : 'bottom');
   const countText = Number.isInteger(atom.lineCount) ? ` · ${atom.lineCount} line${atom.lineCount === 1 ? '' : 's'}` : '';
-  chip.title = `${atom.title || `Code · ${atom.lang || 'text'}`}${countText}: double-click to show the lines (← → move over it, Backspace selects it, then deletes it)`;
+  const name = atom.isEmbed ? (atom.title || 'MDX block') : (atom.title || `Code · ${atom.lang || 'text'}`);
+  chip.title = `${name}${countText}: double-click to ${atom.isEmbed ? 'open the document' : 'show the lines'} (← → move over it, Backspace selects it, then deletes it)`;
   return chip;
 }
 

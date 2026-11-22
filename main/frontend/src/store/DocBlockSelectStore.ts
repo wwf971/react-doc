@@ -139,7 +139,10 @@ export class DocBlockSelectStore {
   // of another document or of an older text of it
   selectionIndexListGet(path: string): number[] {
     const selection = this.selection;
-    if (!this.isMode || !selection || selection.path !== path) return [];
+    // in edit mode a selection exists only for the menu opened on a block (and
+    // the dialog it opens): nothing else of edit mode reads it
+    const isEditSelection = this.editStore.isEditMode && (this.contextMenu !== undefined || this.transfer !== undefined);
+    if (!(this.isMode || isEditSelection) || !selection || selection.path !== path) return [];
     if (this.editStore.docEditGet(path)?.hash !== selection.hash) return [];
     return selection.blockIndexList;
   }
@@ -221,7 +224,14 @@ export class DocBlockSelectStore {
   // ---------- the context menu ----------
 
   get isContextMenuOpen(): boolean {
-    return this.isMode && this.contextMenu !== undefined;
+    return this.isContextMenuAvailable && this.contextMenu !== undefined;
+  }
+
+  // the menu is offered in block selection mode, and in edit mode, where a
+  // right click on a block that is not being edited opens it for that block
+  // (doc_page_impl_edit_structure.md#the-menu-of-the-selection)
+  get isContextMenuAvailable(): boolean {
+    return this.isMode || this.editStore.isEditMode;
   }
 
   // a right click on a block: on a selected block the menu is for the whole
@@ -231,7 +241,7 @@ export class DocBlockSelectStore {
   // stale menu at the old point. offset is the point of the click from the
   // top left of the block: the menu is anchored there, not to the window.
   contextMenuOpen(path: string, blockIndex: number, offset: { x: number; y: number }) {
-    if (!this.isMode) return;
+    if (!this.isContextMenuAvailable) return;
     if (this.contextMenu?.status === 'submitting') return;
     if (!this.blockIsSelected(path, blockIndex)) {
       const hash = this.editStore.docEditGet(path)?.hash ?? '';
@@ -240,7 +250,7 @@ export class DocBlockSelectStore {
     this.contextMenu = undefined;
     window.requestAnimationFrame(() => {
       runInAction(() => {
-        if (!this.isMode) return;
+        if (!this.isContextMenuAvailable) return;
         this.contextMenuOpenCount += 1;
         this.contextMenu = {
           path,
@@ -258,6 +268,8 @@ export class DocBlockSelectStore {
   contextMenuClose() {
     if (this.contextMenu?.status === 'submitting') return;
     this.contextMenu = undefined;
+    // the block a right click selected in edit mode is not kept selected
+    if (!this.isMode && !this.transfer) this.selection = undefined;
   }
 
   contextMenuStepSet(step: BlockSelectContextMenu['step']) {
@@ -348,15 +360,16 @@ export class DocBlockSelectStore {
   // ---------- the dialog: copying or moving the blocks ----------
 
   get isTransferOpen(): boolean {
-    return this.isMode && this.transfer !== undefined;
+    return this.isContextMenuAvailable && this.transfer !== undefined;
   }
 
   // opens the dialog for the selection. the document the blocks go to is
   // chosen first; the document they come from is the one chosen at first.
   transferOpen(action: BlockTransferAction): boolean {
-    this.contextMenu = undefined;
+    // read while the menu is still open: in edit mode the selection is the menu's
     const path = this.selection?.path ?? '';
     const indexList = this.selectionIndexListGet(path);
+    this.contextMenu = undefined;
     if (indexList.length === 0 || this.transfer?.status === 'submitting') return false;
     this.transfer = {
       actionInitial: action,
@@ -380,6 +393,7 @@ export class DocBlockSelectStore {
   transferClose() {
     if (this.transfer?.status === 'submitting') return;
     this.transfer = undefined;
+    if (!this.isMode) this.selection = undefined;
   }
 
   // the blocks of the document the blocks come from, as they were chosen;

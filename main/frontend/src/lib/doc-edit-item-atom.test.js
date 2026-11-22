@@ -1,8 +1,9 @@
 import { test } from 'node:test';
+import { codeTextJoin, textJoinSpaceIs } from './doc-edit-code.js';
 import assert from 'node:assert/strict';
 import {
   itemAtomCharStrip, itemAtomModelBuild, itemAtomOffsetDisplayGet, itemAtomTextBuild, itemAtomTextSourceGet, itemCodeBlockListGet,
-  itemPartGet, itemPartOffsetGet, itemPartTextWrite,
+  itemBlockSplitOut, itemPartGet, itemPartOffsetGet, itemPartTextWrite,
 } from './doc-edit-item-atom.js';
 
 const A0 = '';
@@ -112,8 +113,8 @@ test('a part of an item: the lines of a code block among its text, edited and wr
   assert.equal(itemPartGet('a\n<!--renderComp=Code-->\n```asset\nitemId: x\n```', 0), undefined);
   const written = itemPartTextWrite(text, 0, 'one\ntwo\nthree');
   assert.equal(written.text, ['see', '```text', 'one', 'two', 'three', '```', 'then', '```sh view=icon', 'ls', '```'].join('\n'));
-  // a block of text down to one line is a line of text among the others
-  assert.equal(itemPartTextWrite(text, 0, 'one two').text, ['see', 'one two', 'then', '```sh view=icon', 'ls', '```'].join('\n'));
+  // a block among text stays a block, whatever its lines
+  assert.equal(itemPartTextWrite(text, 0, 'one two').text, ['see', '```text', 'one two', '```', 'then', '```sh view=icon', 'ls', '```'].join('\n'));
   // taken out with a line break
   const removed = itemPartTextWrite(text, 0, '', { isRemoved: true });
   assert.equal(removed.text, ['see', 'then', '```sh view=icon', 'ls', '```'].join('\n'));
@@ -122,4 +123,35 @@ test('a part of an item: the lines of a code block among its text, edited and wr
   assert.equal(model.display, `see${A0}then${A1}`);
   assert.equal(itemAtomOffsetDisplayGet(model, itemPartOffsetGet(text, written.start, 'before')), 3);
   assert.equal(itemAtomOffsetDisplayGet(model, itemPartOffsetGet(text, model.atomList[0].end, 'after')), 4);
+});
+
+test('Enter in the lines of a block: the lines after the caret become text after it, joined to that text', () => {
+  const options = { textJoin: codeTextJoin, spaceIs: textJoinSpaceIs };
+  const text = ['see', '```text', 'bbaaaa', 'cc', '```', 'then more'].join('\n');
+  const split = itemBlockSplitOut(text, 0, 'bbaaaa\ncc', 2, 2, options);
+  assert.equal(split.text, ['see', '```text', 'bb', '```', 'aaaa cc then more'].join('\n'));
+  assert.equal(split.text.slice(split.offset), 'aaaa cc then more');
+  // at the end of the lines: nothing moves, the caret goes after the block
+  const end = itemBlockSplitOut(text, 0, 'bbaaaa\ncc', 9, 9, options);
+  assert.equal(end.text, text);
+  assert.equal(end.text.slice(end.offset), 'then more');
+  // at the start: every line leaves, the block is gone
+  const start = itemBlockSplitOut(text, 0, 'bbaaaa\ncc', 0, 0, options);
+  assert.equal(start.text, ['see', 'bbaaaa cc then more'].join('\n'));
+  // a block that is the whole item, nothing after it
+  const whole = itemBlockSplitOut('```js\nconst a = 1;\nb();\n```', 0, 'const a = 1;\nb();', 12, 12, options);
+  assert.equal(whole.text, '```js\nconst a = 1;\n```\nb();');
+  assert.equal(whole.text.slice(whole.offset), 'b();');
+});
+
+test('an MDX block of an item is a chip, icon by default, never a part', () => {
+  const text = ['see', '<!--renderComp=Mdx,view=icon,title=Notes-->', '```md', '# Notes', 'a line', '```', 'then', '<!--renderComp=Mdx,view=card-->', '```md', 'b', '```'].join('\n');
+  const model = itemAtomModelBuild(text, { viewResolve: () => 'card' });
+  assert.deepEqual(model.atomList.map((atom) => [atom.compName, atom.kind, atom.label, atom.isEmbed]), [['Mdx', 'icon', 'Notes', true], ['Mdx', 'block', 'mdx', true]]);
+  assert.equal(model.display, `see${A0}then${A1}`);
+  assert.equal(itemAtomTextBuild(model.display, model), text);
+  assert.equal(itemPartGet(text, 0), undefined);
+  // the whole item, without a view written: an icon
+  const whole = itemAtomModelBuild('<!--renderComp=Mdx-->\n```md\nx\n```', { viewResolve: () => 'card' });
+  assert.equal(whole.atomList[0].kind, 'icon');
 });

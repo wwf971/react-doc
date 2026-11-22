@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { observer } from 'mobx-react-lite';
 import { buildMdxComps } from '../../frontend/src/lib/mdx-comps.js';
+import { DocEditLineShiftContext } from '../edit/DocEditDocContext.js';
 import { markdownFragmentRender, markdownTransformListGet } from '../../frontend/src/lib/markdown-render.js';
 import { useDocStores } from '../../frontend/src/store/context.js';
 import { MdxRendererStore } from './MdxRendererStore.js';
@@ -40,9 +41,15 @@ export const MdxRenderer = observer(function MdxRenderer({ data = {}, config = {
     ...(config.components ?? {}),
   }), [compById, config.components, config.sourcePath, configDoc]);
 
-  const content = isNodeListInput
-    ? <MdxRendererFragment data={data} config={config} components={components} transformList={transformList} />
-    : <MdxRendererText data={data} config={config} components={components} transformList={transformList} />;
+  // its lines are counted in its own text, never the lines of the block it is
+  // drawn in: the shift of that block (DocEditLineShiftContext) is not theirs
+  const content = (
+    <DocEditLineShiftContext.Provider value={null}>
+      {isNodeListInput
+        ? <MdxRendererFragment data={data} config={config} components={components} transformList={transformList} />
+        : <MdxRendererText data={data} config={config} components={components} transformList={transformList} />}
+    </DocEditLineShiftContext.Provider>
+  );
   if (isInline) return config.className ? <span className={config.className}>{content}</span> : content;
   return <div className={config.className}>{content}</div>;
 });

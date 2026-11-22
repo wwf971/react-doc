@@ -24,9 +24,21 @@
 //                  an action without a parameter: called when it is chosen
 //     param: {     an action with a parameter: chosen (or typed, then a
 //                  space), the slash mode enters its param mode and asks
-//                  the action for everything the parameter needs:
+//                  the action for everything the parameter needs.
+//                  an action with run AND param has an OPTIONAL parameter:
+//                  Enter (or a click) runs it as it is, with no parameter;
+//                  Tab, or a space after its name, enters the param mode
+//                  (the view of a block: slashBlockActionDefine below)
+//       label                    what the parameter is, in a few words
+//                                ('view'): "Tab: choose a view"
 //       placeholder              shown while the parameter is empty
-//       itemListGet(param, context) -> [{ id, label, detail?, ... }]
+//       isListedOnRow            optional: the items for an empty parameter
+//                                are drawn on the row of the action too, so a
+//                                pointer chooses one at once (a short list
+//                                that does not depend on what is typed)
+//       itemListGet(param, context) -> [{ id, label, detail?, isDefault?, ... }]
+//                                (isDefault: what running without the
+//                                parameter does, marked so in the menu)
 //                                the items the menu lists for the
 //                                parameter typed so far. called inside an
 //                                observer, so it may read mobx stores and
@@ -50,18 +62,23 @@
 //   })
 //
 // an effect is one of slashEffect of lib/doc-slash.js: replace(text),
-// paramSet(text), cancel(). the action never touches the editing surface;
-// the slash mode applies the effect.
+// paramSet(text), cancel(), block(source). the action never touches the
+// editing surface; the slash mode applies the effect.
 //
 // context, the same for every call while the slash mode is open:
 //   { sourcePath    the document being edited (full source path)
 //     docPageAlias  its doc page
 //     source        the service object of the doc page source service layer
 //                   (doc_page_impl_source.md#the-page-side-docsourcestore-and-the-service-object)
-//     object        the object service layer (DocObjectStore): what /object lists from }
+//     object        the object service layer (DocObjectStore): what /object lists from
+//     place         where a block put at the caret stands: undefined (a block
+//                   of the document), 'inListItem' (the text of a list item)
+//     configValueGet(key)  the value of a config key for the document }
 // a surface of a component hands its own context (use-edit-slash-config.js); a cell's
 // context is built by the cell edit layer, which adds source and object to the
 // component's own (doc_page_impl_edit_cell.md)
+
+import { slashEffect, slashViewItemListGet } from '../../frontend/src/lib/doc-slash.js';
 
 const nameRegex = /^[A-Za-z][A-Za-z0-9_-]*$/;
 
@@ -73,11 +90,12 @@ export function slashActionDefine(options = {}) {
     if (!nameRegex.test(alias)) throw new Error(`slashActionDefine: alias of ${name} must be one word (got ${JSON.stringify(alias)}).`);
   }
   const param = options.param;
+  const isRunnable = typeof options.run === 'function';
   if (param !== undefined) {
     if (typeof param?.itemListGet !== 'function' || typeof param?.itemChoose !== 'function') {
       throw new Error(`slashActionDefine: param of ${name} needs itemListGet and itemChoose.`);
     }
-  } else if (typeof options.run !== 'function') {
+  } else if (!isRunnable) {
     throw new Error(`slashActionDefine: ${name} needs run(context), or a param.`);
   }
   return Object.freeze({
@@ -86,9 +104,12 @@ export function slashActionDefine(options = {}) {
     label: String(options.label ?? name),
     description: String(options.description ?? ''),
     icon: options.icon,
-    run: options.run,
+    run: isRunnable ? options.run : undefined,
     param: param === undefined ? undefined : Object.freeze({
+      isOptional: isRunnable,
+      label: String(param.label ?? ''),
       placeholder: String(param.placeholder ?? ''),
+      isListedOnRow: param.isListedOnRow === true,
       itemListGet: param.itemListGet,
       itemChoose: param.itemChoose,
       keyHandle: typeof param.keyHandle === 'function' ? param.keyHandle : undefined,
@@ -96,6 +117,39 @@ export function slashActionDefine(options = {}) {
       hintGet: typeof param.hintGet === 'function' ? param.hintGet : undefined,
       emptyText: String(param.emptyText ?? 'Nothing matches'),
     }),
+  });
+}
+
+// an action that puts a block at the caret (slashEffect.block), its view an
+// optional parameter: Enter puts the block in its default view, Tab (or
+// "/name " typed) lists the views, and the views are on the row of the action
+// for a pointer. the default comes first, marked so; choosing it writes no
+// view, so the block keeps following the default of its place.
+//
+//   slashBlockActionDefine({
+//     name, aliasList, label, description, icon    as slashActionDefine
+//     viewList          [{ id, label?, description? }]: the views of the block
+//     viewDefaultGet(context) -> id   the view a block gets when none is
+//                       written, where the caret is (context.place)
+//     sourceBuild(view, context) -> source   the source of the block; view
+//                       undefined for the default (none written)
+//   })
+export function slashBlockActionDefine({ viewList, viewDefaultGet, sourceBuild, ...options }) {
+  const viewDefault = (context) => {
+    const view = typeof viewDefaultGet === 'function' ? viewDefaultGet(context) : undefined;
+    return viewList.some((one) => one.id === view) ? view : viewList[0]?.id;
+  };
+  return slashActionDefine({
+    ...options,
+    run: (context) => slashEffect.block(sourceBuild(undefined, context)),
+    param: {
+      label: 'view',
+      placeholder: 'the view of the block; Enter: the default',
+      isListedOnRow: true,
+      emptyText: 'No view is named so',
+      itemListGet: (param, context) => slashViewItemListGet(viewList, viewDefault(context), param),
+      itemChoose: (item, param, context) => slashEffect.block(sourceBuild(item.isDefault ? undefined : item.id, context)),
+    },
   });
 }
 

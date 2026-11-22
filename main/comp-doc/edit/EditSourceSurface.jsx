@@ -74,6 +74,10 @@ import './DocEdit.css';
 //                       selects it and then deletes it, a copy carries its
 //                       source, a double click on it is ATOM_OPEN_EVENT of the
 //                       DOM. the offsets above count a chip as one character
+//   onBlockInsert(source, offset, text)
+//                       optional: a block a slash action puts at the caret
+//                       (an MDX block): the editor around the surface writes it
+//                       there; without it its source is typed as lines
 //   onSubmitRequest()   Ctrl/Cmd + Enter
 //   onCancelRequest()   Escape
 //   onFocusShiftRequest(direction, { point, rectSurface })
@@ -103,10 +107,13 @@ export function EditSourceSurface({
   onSubmitRequest,
   onCancelRequest,
   onFocusShiftRequest,
+  onBlockInsert,
   ariaLabel = 'Block source',
 }) {
   const elementRef = useRef(null);
-  const slashBinding = useEditSlash(elementRef, slash, { textBeforeCaretGet });
+  // the text of the surface goes along: the slash text is gone from it already
+  const blockInsert = onBlockInsert ? (source, offset) => onBlockInsert(source, offset, surfaceTextGet(elementRef.current)) : undefined;
+  const slashBinding = useEditSlash(elementRef, slash, { textBeforeCaretGet, blockInsert });
   const onSelectionChangeRef = useRef(onSelectionChange);
   onSelectionChangeRef.current = onSelectionChange;
   const isSelectionReported = Boolean(onSelectionChange);

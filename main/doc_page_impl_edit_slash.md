@@ -48,6 +48,10 @@ action mode            the slash text is "/" + a query without spaces
   │  Enter / Tab / click on an action with a parameter    -> the text becomes "/name ␣"
   │  "/name" typed, then a space                          -> the same
   │  Enter / Tab / click on an action without a parameter -> run(context) -> effect
+  │  an action whose parameter is optional (run and param):
+  │    Enter / click on its row     -> run(context): as it is, the default
+  │    Tab, "/name" + a space       -> the text becomes "/name ␣"
+  │    click on a choice of its row -> itemChoose(choice, '') -> effect
   ▼
 param mode             the slash text is "/name " + the parameter
   │                    menu: what the action's itemListGet(param) answers
@@ -95,10 +99,11 @@ While a slash mode is open, the surface offers every key to the binding first (`
 | key / pointer | menu with items | menu without items |
 | --- | --- | --- |
 | ArrowDown / ArrowUp | move the highlight (wraps) | the caret moves; the slash mode ends when it leaves the line |
-| Enter / Tab | choose the highlighted item | a line break / the surface's Tab; the slash mode ends |
+| Enter / Tab | choose the highlighted item; on an action whose parameter is optional, Enter runs it as it is and Tab enters its param mode | a line break / the surface's Tab; the slash mode ends |
 | Escape | close the slash mode only | the same |
 | pointer over an item | highlight it | |
 | pointer down on an item | choose it, before the surface could lose focus | |
+| pointer down on a choice of a row | choose that item of the action's parameter at once | |
 | a key the action takes (`keyHandle`) | the action's effect | the same |
 
 A click on the menu does not take the focus from the surface (the menu prevents the pointer down), and the menu carries the edit layer's popup class `doc-edit-popup`. A click on it is therefore not a click outside the block ([use-edit-outside-pointer.js](doc_page_impl_edit.md#floating-controls)), and the session stays open.
@@ -124,14 +129,37 @@ slashActionDefine({
   },
 })
 
-context = { sourcePath, docPageAlias, source, object }   the document edited, its doc page, the source service
-                                                          object, the object service layer (what /object lists from)
+context = { sourcePath, docPageAlias, source, object,   the document edited, its doc page, the source service
+            place, configValueGet }                       object, the object service layer (what /object lists
+                                                          from); where a block put at the caret stands (undefined:
+                                                          a block of the document, 'inListItem': the text of a list
+                                                          item) and the config of the document (configValueGet(key))
 effect  = slashEffect.replace(text) | slashEffect.paramSet(text) | slashEffect.cancel()
+        | slashEffect.block(source)              a block at the caret (below)
 ```
+
+**An optional parameter.** An action with both `run` and `param` runs as it is when it is chosen, and its parameter is there for the author who wants it: Enter (or a click on its row) runs it, Tab (or a space after its name) enters its param mode. The parameter says what it is (`param.label`, `view`), which the menu shows in the head of the param mode and in its foot ("Tab: choose the view"). An item of the parameter marked `isDefault` is what running without it does: the menu marks it `default`, lists it first, and says it in the foot ("Enter: Icon (default)"). A short list that does not depend on what is typed is drawn on the row of the action too (`param.isListedOnRow`), so a pointer chooses in one click what the keyboard reaches by Tab. Typing chooses as well: `/mdx card` and Enter.
+
+<!--renderComp=DiagramText-->
+```text
+/mdx          ▤ /mdx  MDX block  a document of its…  [Icon] Card
+              ↑↓ · Enter Icon (default) · Tab choose the view
+  Enter       the block in its default view, none written
+  click Card  the block in the view card
+  Tab         /mdx ␣
+              ▤ MDX block · view (optional)
+                Icon  default  a tile in the line; a click opens…
+                Card           the document drawn in place, in a…
+  "ca" Enter  the block in the view card
+```
+
+**A block and its view.** The actions that put a block at the caret are defined with `slashBlockActionDefine({ name, …, viewList, viewDefaultGet(context), sourceBuild(view, context) })` (`slash-define.js`): `run` answers the block in its default view, and the parameter is the view, optional and listed on the row. The default is the view the block gets where the caret is (`viewDefaultGet`: a code block reads the config of its place, `context.place`), and choosing it writes no view, so the block goes on following that default; another view is written in the block. Any later kind of block that has views is added the same way.
 
 **Going on after a part of the parameter.** An action whose parameter is a path chosen a part at a time (a folder, then what is in it) answers a folder chosen with `paramSet`: the parameter becomes the folder followed by `/`, the menu lists what is inside, and the author goes on choosing, never leaving the slash mode until a leaf is chosen and `replace` writes it. `/link ~example/`, a CV's `/query name/jp/` and `/object` (a type, then an object, then what is inside it) work so; the menu shows such an item with a folder icon (`kind: 'dir'`). An action whose parameter does not read as a path while it is walked (a reference holding an id) says what it has reached with `hintGet`. An item an action lists only to say something (why a list is empty, that it is still asked for) is chosen to no effect: `itemChoose` answers nothing.
 
-Callbacks rather than a component of its own keep the parameter logic pure and testable (`/link` is `lib/doc-link-complete.js` plus four lines of definition), while the menu stays one component with one keyboard behavior. `itemListGet` is called inside an observer, so an action may read MobX stores, and its list follows them (a document added to the source appears in the list while the author types). An action whose callback throws lists nothing, and a warning names it (`[doc-slash]`), so a broken action never breaks the editor. The effects are the whole vocabulary of what an action can do to the text. A later need (insert a block, open a dialog) is one more effect type, applied in one place (`slashEffectApplyGet`, `DocSlashStore.effectApply`).
+Callbacks rather than a component of its own keep the parameter logic pure and testable (`/link` is `lib/doc-link-complete.js` plus four lines of definition), while the menu stays one component with one keyboard behavior. `itemListGet` is called inside an observer, so an action may read MobX stores, and its list follows them (a document added to the source appears in the list while the author types). An action whose callback throws lists nothing, and a warning names it (`[doc-slash]`), so a broken action never breaks the editor. The effects are the whole vocabulary of what an action can do to the text. A later need (open a dialog) is one more effect type, applied in one place (`slashEffectApplyGet`, `DocSlashStore.effectApply`).
+
+**A block at the caret.** `slashEffect.block(source)` takes the slash text away and hands the source of a block to the editor of the surface, which knows what a block is in its text (`blockInsert` of the surface binding): the editor of a list item makes it a chip of the item's text ([Code blocks in the text of an item](doc_page_impl_edit_structure.md#code-blocks-in-the-text-of-an-item)); a paragraph is saved as the text before the caret, the block and the text after it, blank lines between them, and its session ends (`slashBlockTextInsert`); a surface with no such editor (the source of a whole list) gets the lines of the block typed at the caret. `/mdx` is such an action ([MDX blocks](doc_page_impl_mdx_embed.md#adding-a-block)).
 
 ## The slash action registry
 
@@ -152,6 +180,9 @@ Ids are `{layer}/{name}`, such as `nav/link`. The [unified api registry](doc_pag
 | id | name | provided by | does |
 | --- | --- | --- | --- |
 | `nav/link` | `/link`, `/ln` | navigation ([Writing a link](doc_page_impl_nav.md#writing-a-link)) | a Markdown link to a document of the workspace |
+| `nav/inline` | `/inline`, `/popup` | navigation | the same link with `?nav=popup`: the document opens in the inline popup of the page, and is edited there in edit mode |
+| `block/code` | `/code`, `/fence` | the code block ([Adding a block](doc_page_impl_mdx_code.md#adding-a-block)) | a fenced code block at the caret; its view an optional parameter (`card`, `plain`, `icon`; the default is the config's for the place) |
+| `block/mdx` | `/mdx`, `/embed`, `/doc` | the MDX block ([Adding a block](doc_page_impl_mdx_embed.md#adding-a-block)) | an MDX block at the caret (`slashEffect.block`); its view an optional parameter (`icon`, `card`) |
 | `object/view` | `/object`, `/obj`, `/o` | the object service layer ([Writing a reference](doc_page_impl_obj.md#writing-a-reference)) | a view of an object of the registry, found a type, an object, then what is inside it; in a document the inline form of `ObjectView` |
 
 ## Which blocks offer it
@@ -210,7 +241,7 @@ What holds for both:
 
 ## The surface binding
 
-`useEditSlash(elementRef, slash, { textBeforeCaretGet })` (`comp-doc/slash/use-edit-slash.js`) is the one place between the surface and the store:
+`useEditSlash(elementRef, slash, { textBeforeCaretGet, blockInsert })` (`comp-doc/slash/use-edit-slash.js`) is the one place between the surface and the store (`blockInsert(source, offset)`: what the editor does with a block an action puts at the caret, [above](#the-action-interface)):
 
 ```text
 surface onInput  -> textReport (the draft, as before) -> inputAfter
@@ -239,6 +270,8 @@ action mode                                   param mode
                                              │ ↑ ↓ Enter choose · Esc or two spaces  │
                                              └───────────────────────────────────────┘
 ```
+
+The row of an action whose parameter lists its choices on the row (`isListedOnRow`) ends with them, as small chips after the description: the default first, outlined, each one a target of its own; the description is cut first. The foot follows the highlighted row: on an action whose parameter is optional it says what Enter does and that Tab chooses the parameter; in such a param mode, that Backspace goes back to the actions.
 
 In the action mode, a query that matches no action shows no menu, because the author is probably writing text that starts with `/`. In the param mode, an empty list shows the action's `emptyText`, so the author knows the parameter is being read. The head and the foot stay in place while a long list scrolls between them.
 

@@ -87,9 +87,11 @@ export function linkDirParamGet(item, query) {
 // the Markdown link to a chosen document, written in the document fromPath:
 // [title](target) with the shortest exact target (sourcePathReferenceGet),
 // the "#place" of the query kept
-export function linkMarkdownBuild(item, query, fromPath) {
+//   isPopup   an inline link: the target opens in the inline popup of the
+//             page (?nav=popup, doc_page_impl_nav.md#routes)
+export function linkMarkdownBuild(item, query, fromPath, { isPopup = false } = {}) {
   const { fragment } = linkQuerySplit(query);
-  const target = `${sourcePathReferenceGet(item.path, fromPath)}${fragment ? `#${fragment}` : ''}`;
+  const target = `${sourcePathReferenceGet(item.path, fromPath)}${isPopup ? '?nav=popup' : ''}${fragment ? `#${fragment}` : ''}`;
   const destination = /[\s()<>]/.test(target) ? `<${target.replace(/[<>]/g, '')}>` : target;
   const text = item.label.replace(/([\\[\]])/g, '\\$1');
   return `[${text}](${destination})`;

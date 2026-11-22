@@ -1,5 +1,6 @@
 import {
   FileCode,
+  FileText,
   ChevronsDownUp,
   FoldersIcon,
   FolderTreeIcon,
@@ -152,6 +153,16 @@ export const multiLangExpose = {
 export const codeExpose = {
   meta: { label: 'Code', description: 'Lines of code or text drawn as a fenced code block, from data: the lines of a code block moved into the asset service layer.' },
   icon: FileCode,
+};
+
+export const mdxExpose = {
+  meta: {
+    label: 'MDX block',
+    description: 'A document of its own inside this one: an icon that opens it in a popup, where it is edited in edit mode.',
+    isInsertCommon: true,
+  },
+  icon: FileText,
+  sourceDefaultCreate: () => ({ lang: 'md', raw: '', props: { view: 'icon' } }),
 };
 
 export const diagramTextExpose = {

@@ -75,8 +75,12 @@
   color: var(--color-fd-muted-foreground);
 }
 
+/* the label of an item keeps its width before its detail is cut (a view
+   named in full, not "Ca…"), up to most of the row (a long title of a
+   document leaves its path some room) */
 .doc-edit-slash-label-main {
-  flex: 0 1 auto;
+  flex: 0 0 auto;
+  max-width: 60%;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -130,4 +134,44 @@
 
 .doc-edit-slash-go {
   flex: 0 0 auto;
+}
+
+/* the choices of an optional parameter on the row of its action (the views
+   of a block): small chips after the description, each a target of its own;
+   the default, what Enter does, outlined */
+.doc-edit-slash-choice-list {
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 2px;
+}
+
+.doc-edit-slash-choice {
+  padding: 0 0.3rem;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  color: var(--color-fd-muted-foreground);
+  font-size: 0.66rem;
+  line-height: 1.1rem;
+}
+
+.doc-edit-slash-choice[data-default] {
+  border-color: var(--color-fd-border);
+  color: var(--color-fd-foreground);
+}
+
+.doc-edit-slash-choice:hover {
+  background: var(--color-fd-background);
+  border-color: var(--color-fd-muted-foreground);
+  color: var(--color-fd-foreground);
+}
+
+/* the item of a parameter that running without it gives */
+.doc-edit-slash-default {
+  flex: 0 0 auto;
+  padding: 0 0.25rem;
+  border: 1px solid var(--color-fd-border);
+  border-radius: 2px;
+  color: var(--color-fd-muted-foreground);
+  font-size: 0.62rem;
+  line-height: 1rem;
 }

@@ -222,6 +222,11 @@ li .doc-code-icon[data-align='top'],
   --doc-code-icon-glyph: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z'/%3E%3Cpath d='M14 2v5a1 1 0 0 0 1 1h5'/%3E%3Cpath d='M10 12.5 8 15l2 2.5'/%3E%3Cpath d='m14 12.5 2 2.5-2 2.5'/%3E%3C/svg%3E");
 }
 
+/* the chip of an MDX block: the glyph of its tile (lucide file-text) */
+.doc-edit-atom-icon[data-comp='Mdx'] {
+  --doc-code-icon-glyph: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z'/%3E%3Cpath d='M14 2v5a1 1 0 0 0 1 1h5'/%3E%3Cpath d='M10 9H8'/%3E%3Cpath d='M16 13H8'/%3E%3Cpath d='M16 17H8'/%3E%3C/svg%3E");
+}
+
 .doc-edit-atom[data-gap-before] {
   margin-left: var(--doc-edit-atom-gap, 0.28em);
 }
@@ -404,4 +409,83 @@ li .doc-code-icon[data-align='top'],
 .doc-code-lang-current {
   margin-left: auto;
   color: var(--color-fd-primary);
+}
+
+/* ---------- the MDX block (Mdx.jsx, main/doc_page_impl_mdx_embed.md) ----------
+   its icon is the tile of a code block; its card draws the document in place,
+   in the quiet frame of the plain view; its popup is a document page */
+.doc-mdx-embed-card {
+  margin: 0.75rem 0;
+  padding: 4px 14px;
+  border: 1px solid color-mix(in srgb, var(--color-fd-foreground) 15%, transparent);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--color-fd-foreground) 2.5%, transparent);
+}
+
+li .doc-mdx-embed-card {
+  margin: 4px 0;
+}
+
+.doc-mdx-embed-card[role='button'] {
+  cursor: pointer;
+}
+
+.doc-mdx-embed-card[role='button']:hover {
+  border-color: color-mix(in srgb, var(--color-fd-primary) 45%, transparent);
+}
+
+.doc-mdx-embed-popup {
+  width: min(52rem, 92vw);
+  height: min(36rem, 80vh);
+}
+
+.doc-mdx-embed-popup-body {
+  height: 100%;
+  min-height: 0;
+  overflow: auto;
+}
+
+/* the padding of a document in a popup, as the popup of a source link has it */
+.doc-mdx-embed-popup-doc {
+  padding: 0.9rem 1.1rem 1.5rem;
+}
+
+/* the document starts at the top of its frame or popup: no margin above its
+   first block (a heading's would leave a gap under the title bar) */
+.doc-mdx-embed-content > :first-child {
+  margin-top: 0;
+}
+
+/* the title of an MDX block in the header of its popup, in Edit: a field in
+   the place and type of the title, outlined on hover and while typed */
+.doc-mdx-embed-title-field {
+  display: inline-block;
+  min-width: 8rem;
+  max-width: 24rem;
+  margin: -2px -5px;
+  padding: 1px 4px;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+  cursor: text;
+}
+
+.doc-mdx-embed-title-field:hover {
+  border-color: var(--color-fd-border);
+}
+
+.doc-mdx-embed-title-field:focus {
+  outline: none;
+  border-color: var(--color-fd-muted-foreground);
+  background: var(--color-fd-background);
+  text-overflow: clip;
+}
+
+.doc-mdx-embed-title-field:empty::before {
+  content: attr(data-placeholder);
+  color: var(--color-fd-muted-foreground);
+  font-weight: 400;
 }

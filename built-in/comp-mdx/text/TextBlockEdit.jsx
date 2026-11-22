@@ -4,6 +4,7 @@ import { EditActions } from '../../../main/comp-doc/edit/EditActions.jsx';
 import { EditFloatingPanel } from '../../../main/comp-doc/edit/EditFloatingPanel.jsx';
 import { EditSourceSurface } from '../../../main/comp-doc/edit/EditSourceSurface.jsx';
 import { EditSlashToggle } from '../../../main/comp-doc/slash/EditSlashToggle.jsx';
+import { slashBlockTextInsert } from '../../../main/frontend/src/lib/doc-slash.js';
 import { headingLevelGet } from './HeadingData.js';
 import { listLineSpaceListGet } from './ListData.js';
 import './text-block.css';
@@ -40,6 +41,12 @@ import './text-block.css';
 //                                  the last do instead of editFocusShiftRequest
 //                                  (the lines of a part of a list item lead back
 //                                  into the text of the item)
+//   blockInsert(source, offset, text)   optional: what a block an action
+//                                  puts at the caret does (slashEffect.block;
+//                                  ListItemEdit: a block of the item's text).
+//                                  a paragraph has its own: it is saved as the
+//                                  text before the caret, the block and the
+//                                  text after it (slashBlockTextInsert)
 //
 // events (handled by the edit layer):
 //   editDraftChange { text }      typed text; what a leave saves
@@ -52,7 +59,7 @@ import './text-block.css';
 //                                 reported with the caret position as the
 //                                 event point, so the neighbor keeps the x
 export const TextBlockEdit = observer(function TextBlockEdit({
-  data = {}, config = {}, onEvent, children, surfaceKeyDown, surfaceSelectionChange, atomModel, focusShift,
+  data = {}, config = {}, onEvent, children, surfaceKeyDown, surfaceSelectionChange, atomModel, focusShift, blockInsert,
 }) {
   const edit = config.edit ?? {};
   const session = edit.session ?? {};
@@ -74,6 +81,14 @@ export const TextBlockEdit = observer(function TextBlockEdit({
     if (isLocked) return;
     void onEvent?.('editCancelRequest');
   };
+  // a block put among the text of a paragraph makes it more than one block:
+  // it is saved so, and the session ends
+  const blockInsertParagraph = kind === 'paragraph' && !edit.isSurfaceFloating
+    ? (source, offset, text) => {
+        if (isLocked) return;
+        void onEvent?.('editSubmitRequest', { text: slashBlockTextInsert(text, offset, source) });
+      }
+    : undefined;
 
   const surface = (
     <EditSourceSurface
@@ -91,6 +106,7 @@ export const TextBlockEdit = observer(function TextBlockEdit({
       onTextChange={(text) => void onEvent?.('editDraftChange', { text })}
       onKeyDownFirst={surfaceKeyDown}
       onSelectionChange={surfaceSelectionChange}
+      onBlockInsert={blockInsert ?? blockInsertParagraph}
       onSubmitRequest={submitRequest}
       onCancelRequest={cancelRequest}
       onFocusShiftRequest={edit.isSurfaceFloating

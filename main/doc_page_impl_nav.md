@@ -114,11 +114,11 @@ link activated
 
 **Inside or outside.** A target registered by an object is shown **where the reader is** when the link is in an instance of that object's component (the scope: the same instance answers), and **in the popup** when the link is anywhere else, since no place of the page is the object's. What the popup shows is the object's to say: its [home document](doc_page_impl_obj_frontend.md#the-home-document) when it has one, told where the reader was going, else the target itself.
 
-**The inline popup** is one per page (`DocNavPopup`, state in `DocNavStore.popup`), drawn by the popup of a source link. `arrival { target, hash, key, ref }` of `nav/popup` is handed to what the popup renders as `DocNavArrivalContext`: a document standing for another one (a home document) reads it and takes the reader there.
+**The inline popup** is one per page (`DocNavPopup`, state in `DocNavStore.popup`), drawn by the popup of a source link. `arrival { target, hash, key, ref }` of `nav/popup` is handed to what the popup renders as `DocNavArrivalContext`: a document standing for another one (a home document) reads it and takes the reader there. In edit mode, when the page can write the document it shows, the popup shows its edit body instead of the document rendered (`DocPopupBody`), so a document opened from a link is edited where it was opened; in a body being edited a link is followed by Ctrl/⌘ + click, a plain click editing the text it stands in ([A document in a popup](doc_page_impl_mdx_embed.md#a-document-in-a-popup)).
 
 ## Writing a link
 
-Resolution reads a target. Its inverse writes one: for a document chosen while editing, it gives the target the author would have written. The navigation layer offers this as the `/link` action of the [slash mode](doc_page_impl_edit_slash.md). In a paragraph or a list being edited, `/link ` followed by a name, a title or a path lists the documents of the whole workspace. Choosing one replaces what was typed with `[title](target)`.
+Resolution reads a target. Its inverse writes one: for a document chosen while editing, it gives the target the author would have written. The navigation layer offers this as the `/link` action of the [slash mode](doc_page_impl_edit_slash.md). `/inline` writes the same link with `?nav=popup`, for a document to be opened in the inline popup. In a paragraph or a list being edited, `/link ` followed by a name, a title or a path lists the documents of the whole workspace. Choosing one replaces what was typed with `[title](target)`.
 
 ```text
 the chosen document, seen from the document being edited      target written (sourcePathReferenceGet)

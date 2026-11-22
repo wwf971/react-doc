@@ -20,6 +20,16 @@ export const EDIT_CLICK_OWN_SELECTOR = [
   EDIT_POPUP_SELECTOR,
 ].join(', ');
 
+// the nearest element of the target matching the selector, when it lies
+// inside the container; null otherwise. a control or a popup of the edit
+// layer around a whole body (a document edited in a popup: the popup holds
+// its body) is not a control of what is inside that body, so what decides
+// on its own clicks asks only within itself.
+export function targetClosestWithin(target, selector, container) {
+  const match = target?.closest?.(selector);
+  return match && container?.contains(match) ? match : null;
+}
+
 // Calls onOutside when a pointer goes down outside the element while
 // isActive. A pointer going down somewhere else is how an author leaves an
 // editor (the draft is saved) or closes a menu, so this is the "click
@@ -28,7 +38,10 @@ export const EDIT_CLICK_OWN_SELECTOR = [
 //
 // a popup of the edit layer that is portaled to the body (the mode menu of
 // a block, marked with the class doc-edit-popup) belongs to the element
-// that opened it: a pointer going down in it is not outside.
+// that opened it: a pointer going down in it is not outside. a popup the
+// element itself lies in (a field in the header of a dialog, a block of a
+// document edited in a popup) is not one it opened: a pointer going down
+// elsewhere in that popup is outside.
 export function useEditOutsidePointer(elementRef, isActive, onOutside) {
   const onOutsideRef = useRef(onOutside);
   onOutsideRef.current = onOutside;
@@ -40,7 +53,8 @@ export function useEditOutsidePointer(elementRef, isActive, onOutside) {
       if (event.button !== 0) return;
       const element = elementRef.current;
       if (!element || element.contains(event.target)) return;
-      if (event.target instanceof Element && event.target.closest(EDIT_POPUP_SELECTOR)) return;
+      const popup = event.target instanceof Element ? event.target.closest(EDIT_POPUP_SELECTOR) : null;
+      if (popup && !popup.contains(element)) return;
       editFocusRelease(element);
       onOutsideRef.current();
     };

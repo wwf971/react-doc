@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { selectionHolds } from '../../frontend/src/store/DocEditStructStore.js';
-import { EDIT_CLICK_OWN_SELECTOR, EDIT_POPUP_SELECTOR } from '../edit/use-edit-outside-pointer.js';
+import { EDIT_CLICK_OWN_SELECTOR, EDIT_POPUP_SELECTOR, targetClosestWithin } from '../edit/use-edit-outside-pointer.js';
 import {
   STRUCT_OWN_SELECTOR,
   blockRectListMeasure,
@@ -75,7 +75,8 @@ export function useStructPointer(bodyRef, { path, stores, model }) {
         return { blockIndex: Number(grip.dataset.blockIndex), itemPath: String(grip.dataset.itemPath ?? ''), isGrip: true };
       }
       if (!event.shiftKey) return undefined;
-      if (target.closest(STRUCT_OWN_SELECTOR) || target.closest(EDIT_CLICK_OWN_SELECTOR)) return undefined;
+      // what is asked within the body: a body edited in a popup lies inside the popup
+      if (targetClosestWithin(target, STRUCT_OWN_SELECTOR, body) || targetClosestWithin(target, EDIT_CLICK_OWN_SELECTOR, body)) return undefined;
       const located = elementLocate(body, target);
       if (!located || located.blockElement.hasAttribute('data-editing')) return undefined;
       // a component that works by its own clicks keeps them
@@ -90,7 +91,8 @@ export function useStructPointer(bodyRef, { path, stores, model }) {
       if (!structStore.selectionGet(path)) return;
       const target = event.target;
       if (target instanceof Element) {
-        if (target.closest(STRUCT_OWN_SELECTOR) || target.closest(EDIT_POPUP_SELECTOR)) return;
+        const body = bodyGet();
+        if (target.closest(STRUCT_OWN_SELECTOR) || (body ? targetClosestWithin(target, EDIT_POPUP_SELECTOR, body.ownerDocument.body) && !body.contains(target) : target.closest(EDIT_POPUP_SELECTOR))) return;
         if (target.closest('.doc-edit-block[data-struct-selected] > .doc-edit-block-anchor')) return;
       }
       structStore.selectionClear();

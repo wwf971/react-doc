@@ -1,12 +1,12 @@
-import { useRef } from 'react';
-import { makeAutoObservable, runInAction } from 'mobx';
+import { useMemo, useRef } from 'react';
+import { computed, makeAutoObservable, runInAction } from 'mobx';
 import { observer } from 'mobx-react-lite';
 import { Check, Copy, Eye, FileCode, History, LoaderCircle, Pencil, Upload, X } from '../../../main/frontend/UICommon.js';
 import { PanelPopup } from '../../../main/comp-doc/popup/PanelPopup.jsx';
 import { CodeEditor } from '../../../main/comp-doc/code-editor/CodeEditor.jsx';
 import { EditActions } from '../../../main/comp-doc/edit/EditActions.jsx';
 import { useCompStateStore } from '../../../main/comp-doc/registry/use-comp-state.js';
-import { useEditOutsidePointer } from '../../../main/comp-doc/edit/use-edit-outside-pointer.js';
+import { EDIT_POPUP_CLASS, useEditOutsidePointer } from '../../../main/comp-doc/edit/use-edit-outside-pointer.js';
 import { useWheelContain } from '../../../main/comp-doc/popup/use-wheel-contain.js';
 import { codeLangSearch } from '../../../main/comp-doc/code-editor/code-lang-list.js';
 import { useDocStores } from '../../../main/frontend/src/store/context.js';
@@ -271,8 +271,15 @@ export const CodeLinesDialogHost = observer(function CodeLinesDialogHost(props) 
     const state = compStateStore?.stateEnsure(`${key}|codeLines`, { initial: () => new CodeLinesStore(), compId: stateConfig?.compId ?? '' });
     state?.value?.open?.(isEditStart && editReason === '' ? 'edit' : 'view', value, lang);
   });
-  const state = key ? compStateStore?.stateGet(`${key}|codeLines`) : undefined;
-  if (!state?.value?.isOpen) return null;
+  // whether its dialog is open, as a computed value: the state layer gets an
+  // entry whenever a component makes its state, during a render of its own (an
+  // icon taking the place of this block's view), and this host is drawn again
+  // only when the answer changes, never during that render
+  const isOpenValue = useMemo(
+    () => computed(() => Boolean(key && compStateStore?.stateGet(`${key}|codeLines`)?.value?.isOpen)),
+    [compStateStore, key],
+  );
+  if (!isOpenValue.get()) return null;
   return <CodeLinesDialogHeld {...props} />;
 });
 
@@ -283,7 +290,13 @@ const CodeLinesDialogHeld = observer(function CodeLinesDialogHeld(props) {
 });
 
 // the dialog of the lines: View and Edit, the language, Copy, To asset / Asset
-const CodeLinesDialog = observer(function CodeLinesDialog({
+const CodeLinesDialog = observer(function CodeLinesDialog(props) {
+  // closed, the dialog draws nothing: its header is not built for every tile of the page
+  if (!props.store.isOpen) return null;
+  return <CodeLinesDialogOpen {...props} />;
+});
+
+const CodeLinesDialogOpen = observer(function CodeLinesDialogOpen({
   store, lang = '', title = '', value = '', editReason = 'the lines cannot be written here', onSave, assetMove, assetOpen,
 }) {
   const { compStateStore } = useDocStores();
@@ -387,7 +400,8 @@ const CodeLinesDialog = observer(function CodeLinesDialog({
       isOpen={store.isOpen}
       onClose={() => store.close()}
       headerRightContent={headerRightContent}
-      className="doc-code-lines-popup"
+      // a popup of the edit layer: a click in it is not a click on the block it belongs to
+      className={`doc-code-lines-popup ${EDIT_POPUP_CLASS}`}
       bodyClassName="doc-code-lines-body"
     >
       <CodeEditor
