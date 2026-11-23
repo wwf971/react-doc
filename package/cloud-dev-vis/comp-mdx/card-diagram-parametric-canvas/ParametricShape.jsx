@@ -12,7 +12,7 @@ import { shapeNormalize, shapePointListOf, shapePropertyList, shapeTextSearchMat
 // The kinds the parametric canvas brings to every registry listing it (node-registry.js: a feature's
 // kindList; ParametricShapeData.js for their data): a shape, drawn to the size of its node, and a
 // text, as wide as its words or wrapped at a width (its size mode). Their colors are the style of the node (DiagramNodeStyle.js), their
-// words a cell of the cell edit layer, typed where they stand while the diagram is edited (a click
+// words a cell of the cell editing kit, typed where they stand while the diagram is edited (a click
 // on them; Enter or a click elsewhere keeps them, Escape puts them back), each a step of the history.
 
 // the words of a shape or a text node: typed in place while edited, read otherwise. A text typed

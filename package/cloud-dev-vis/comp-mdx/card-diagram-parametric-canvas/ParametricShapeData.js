@@ -11,7 +11,7 @@ import { cardIconTextStrip } from '../card-diagram/CardIconTokenData.js';
 //           words standing by themselves; their box by the size mode of the node (fit: as wide as
 //           they are; wrap: a width they wrap at; DiagramNodeResize.js); style.fill puts a color behind them
 //
-// The words of both are a text of the cell edit layer: an icon is a token among them ({{icon:NAME}}).
+// The words of both are a text of the cell editing kit: an icon is a token among them ({{icon:NAME}}).
 export const SHAPE_LIST = ['rect', 'rounded', 'ellipse', 'diamond', 'triangle', 'hexagon', 'parallelogram'];
 export const SHAPE_LABEL = { rect: 'Rectangle', rounded: 'Rounded rectangle', ellipse: 'Ellipse', diamond: 'Diamond', triangle: 'Triangle', hexagon: 'Hexagon', parallelogram: 'Parallelogram' };
 export const TEXT_SIZE_LIST = ['s', 'm', 'l', 'xl'];

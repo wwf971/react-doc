@@ -306,7 +306,7 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
     const assetRemoteStore = new DocAssetRemoteStore({ assetStore, authStore, objectFrontendStore }, { driverList: data.storagePageDriverList });
     assetStore.remoteSet(assetRemoteStore);
     objectFrontendStore.stores.remoteStore = assetRemoteStore;
-    // the cell edit layer (doc_page_impl_edit_cell.md): the small values a component lets the
+    // the cell editing kit (doc_page_impl_edit_cell.md): the small values a component lets the
     // author type in place, their tokens (a link, a view of an object, a value of the
     // component's own data) and the slash mode typing them
     const cellStore = new DocCellStore({ cellTokenById, stores: { slashStore, sourceStore, objectStore } });

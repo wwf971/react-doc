@@ -68,7 +68,7 @@
 .doc-color-block-column { position: absolute; bottom: 12px; box-sizing: border-box; display: flex; justify-content: center; align-items: flex-start; padding: 0 8px; }
 .doc-color-block-column.has-divider { border-left: 1px dashed color-mix(in srgb, currentColor 40%, transparent); }
 .doc-color-block-label > span { min-width: 0; overflow-wrap: anywhere; }
-/* the words of a label: a text of the cell edit layer, an icon among them drawn at the size of the
+/* the words of a label: a text of the cell editing kit, an icon among them drawn at the size of the
    words (CardIconToken.jsx), a little apart from what follows it */
 .doc-color-block-text .doc-card-icon-token { margin-right: 0.15em; }
 /* the + of a block selected, at its corner on the side of its labels: it takes no room among them */

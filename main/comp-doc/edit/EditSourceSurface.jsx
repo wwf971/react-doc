@@ -60,7 +60,7 @@ import './DocEdit.css';
 //                       into its text, whenever it changes (a caret is start
 //                       equal to end). not reported once the selection has left
 //                       the surface, so what was selected last stays known to a
-//                       control beside it (the cell edit layer: a selected text
+//                       control beside it (the cell editing kit: a selected text
 //                       made a token, doc_page_impl_edit_cell.md)
 //   onKeyDownFirst(event, { caretOffset, selectionStart, selectionEnd, textLength })
 //                       optional: a key the editor around the surface takes
@@ -96,6 +96,9 @@ import './DocEdit.css';
 //                       adds it; without it the action's text is typed
 //   onSubmitRequest()   Ctrl/Cmd + Enter
 //   onCancelRequest()   Escape
+//   surfaceRef          optional: a ref given the editable element while it is
+//                       mounted, for an editor reading or marking its text (the
+//                       cell editing kit: a token marked, cell-surface.js)
 //   onFocusShiftRequest(direction, { point, rectSurface })
 //                       ArrowDown on the last line ('next') / ArrowUp on the
 //                       first line ('previous'): the author wants to go on
@@ -127,9 +130,15 @@ export function EditSourceSurface({
   onAtomValueChange,
   atomOpenRequest,
   onAtomInsert,
+  surfaceRef,
   ariaLabel = 'Block source',
 }) {
   const elementRef = useRef(null);
+  useLayoutEffect(() => {
+    if (!surfaceRef) return undefined;
+    surfaceRef.current = elementRef.current;
+    return () => { surfaceRef.current = null; };
+  }, [surfaceRef, tag]);
   // the kinds of atoms of the page (DocPageMdx: the registry of atom kinds)
   const atomKindByName = useContext(StoreContext)?.editStore?.atomKindByName ?? {};
   const atomKindByNameRef = useRef(atomKindByName);

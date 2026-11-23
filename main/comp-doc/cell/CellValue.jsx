@@ -1,10 +1,9 @@
-import { useContext, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
+import { useContext, useRef } from 'react';
 import { observer } from 'mobx-react-lite';
-import { X } from '../../frontend/UICommon.js';
 import { cellTextRangeReplace, cellTokenTextBuild } from '../../frontend/src/lib/doc-cell.js';
 import { StoreContext } from '../../frontend/src/store/context.js';
-import { EDIT_POPUP_CLASS } from '../edit/use-edit-outside-pointer.js';
+import { cellTokenCardIsOffered } from './cell-define.js';
+import { CellTokenCard } from './CellTokenCard.jsx';
 import './Cell.css';
 
 // A cell text drawn (doc_page_impl_edit_cell.md#drawing-and-typing): its text
@@ -18,9 +17,9 @@ import './Cell.css';
 //   text        the text kept in the data
 //   textEmpty   what is drawn for an empty text (a placeholder, a dash); default nothing
 //
-// A token whose kind has a card can be selected where it is drawn and changed
-// from the card beside it (#a-token-selected-its-card), in a value that says
-// it can be edited:
+// A token whose kind offers its card where it is drawn (cardPlaceList 'value')
+// can be selected there and changed from the card beside it
+// (#a-token-selected-where-it-is-drawn), in a value that says it can be edited:
 //
 //   isEditable            whether a click on such a token selects it
 //   cellKey               the value, unique on the page while it is drawn: which
@@ -50,7 +49,7 @@ const CellToken = observer(function CellToken({ part, cell, text, cellKey, onTex
   // (use-cell.js). the context is one object and the token's own props stay the same, so
   // nothing else would say it; handed on to the Render, which a memo may keep as well
   const contextVersion = cell.contextVersionGet?.() ?? 0;
-  const isSelectable = Boolean(part.kind.Card && cellKey && cellStore);
+  const isSelectable = cellTokenCardIsOffered(part.kind, 'value') && Boolean(cellKey && cellStore);
   const isSelected = isSelectable && cellStore.tokenIsSelected(cellKey, part.start);
   if (!Render && !isSelectable) {
     const textPlain = part.kind.textGet?.(part, cell);
@@ -77,7 +76,11 @@ const CellToken = observer(function CellToken({ part, cell, text, cellKey, onTex
       {Render ? <Render token={part} cell={cell} contextVersion={contextVersion} /> : textPlain ?? part.raw}
       {isSelected ? (
         <CellTokenCard
-          anchorRef={elementRef}
+          anchorRectGet={() => elementRef.current?.getBoundingClientRect()}
+          observeElementGet={() => elementRef.current}
+          isInsideGet={(target) => Boolean(elementRef.current?.contains(target))}
+          placement="right"
+          where="value"
           part={part}
           cell={cell}
           close={() => cellStore.tokenSelectClear(cellKey)}
@@ -91,106 +94,3 @@ const CellToken = observer(function CellToken({ part, cell, text, cellKey, onTex
     </span>
   );
 });
-
-// The card of a selected token: the kind's Card in a floating frame to the
-// right of the token (below it when the window has no room there), its top
-// edge at the token's, so nothing the author does in it moves it. It is a
-// popup of the edit layer: a pointer in it is not a click outside what is
-// being edited. Escape, the close button and a pointer going down elsewhere
-// close it.
-function CellTokenCard({ anchorRef, part, cell, tokenSet, close }) {
-  const cardRef = useRef(null);
-  const [place, placeSet] = useState(null);
-  const closeRef = useRef(close);
-  closeRef.current = close;
-
-  useLayoutEffect(() => {
-    const observer = new ResizeObserver(() => placeRead());
-    let frame = 0;
-    let isObserved = false;
-    const placeRead = () => {
-      const anchor = anchorRef.current;
-      const card = cardRef.current;
-      if (!anchor || !card) return false;
-      if (!isObserved) {
-        isObserved = true;
-        observer.observe(anchor);
-      }
-      placeSet(tokenCardPlaceGet(anchor.getBoundingClientRect(), card.offsetWidth, card.offsetHeight));
-      return true;
-    };
-    // a card mounted in the same turn as its token (a token selected already when its text is
-    // drawn again) meets no anchor yet: the token's element is attached after the effects of
-    // what is inside it. it is placed on the next frame then, never left out of sight
-    if (!placeRead()) frame = requestAnimationFrame(placeRead);
-    window.addEventListener('scroll', placeRead, { capture: true, passive: true });
-    window.addEventListener('resize', placeRead);
-    return () => {
-      cancelAnimationFrame(frame);
-      window.removeEventListener('scroll', placeRead, { capture: true });
-      window.removeEventListener('resize', placeRead);
-      observer.disconnect();
-    };
-  }, [anchorRef]);
-
-  useEffect(() => {
-    const pointerDownHandle = (event) => {
-      if (event.button !== 0) return;
-      if (cardRef.current?.contains(event.target) || anchorRef.current?.contains(event.target)) return;
-      closeRef.current();
-    };
-    const keyDownHandle = (event) => {
-      if (event.key !== 'Escape' || event.defaultPrevented) return;
-      event.preventDefault();
-      event.stopPropagation();
-      closeRef.current();
-    };
-    document.addEventListener('pointerdown', pointerDownHandle, true);
-    document.addEventListener('keydown', keyDownHandle, true);
-    return () => {
-      document.removeEventListener('pointerdown', pointerDownHandle, true);
-      document.removeEventListener('keydown', keyDownHandle, true);
-    };
-  }, [anchorRef]);
-
-  const Card = part.kind.Card;
-  return createPortal(
-    <div
-      ref={cardRef}
-      className={`doc-popover doc-cell-token-card not-prose ${EDIT_POPUP_CLASS}`}
-      role="dialog"
-      aria-label={`${part.kind.label}: edit`}
-      style={place ? { left: place.left, top: place.top, maxHeight: place.maxHeight } : { left: 0, top: 0, visibility: 'hidden' }}
-      onClick={(event) => event.stopPropagation()}
-    >
-      <div className="doc-cell-token-card-head">
-        <span className="doc-cell-token-card-title">{part.kind.label}</span>
-        <button type="button" className="doc-cell-token-card-close" title="Close (Esc)" aria-label="Close" onClick={close}>
-          <X size={12} aria-hidden="true" />
-        </button>
-      </div>
-      <Card token={part} cell={cell} tokenSet={tokenSet} close={close} />
-    </div>,
-    document.body,
-  );
-}
-
-// to the right of the token, its top edge at the token's; to its left when the
-// window has no room at the right, under it when neither side has. kept inside
-// the window, and what does not fit scrolls inside the card
-function tokenCardPlaceGet(rect, widthCard, heightCard) {
-  const gap = 8;
-  const margin = 6;
-  let left = rect.right + gap;
-  let top = rect.top;
-  if (left + widthCard > window.innerWidth - margin) {
-    const leftOther = rect.left - gap - widthCard;
-    if (leftOther >= margin) left = leftOther;
-    else {
-      left = Math.max(margin, Math.min(rect.left, window.innerWidth - widthCard - margin));
-      top = rect.bottom + gap;
-    }
-  }
-  top = Math.max(margin, Math.min(top, Math.max(margin, window.innerHeight - Math.min(heightCard, 160) - margin)));
-  return { left: Math.round(left), top: Math.round(top), maxHeight: Math.max(120, window.innerHeight - top - margin) };
-}

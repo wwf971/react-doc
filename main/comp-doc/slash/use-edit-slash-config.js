@@ -16,7 +16,7 @@ import { StoreContext } from '../../frontend/src/store/context.js';
 //   triggerList           direct triggers: [{ text, action, endList? }], a text
 //                         that enters the param mode of an action at once
 //
-// a cell of a frontend object's mode does not call this: the cell edit layer
+// a cell of a frontend object's mode does not call this: the cell editing kit
 // builds the slash of a cell from its token kinds (doc_page_impl_edit_cell.md)
 //
 // answers the slash of EditSourceSurface, or undefined outside a page (no

@@ -76,7 +76,7 @@
 //                   of the document), 'inListItem' (the text of a list item)
 //     configValueGet(key)  the value of a config key for the document }
 // a surface of a component hands its own context (use-edit-slash-config.js); a cell's
-// context is built by the cell edit layer, which adds source and object to the
+// context is built by the cell editing kit, which adds source and object to the
 // component's own (doc_page_impl_edit_cell.md)
 
 import { slashEffect, slashViewItemListGet } from '../../frontend/src/lib/doc-slash.js';

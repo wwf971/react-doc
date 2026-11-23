@@ -1,8 +1,8 @@
-<!-- Design of the cell edit layer: the small values a component lets the author type in place (a cell of a table, a field of a mode of a frontend object), their tokens (a link, a view of an object, a value of the component's own data) and how they are drawn and typed. Parent document: doc_page_impl_edit.md. It is built on the slash mode (doc_page_impl_edit_slash.md), and its token kinds come from the navigation layer (doc_page_impl_nav.md), the object service layer (doc_page_impl_obj.md) and the components owning the cells, usually modes of frontend objects (doc_page_impl_obj_frontend.md). -->
+<!-- Design of the cell editing kit: the small values a component lets the author type in place (a cell of a table, a field of a mode of a frontend object), their tokens (a link, a view of an object, a value of the component's own data) and how they are drawn and typed. Parent document: doc_page_impl_edit.md. It is built on the slash mode (doc_page_impl_edit_slash.md), and its token kinds come from the navigation layer (doc_page_impl_nav.md), the object service layer (doc_page_impl_obj.md) and the components owning the cells, usually modes of frontend objects (doc_page_impl_obj_frontend.md). -->
 
-# Cell Editing: Design
+# Cell Editing Kit: Design
 
-A **cell** is one small value a component draws and lets the author type in place: a cell of a table, a field of a form, a line of a card. Most cells belong to a mode of a [frontend object](doc_page_impl_obj_frontend.md): the remark of a book of a reading list, a cell of a CV. A document is edited block by block by the [edit layer](doc_page_impl_edit.md); a cell is one level below a block, and this layer is what every component uses for it, so that all cells of a page are typed the same way and can hold the same things.
+A **cell** is one small value a component draws and lets the author type in place: a cell of a table, a field of a form, a line of a card. Most cells belong to a mode of a [frontend object](doc_page_impl_obj_frontend.md): the remark of a book of a reading list, a cell of a CV. A document is edited block by block by the [edit layer](doc_page_impl_edit.md); a cell is one level below a block, and the **cell editing kit** is what every component uses for it: the registry of token kinds, `useCell` for a cell, and the components drawing and typing it (`CellValue`, `CellEdit`, `CellField`), so that all cells of a page are typed the same way and can hold the same things. It is a kit, not a layer of its own: a component picks up what it needs, and the layers of the page (navigation, objects) bring their token kinds to it.
 
 A cell holds **text with tokens in it**. A token is something more than words that the author typed out: a link, a view of an object, a value the component reads from its own data. Each token is drawn by the layer it belongs to, and typed with the [slash mode](doc_page_impl_edit_slash.md):
 
@@ -15,10 +15,10 @@ read      read before Dune · Guide ↗ · ▢ Short list           every token 
 edited    the text as kept, in the cell itself; "/" lists /book /link /object, "{{" opens a token
 ```
 
-The layer stands between three parties that know nothing of each other:
+The kit stands between three parties that know nothing of each other:
 
 ```text
-token kinds (what a token is)                 the cell edit layer                   the component (owns the cell)
+token kinds (what a token is)                 the cell editing kit                  the component (owns the cell)
   nav/link      navigation layer        ──►   DocCellStore                    ◄──   useCell({ tokenList, context })
   object/view   object service layer            the registry of kinds               its own kinds, over its own data
   its own       the component                   a cell: its kinds, its slash   ──►  CellValue   draws a text
@@ -71,8 +71,11 @@ cellTokenDefine({
   how it is typed:
     slashAction                           a slash action, or (cell) => one
     isTriggerDirect                       a brace kind: its opening text enters the action at once (default true)
-  how one token is changed where it is drawn:
-    Card({ token, cell, tokenSet, close })   optional: its edit card (#a-token-selected-its-card)
+  how one token is shown and changed where it is:
+    Card({ token, cell, tokenSet, close, where })   optional: its card (#the-card-of-a-token), drawn
+                                          beside a token selected where it is drawn (where 'value') and
+                                          under a token marked in the typed text (where 'surface')
+    cardPlaceList                         where the card is offered: ['value', 'surface'] (default both)
 })
 token = { kind, name, raw, body, param, data, start, end }
 cell  = { tokenList, context, contextVersionGet(), contextTouch(), sourcePath, owner, source, object, slash, parse(text), textGet(text) }
@@ -96,7 +99,7 @@ The kinds of the page are a registry, built like the [slash action registry](doc
 
 **Which kinds a cell accepts** (`cellTokenListResolve`): its own first, then the page's, all of them or those it names (`tokenIdList`). An own kind hides a page kind of its name, and only one kind takes the brace tokens without a sigil.
 
-**The layer knows no kind by name.** A layer added later (tags, a formula) brings a kind the same way; nothing of this layer changes.
+**The kit knows no kind by name.** A layer added later (tags, a formula) brings a kind the same way; nothing of the kit changes.
 
 ## Drawing and typing
 
@@ -107,7 +110,7 @@ CellEdit  { cell, text, ... }     the text typed: tokens written out, in EditSou
                                   (never an <input>), with the slash of the cell
 ```
 
-**The slash of a cell** is built by the layer from its kinds (`DocCellStore.slashBuild`):
+**The slash of a cell** is built by the kit from its kinds (`DocCellStore.slashBuild`):
 
 - **Its actions are the actions of its kinds**, the owner's first, and nothing else: the page's other actions are not offered in a cell.
 - **`/` starts the slash mode wherever no word goes on after it**, whatever stands before it, as in a document ([The state machine](doc_page_impl_edit_slash.md#the-state-machine)). A cell is often text without spaces between its words (`{{birth/month}}月`), where a rule asking for a space before the `/` would never hold.
@@ -118,9 +121,22 @@ CellEdit  { cell, text, ... }     the text typed: tokens written out, in EditSou
 
 **Nothing moves** when a cell opens ([the no-jitter rule](doc_page_impl_edit.md#in-place-editing-and-the-no-jitter-rule), rule 9): the surface stands in the box of the value, in its type, at least as wide as the value was read (`CellField` measures it on the click: `field.widthRead`), and never at a width of its own, so a short value (two letters on a label) is not widened by opening it; only typing changes its size; a token drawn inside a line never makes the line taller (a chip of the registry is drawn in the scale of the line in a cell); what exists only while editing floats.
 
-### A token selected: its card
+### The card of a token
 
-Typing changes a text; some tokens are better changed **where they are drawn**: a badge given another size, an image replaced, a token taken out. A kind that has something to offer there defines a `Card`, and the layer does the rest:
+A token is more than its words: the value it reads, the object it names, how large a badge is drawn. **Its card** shows that and changes it, and the kind alone decides what it holds and what may be done there (read only, a value typed in place, a parameter chosen): the kit only places it, opens and closes it, and hands it `tokenSet`. A card is offered in two places, `where` telling it which:
+
+| where | the token | the card |
+| --- | --- | --- |
+| `value` | drawn, in a value that can be edited, **selected** by a click | to its right ([below](#a-token-selected-where-it-is-drawn)) |
+| `surface` | written out in the text being typed, **marked** | under it ([below](#a-token-marked-in-the-typed-text)) |
+
+`cardPlaceList` of the kind says where it offers it: a badge in both (a size is chosen on the sheet as well as while typing), a value of the owner's data or a view of an object only in the typed text, so that a click on it where it is drawn still does what it did (opening the cell, opening the object).
+
+**A token naming an object, or something inside one, has the card of that object.** The kind `object/view` draws `{{@reference}}` by the [object view registry](doc_page_impl_obj.md#object-views) in the context `inline`, and its card is the same registry in the context `panel`: whatever view the object's types expose for `panel` is drawn there, a fallback card when none does. So the card of a token is registered where the thing is understood: a component exposing a view (`expose.objectView: { typeList, contextList: ['panel'] }`) is the card of every token naming an object of those types, on every page. A frontend object gives the things inside it a type of its own (`typeId` of `objectInner.resolve`) and a `panel` view of that type, which reaches the object through `useObjectFrontendInner(ref)` ([Things inside an object](doc_page_impl_obj_frontend.md#things-inside-an-object-inner-paths)): a value of a profile is then typed where a cell names it. An owner's own kind naming such a thing (a query of a CV) may draw the same view as its card, so a value is changed alike wherever it is named.
+
+#### A token selected where it is drawn
+
+Typing changes a text; some tokens are better changed **where they are drawn**: a badge given another size, an image replaced, a token taken out. A kind offering its card in `value` is selectable there, and the kit does the rest:
 
 ```text
 a value that can be edited (CellValue isEditable, or a CellField)
@@ -138,6 +154,32 @@ a value that can be edited (CellValue isEditable, or a CellField)
 - **One token is selected on the page** (`DocCellStore.token: { key, start }`); `cellKey` of `CellValue` names the value it stands in. Opening a field clears it, since both would write the same text.
 - **A change made from the card keeps the card open.** A token is the same element while only how it is written changes (its parameters, typed in the card or chosen there), so the card stays where it is and the author goes on: a size typed, then a caption.
 - **The card is a popup of the edit layer** (`doc-edit-popup`), floating, so a click in it is not a click outside what is being edited, and its top edge does not move while its content changes ([the edit card](doc_page_impl_mdx_comp_block.md#should-interaction-patterns-of-a-canvas)).
+
+#### A token marked in the typed text
+
+While a cell is typed, its tokens are written out (`{{address/jp/postal}}`), and its text is typed as any text. A token is also **one thing** there: it can be marked, taken out whole, and shown by its card, without the text stopping being text:
+
+```text
+the text typed (CellEdit)              〒{{address/jp/postal}} 東京都…
+  a click on the words of a token      marks it: a ground under its words (a highlight, nothing of the
+                                       text changes), the caret at its edge nearer the click, its card
+                                       under it when its kind offers one in the surface
+  the caret coming to its edge from    marks it too: ← onto the place after its last "}" from after it,
+  outside                              → onto the place before its first "{" from before it
+marked
+  Backspace, Delete                    take the whole token out (as a typed delete: Undo brings it back)
+  a click on its words                 unmarks it: the caret where the click was, inside its words,
+                                       which are typed as any text (a query changed by hand)
+  ← → onward, a character typed,       unmark it, and do what they do: the caret moves (into the words,
+  Escape, a click elsewhere            or away), the character is typed at the edge; Escape only unmarks
+  in its card                          the token written again (tokenSet), or what it names changed by
+                                       the kind's own write (a value of a profile, for every paper)
+```
+
+- **A cell opened by a click on a token marks it at once**, and so does a cell whose whole text is one token: the most common cell (one value of a profile) opens with that value's card under it, and a second click on the token reaches its words.
+- **The mark is drawn by the browser's highlight registry** (`::highlight(doc-cell-token-mark)`), so the surface stays plain text: no element is added to what is typed, the caret moves and the text reads back as before. One token is marked on the page.
+- **`tokenSet` from a card in the surface writes the typed text**, not the owner's data: the draft changes as if typed, and the owner saves it with the rest. A card that changes what the token names (a value kept elsewhere) writes that itself, at once, and says where it is kept.
+- **The card stands under the token**, its left edge at the token's (above it when the window has no room under it), floating: it is a popup of the edit layer, so a click in it does not leave the cell, and the cell keeps its place (rule 9).
 
 ### A selection made a token
 
@@ -185,7 +227,7 @@ const Shelf = observer(function Shelf({ data, config }) {
 
 - **`useCell`** (`comp-doc/cell/use-cell.js`) answers the cell: `tokenList` its own kinds, `context` what they read, `config` the config of the component (the document it is drawn in, and for a mode the object), `tokenIdList` the kinds of the page it accepts. The context is copied into the cell on every render, so a kind drawing a token and an action listing while the author types read the component's data as it is now. **A token drawn already is drawn again when the context changed**: the context is one object for the life of the cell, and the props of a token stay the same, so nothing else would tell a token, kept by a memo, that the badge it draws has another caption. The cell therefore counts the changes (`cell.contextVersionGet()`, an observable; `useCell` bumps it with `cell.contextTouch()` after a render in which a value handed in is not the one of the last render, before the paint), `CellValue` reads the count where it draws a token and hands it to the kind's `Render` as `contextVersion`. A component whose tokens are costly to draw hands in the same object for what did not change.
 - **The owner decides when a cell is editable.** For a mode of a frontend object that is `service.isEditable`: the object can be written and the document is in edit mode ([Reading and editing](doc_page_impl_obj_frontend.md#reading-and-editing)). In reading mode a cell is drawn and its links and views work.
-- **The owner keeps the text.** The layer never writes data: `onCommit` hands the text to the component, which writes it through its own api.
+- **The owner keeps the text.** The kit never writes data: `onCommit` hands the text to the component, which writes it through its own api.
 - **A link in a cell is written in the full form** (`~page:root/a.md`): a cell belongs to data, not to one document, and is drawn wherever a block shows its object ([Writing a link](doc_page_impl_nav.md#writing-a-link)).
 - Outside a page (no stores) a cell still parses and draws its own kinds, without a slash mode.
 
@@ -203,7 +245,7 @@ const Shelf = observer(function Shelf({ data, config }) {
 
 The last step is **delegated**: the registry asks the provider of the reference (`innerComplete`, [Inside an object](doc_page_impl_obj.md#inside-an-object)), and the frontend object service layer asks the type of the object ([Things inside an object](doc_page_impl_obj_frontend.md#things-inside-an-object-inner-paths)). A reading list answers with the paths of its books; a profile of the package cv with its partitions and query paths; a document with its sections. The head of the menu says what the parameter has reached (`Reading list › Short list › inside: /book/`), since the parameter itself holds ids.
 
-## What the layer does not do
+## What the kit does not do
 
 - It does not store, validate or version the text: the owner's data does.
 - It is not a rich text editor: a cell text is one string, and a token is typed as text and drawn only when the cell is read. What a token offers beyond its text is in its card.
@@ -219,13 +261,14 @@ The last step is **delegated**: the registry asks the provider of the reference 
 | `comp-doc/cell/cell-define.js` | `cellTokenDefine`, building the registry by layers |
 | `comp-doc/cell/cell-registry.js` | the package's kinds by id |
 | `comp-doc/cell/use-cell.js` | `useCell`: the cell of a component |
-| `comp-doc/cell/CellValue.jsx`, `CellEdit.jsx`, `CellField.jsx`, `Cell.css` | drawing (a token selected, its card), typing (the selection reported), the field |
+| `comp-doc/cell/CellValue.jsx`, `CellEdit.jsx`, `CellField.jsx`, `Cell.css` | drawing (a token selected), typing (a token marked, the selection reported), the field |
+| `comp-doc/cell/CellTokenCard.jsx`, `cell-surface.js` | the card of a token, beside or under it; the offsets of the typed text as ranges of its surface, the mark |
 | `comp-doc/link/link-cell.jsx` | `nav/link`: the link in a cell |
-| `comp-doc/object/object-cell.jsx`, `object-slash.js` | `object/view`: the object view in a cell; `/object` |
+| `comp-doc/object/object-cell.jsx`, `object-slash.js` | `object/view`: the object view in a cell, its card (the view of the context `panel`); `/object` |
 | `frontend/src/lib/doc-object-complete.js` | the walk of `/object`: a type, an object, inside it |
 | `frontend/src/lib/doc-cell.test.js`, `doc-object-complete.test.js` | the grammar, the store, the walk |
 | `example_doc/.doc-page/comp-mdx/object-frontend/reading-list/ReadingList.jsx` | the demonstration: the remark of a book, the text of a note, the list's own kind |
 
 ## Future updates
 
-What the layer leaves for later (kinds declared by a doc page, a search by words across objects in `/object`, several fields opened together as one ready piece) is in [TODO](doc_page_impl_TODO.md#edit-cell).
+What the kit leaves for later (kinds declared by a doc page, a search by words across objects in `/object`, several fields opened together as one ready piece) is in [TODO](doc_page_impl_TODO.md#edit-cell).

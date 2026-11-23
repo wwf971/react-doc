@@ -24,7 +24,7 @@ test('base color blocks validate bottom labels and stay behind ordinary cards', 
 	const data = { tone: 'blue', itemList: [{ id: 'db', text: '{{icon:database}} Source' }, { id: 'note', text: 'PW' }] };
 	assert.equal(colorBlockNormalize(data), data);
 	assert.throws(() => colorBlockNormalize({ itemList: [{ id: 'same', text: 'One' }, { id: 'same', text: 'Two' }] }), /unique/);
-	// an icon kept apart (the form before the cell edit layer) is refused with the text to write
+	// an icon kept apart (the form before the cell editing kit) is refused with the text to write
 	assert.throws(() => colorBlockNormalize({ itemList: [{ id: 'old', icon: 'database', text: 'Source' }] }), /text: '\{\{icon:database\}\} Source'/);
 	assert.throws(() => colorBlockNormalize({ itemList: [{ id: 'empty', text: ' ' }] }), /needs a text/);
 	const block = { id: 'area', renderer: { type: 'color-block' }, position: { x: -20, y: -20 }, size: { width: 400, height: 300 }, data };

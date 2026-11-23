@@ -82,6 +82,6 @@ export const compObjectViewFrontendInner = compDefine(ObjectViewFrontendInner, {
   placementList: ['objectView'],
   expose: {
     meta: { label: 'Inside a frontend object', isNotInDoc: true, isReadOnly: true },
-    objectView: { typeList: [OBJECT_FRONTEND_TYPE_INNER], contextList: ['icon', 'inline', 'card', 'block'], priority: 0 },
+    objectView: { typeList: [OBJECT_FRONTEND_TYPE_INNER], contextList: ['icon', 'inline', 'card', 'block', 'panel'], priority: 0 },
   },
 });

@@ -33,7 +33,7 @@ import './ReadingList.css';
 // (assets by any asset reference: a path, a key, name:…; their search and
 // path completion; modeSet / paramSet / blockSet switching the block).
 //
-// two texts of it are cells of the cell edit layer (main/doc_page_impl_edit_cell.md): the
+// two texts of it are cells of the cell editing kit (main/doc_page_impl_edit_cell.md): the
 // remark of a book (a cell of the shelf's table) and the text of a note. while the document is
 // edited a click opens one in place, and its text may hold tokens beside words: a link
 // (/link), a view of any object (/object), and the list's own kind, another book of this

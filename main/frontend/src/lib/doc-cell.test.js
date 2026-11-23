@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-  cellBraceTextBuild, cellContextAssign, cellLinkMatchList, cellTextParse, cellTextPlainGet, cellTokenListGet, cellTokenListResolve, cellTokenSoleGet, cellTriggerListBuild,
+  cellBraceTextBuild, cellContextAssign, cellLinkMatchList, cellTextParse, cellTextPlainGet, cellTokenAtGet, cellTokenEdgeArrivalGet, cellTokenInsideGet, cellTokenListGet,
+  cellTokenListResolve, cellTokenSoleGet, cellTriggerListBuild,
 } from './doc-cell.js';
 import { cellTokenByIdBuild, cellTokenDefine } from '../../../comp-doc/cell/cell-define.js';
 import { slashActionDefine, } from '../../../comp-doc/slash/slash-define.js';
@@ -221,4 +222,19 @@ test('a cell says when its context changed: what draws its tokens reads the vers
   cell.contextTouch();
   dispose();
   assert.deepEqual(seenList, [0, 1, 2]);
+});
+
+test('a token marked in the typed text: inside its words, the edge reached from outside', () => {
+  // 〒{{a/b}} x{{c}}: {{a/b}} is 1..8, {{c}} is 10..15
+  const partList = cellTextParse('〒{{a/b}} x{{c}}', kindList);
+  assert.equal(cellTokenInsideGet(partList, 4)?.raw, '{{a/b}}');
+  assert.equal(cellTokenInsideGet(partList, 1), undefined, 'at its start edge: not inside');
+  assert.equal(cellTokenInsideGet(partList, 8), undefined, 'at its end edge: not inside');
+  assert.equal(cellTokenEdgeArrivalGet(partList, 9, 'left')?.raw, '{{a/b}}', '← from one after it lands after its last }');
+  assert.equal(cellTokenEdgeArrivalGet(partList, 8, 'left'), undefined, '← from its own edge goes into its words');
+  assert.equal(cellTokenEdgeArrivalGet(partList, 9, 'right')?.raw, '{{c}}', '→ from one before it lands before its first {');
+  assert.equal(cellTokenEdgeArrivalGet(partList, 0, 'right')?.raw, '{{a/b}}');
+  assert.equal(cellTokenEdgeArrivalGet(partList, 10, 'right'), undefined);
+  assert.equal(cellTokenAtGet(partList, 10, 15)?.raw, '{{c}}');
+  assert.equal(cellTokenAtGet(partList, 10, 14), undefined, 'a mark stays only while its token is there');
 });

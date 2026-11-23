@@ -213,7 +213,8 @@ export type ObjectViewCandidate = {
   unavailableReason: string;
 };
 
-export type ObjectViewChoice = ObjectViewCandidate & { distance: number; isFallback: boolean };
+// contextDrawn: the context the view draws in, when it is not the one asked for (a panel drawn by a card view)
+export type ObjectViewChoice = ObjectViewCandidate & { distance: number; isFallback: boolean; contextDrawn?: string };
 
 export const objectEventTypeList = [
   'objectResolveRequest',
@@ -1061,7 +1062,13 @@ export class DocObjectStore {
   // else the best; the fallback view when nothing else can
   viewResolve(descriptor: ObjectDescriptor, context: string, compIdPreferred = ''): ObjectViewChoice {
     const contextUsed = OBJECT_VIEW_CONTEXT_LIST.includes(context) ? context : 'card';
-    const viewList = this.viewListGet(descriptor.typeList, contextUsed);
+    let viewList = this.viewListGet(descriptor.typeList, contextUsed);
+    // a type with no view of its own for a panel is drawn there by its card view, nearer to it than
+    // the fallback (doc_page_impl_obj.md#object-views)
+    if (contextUsed === 'panel' && viewList.every((view) => view.isFallback)) {
+      const viewCardList = this.viewListGet(descriptor.typeList, 'card');
+      if (viewCardList.some((view) => !view.isFallback)) viewList = viewCardList.map((view) => ({ ...view, contextDrawn: 'card' }));
+    }
     const preferred = compIdPreferred ? viewList.find((view) => view.compId === compIdPreferred) : undefined;
     return preferred ?? viewList[0] ?? {
       compId: OBJECT_VIEW_FALLBACK_COMP_ID, typeList: ['core.object'], contextList: [...OBJECT_VIEW_CONTEXT_LIST], priority: -100, origin: 'page',

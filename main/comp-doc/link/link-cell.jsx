@@ -5,7 +5,7 @@ import { DocLink } from './DocLink.jsx';
 import { linkSlashActionBuild } from './link-slash.js';
 
 // The link in a cell (doc_page_impl_edit_cell.md#token-kinds, doc_page_impl_nav.md#writing-a-link):
-// the token kind the navigation layer offers the cell edit layer. A link is
+// the token kind the navigation layer offers the cell editing kit. A link is
 // written in a cell as it is in a document, [label](target), with the target
 // grammar of the navigation layer, and is drawn by DocLink: resolved against
 // the source of the workspace, followed through the routes of the page, with

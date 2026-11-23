@@ -1,4 +1,4 @@
-/* ---------- the cell edit layer (doc_page_impl_edit_cell.md) ----------
+/* ---------- the cell editing kit (doc_page_impl_edit_cell.md) ----------
    a cell takes the type and the box of where it stands: nothing here sets a
    font, a size or a padding of the text. what is styled is what a cell adds:
    a token inside a line, the surface while it is open, the field's marks */
@@ -174,4 +174,16 @@ span.doc-cell-field[data-editable][data-empty] {
   border-style: dashed;
   border-color: color-mix(in srgb, var(--color-fd-destructive, #dc2626) 60%, var(--color-fd-border));
   color: var(--color-fd-muted-foreground);
+}
+
+/* a token marked in the typed text (CellEdit, cell-surface.js): a ground under its words, drawn by
+   the browser's highlight registry, so the text stays plain text */
+::highlight(doc-cell-token-mark) {
+  /* blue, as a selection is, not the page's primary (near black in its light theme) */
+  background-color: rgb(37 99 235 / 24%);
+}
+
+/* the card under a token marked: room for a value typed in it */
+.doc-cell-token-card[data-placement="below"] {
+  width: 20rem;
 }

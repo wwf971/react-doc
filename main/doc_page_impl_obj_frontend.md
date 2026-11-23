@@ -388,12 +388,14 @@ compDefine(CvProfileInfo, {
 
 **In the registry.** An inner reference is an object of the type `frontend.inner` (a `core.place`): `label` its name, `summary { objectRef, objectLabel, path, kind, text? }`, missing (still of its type) when nothing is at the path. `common/ObjectViewFrontendInner` draws it: a chip in a line (the value itself when it is one), a card, and in the block context the mode declaring `pathParam`. Opening it goes to its document when the asset is one ([Documents of an object](#documents-of-an-object)), else to the object in the settings tab. On the page: `DocObjectFrontendStore.innerResolve(object, path)`, `innerComplete(object, text)`, `innerBlockGet(object, path)`, `innerOpen(object, path)`.
 
+**A thing worked on where it is named.** A token naming a thing inside an object (`{{@frontend:{id}#{inner path}}}` in a cell) has a card, the view of the context `panel` ([The card of a token](doc_page_impl_edit_cell.md#the-card-of-a-token)). `ObjectViewFrontendInner` draws one for every thing (its name, its kind, its object and path, a value's text), read only. A type wanting its things changed there answers a type of its own for them (`typeId` of `objectInner.resolve`, below `frontend.inner`) and exposes a view of that type for `panel`; the view reaches the object with `useObjectFrontendInner(ref)` (exported by the page): `{ service, innerPath, inner, isEditable, editUnavailableReason }`, the api of a mode of the object without a block, and whether a change may be made now: the consumer allows it (`config.objectView.isEditableConsumer`, a cell being typed) and the object can be written. A value of a profile of the package cv is typed so, in its card, from any cell naming it.
+
 **When a type is added or changed, check this part.** It costs little and is what makes the things of an object reachable from every cell and paragraph:
 
 1. Do its assets have paths? Then completion works already. Give them paths as [recommended](doc_page_impl_obj_frontend_asset_path.md#asset-paths-in-a-frontend-object), the kind first, so the top of a walk is the kinds.
 2. Does a mode show one thing? Declare `pathParam` on it, and let it take any asset reference there, not only a key.
 3. Are its things something else than its data items (values inside an item, rows of a table)? Expose `objectInner` on the component that knows them, with both functions.
-4. Does a text of a mode hold what a reader types (a remark, a cell)? Make it a cell of the [cell edit layer](doc_page_impl_edit_cell.md), with a token kind of its own for what only this type knows.
+4. Does a text of a mode hold what a reader types (a remark, a cell)? Make it a cell of the [cell editing kit](doc_page_impl_edit_cell.md), with a token kind of its own for what only this type knows.
 
 | type | inner paths | the mode showing one |
 | --- | --- | --- |
@@ -404,7 +406,7 @@ compDefine(CvProfileInfo, {
 
 ## Cells of a mode
 
-A text of a mode that the author types in place, a cell of a table, a field of a card, is a **cell** of the [cell edit layer](doc_page_impl_edit_cell.md), not a field of the mode's own making: `useCell` for the cell, `CellField` for a value drawn and edited where it stands (or `CellValue` and `CellEdit` for a mode with a behavior of its own around the text), and `cellTokenDefine` for a token only this type knows. The cell is then typed like every other cell of the page, with `/link`, `/object` and the type's own action, and what it holds is drawn by the layer each token belongs to. The mode keeps the text in its data and writes it through its api (`assetWrite`), offered while `service.isEditable`. The demonstration's reading list (the remark of a book, the text of a note) and the Japanese-style CV of the package cv (every cell of the sheet) are built so.
+A text of a mode that the author types in place, a cell of a table, a field of a card, is a **cell** of the [cell editing kit](doc_page_impl_edit_cell.md), not a field of the mode's own making: `useCell` for the cell, `CellField` for a value drawn and edited where it stands (or `CellValue` and `CellEdit` for a mode with a behavior of its own around the text), and `cellTokenDefine` for a token only this type knows. The cell is then typed like every other cell of the page, with `/link`, `/object` and the type's own action, and what it holds is drawn by the layer each token belongs to. The mode keeps the text in its data and writes it through its api (`assetWrite`), offered while `service.isEditable`. The demonstration's reading list (the remark of a book, the text of a note) and the Japanese-style CV of the package cv (every cell of the sheet) are built so.
 
 ## A word on the names: objects hold items
 

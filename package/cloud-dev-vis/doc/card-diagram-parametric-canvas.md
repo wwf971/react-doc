@@ -251,7 +251,7 @@ Beside the cards of a series, the layer brings two kinds to draw with (`Parametr
 | `shape` | `shape` (rect, rounded, ellipse, diamond, triangle, hexagon, parallelogram), `text`, `textSize`, `strokeWidth`, `isDashed` | its outline at the size of its node (an SVG without kept aspect; a rectangle is a box of css, so its corners keep their radius), filled and edged by the style of the node (`style.fill`, `style.stroke`), its words in the middle |
 | `text` | `text`, `textSize` (s to xl), `weight`, `align`, `tone` | its box by its [size mode](card-diagram-impl.md#the-selection-and-resizing): as wide as its words (no size, the default; nothing to resize), or a width they wrap at (`size: { width }`, its height following; its width resized); the edit card switches (**Box**). `style.fill` puts a color behind them, which is how a badge is drawn |
 
-Their colors are the [style of a node](card-diagram-impl.md#the-style-of-a-node), not a property of the kind. Their words are a cell of the cell edit layer, typed where they stand (an icon is a token among them); a text typed empty goes, a shape keeps its outline. A shape is drawn to a size, so its tool places by a box dragged out ([Creating](#creating)); the tool bar has one tool per shape under **Shapes**, and **Text**.
+Their colors are the [style of a node](card-diagram-impl.md#the-style-of-a-node), not a property of the kind. Their words are a cell of the cell editing kit, typed where they stand (an icon is a token among them); a text typed empty goes, a shape keeps its outline. A shape is drawn to a size, so its tool places by a box dragged out ([Creating](#creating)); the tool bar has one tool per shape under **Shapes**, and **Text**.
 
 ## Patterns
 

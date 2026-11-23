@@ -111,7 +111,7 @@ A doc page writes through the mode's api (`config.objectFrontend.assetWrite`, `a
 In reading mode it only shows ([Reading and editing](../../../main/doc_page_impl_obj_frontend.md#reading-and-editing)). While the document is edited, and enabled when the object can be written:
 
 - **writes into**: the layer a change goes to, the default target first; without one, the line says the first change makes `local.main` and where it goes;
-- a value changed where it stands: a boolean a switch, an `enum` of a few values a group of buttons, anything else a cell of the [cell edit layer](../../../main/doc_page_impl_edit_cell.md), read by its type when it is saved (`appConfigValueFromText`: a text that is not a value of its key keeps the cell open, saying why); × removes it from the layer written into;
+- a value changed where it stands: a boolean a switch, an `enum` of a few values a group of buttons, anything else a cell of the [cell editing kit](../../../main/doc_page_impl_edit_cell.md), read by its type when it is saved (`appConfigValueFromText`: a text that is not a value of its key keeps the cell open, saying why); × removes it from the layer written into;
 - in `layers`: a layer made in a partition (its label, its order, and the line saying where it goes and whether git keeps it: `item/local/layer, kept out of git`), and a layer disabled or enabled.
 
 A mode never writes into a partition without saying so; a partition that cannot be written now (`partitionWriteUnavailableReasonGet`) says why.

@@ -205,7 +205,7 @@ const FinalTable = observer(function FinalTable({ service, model, cell, isEditin
 });
 
 // a value changed where it stands: a boolean a switch, a few values a group of buttons, anything
-// else a cell of the cell edit layer (main/doc_page_impl_edit_cell.md), read by its type on commit
+// else a cell of the cell editing kit (main/doc_page_impl_edit_cell.md), read by its type on commit
 const ValueEdit = observer(function ValueEdit({ declare, value, cell, isEditable, editUnavailableReason, onWrite }) {
 	if (declare.type === 'boolean') {
 		return (

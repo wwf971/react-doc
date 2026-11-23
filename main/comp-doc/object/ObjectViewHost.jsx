@@ -12,7 +12,8 @@ import './DocObject.css';
 // view, a node of a card diagram.
 //
 //   objectRef      the reference
-//   context        icon | inline | card | block
+//   context        icon | inline | card | block | panel (under what names it, where it is worked
+//                  on: drawn by the type's card view when it has none for a panel)
 //   viewCompId     a view asked for by the consumer; used when it can draw the object
 //   isEditable     whether the consumer allows a change (default true); a
 //                  change also needs the provider to offer it and to answer now
@@ -32,6 +33,7 @@ export const ObjectViewHost = observer(function ObjectViewHost({
   const state = objectStore.resolveStateGet(objectRef);
   const descriptor = state.status === 'loading' && descriptorGiven ? descriptorGiven : state.descriptor;
   const view = objectStore.viewResolve(descriptor, context, viewCompId);
+  const contextDrawn = view.contextDrawn ?? context;
   const editUnavailableReason = isEditable ? objectStore.editUnavailableReasonGet(descriptor) : 'the consumer shows it read-only';
   const Wrapper = context === 'icon' || context === 'inline' ? 'span' : 'div';
   return (
@@ -41,7 +43,9 @@ export const ObjectViewHost = observer(function ObjectViewHost({
         placement="objectView"
         input={{ data: { ref: objectRef, descriptor } }}
         configRuntime={{
-          objectView: { context, isEditAllowed: editUnavailableReason === '', editUnavailableReason, note, viewCompId: view.compId, isFallback: view.isFallback },
+          // isEditableConsumer: the consumer alone allows a change; a view of a thing written through
+          // a layer of its own (a value inside a frontend object) asks that layer too
+          objectView: { context: contextDrawn, contextAsked: context, isEditAllowed: editUnavailableReason === '', isEditableConsumer: isEditable, editUnavailableReason, note, viewCompId: view.compId, isFallback: view.isFallback },
           ...(sourcePath !== undefined ? { sourcePath } : {}),
           instanceId: `object:${objectRef}:${context}`,
         }}

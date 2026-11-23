@@ -1,4 +1,4 @@
-// The grammar of a cell text: pure functions of the cell edit layer
+// The grammar of a cell text: pure functions of the cell editing kit
 // (design: doc_page_impl_edit_cell.md), shared by its store (DocCellStore),
 // its components and tests. No store, no React.
 //
@@ -168,6 +168,25 @@ export function cellTextPlainGet(partList, textOf) {
 export function cellTokenSoleGet(partList) {
   const partFilled = partList.filter((part) => part.type === 'token' || part.text.trim() !== '');
   return partFilled.length === 1 && partFilled[0].type === 'token' ? partFilled[0] : undefined;
+}
+
+// ---------- a token marked in the typed text (doc_page_impl_edit_cell.md#a-token-marked-in-the-typed-text) ----------
+
+// the token whose words hold an offset inside them, not at their edges: {{a|b}}, never |{{ab}} or {{ab}}|
+export function cellTokenInsideGet(partList, offset) {
+  return partList.find((part) => part.type === 'token' && part.start < offset && offset < part.end);
+}
+
+// the token the caret comes to the edge of by one step from outside it: 'left' from one character
+// after it onto the place after its last character, 'right' from one character before it onto the
+// place before its first. a step from its own edge goes into its words and marks nothing
+export function cellTokenEdgeArrivalGet(partList, caret, direction) {
+  return partList.find((part) => part.type === 'token' && (direction === 'left' ? part.end === caret - 1 : part.start === caret + 1));
+}
+
+// the token written at exactly these offsets: a mark stays only while its token is still there
+export function cellTokenAtGet(partList, start, end) {
+  return partList.find((part) => part.type === 'token' && part.start === start && part.end === end);
 }
 
 // the tokens of one kind (by its name), in order

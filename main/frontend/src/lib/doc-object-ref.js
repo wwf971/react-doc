@@ -22,7 +22,11 @@ const REF_REGEX = /^([a-zA-Z][a-zA-Z0-9.-]*):(.+)$/;
 // inline   in a line of text
 // card     a box of its own, bounded: a list of cards, a group, a node of a diagram
 // block    the width of a document: the object shown whole
-export const OBJECT_VIEW_CONTEXT_LIST = ['icon', 'inline', 'card', 'block'];
+// the contexts an object is drawn in (doc_page_impl_obj.md#object-views). panel: under something
+// naming the object, where it is worked on (the card of a token naming it in a cell)
+export const OBJECT_VIEW_CONTEXT_LIST = ['icon', 'inline', 'card', 'block', 'panel'];
+// the contexts of a view that names none: every context but panel, which a view offers on purpose
+export const OBJECT_VIEW_CONTEXT_DEFAULT_LIST = ['icon', 'inline', 'card', 'block'];
 
 // found: a provider answered with it (at timeChecked). registered: someone
 // registered it, nobody verified it. missing: its provider says it does not

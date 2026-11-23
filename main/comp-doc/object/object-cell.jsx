@@ -6,7 +6,7 @@ import { objectSlashActionBuild } from './object-slash.js';
 
 // A view of an object in a cell (doc_page_impl_edit_cell.md#token-kinds,
 // doc_page_impl_obj.md#writing-a-reference): the token kind the object
-// service layer offers the cell edit layer. The token is a brace token with
+// service layer offers the cell editing kit. The token is a brace token with
 // the sigil "@", holding a reference of the registry, of an object or of
 // something inside one:
 //
@@ -16,7 +16,11 @@ import { objectSlashActionBuild } from './object-slash.js';
 //
 // It is drawn by the view of the object's types in the context inline, as
 // every consumer of the registry draws an object (ObjectViewHost): the cell
-// knows no type. It is typed with /object, or by typing "{{@".
+// knows no type. It is typed with /object, or by typing "{{@". Marked in the
+// typed text, its card is the view of its types in the context panel
+// (doc_page_impl_edit_cell.md#the-card-of-a-token): whatever type it names says
+// what is shown there and what may be changed (a value of a profile typed in
+// place); the fallback shows the object's card.
 export const OBJECT_CELL_SIGIL = '@';
 
 export const objectCellToken = cellTokenDefine({
@@ -29,8 +33,17 @@ export const objectCellToken = cellTokenDefine({
   // the label the registry knows it by; the reference while it knows nothing
   textGet: (token, cell) => cell?.object?.resolveStateGet(token.data.ref).descriptor.label ?? token.data.ref,
   slashAction: objectSlashActionBuild({ textBuild: (ref) => cellBraceTextBuild(ref, OBJECT_CELL_SIGIL) }),
+  Card: ObjectCellCard,
+  // drawn, a click on the object opens it as before: the card is offered while the text is typed
+  cardPlaceList: ['surface'],
 });
 
 function ObjectCellRender({ token, cell }) {
   return <ObjectViewHost objectRef={token.data.ref} context="inline" isEditable={false} sourcePath={cell?.sourcePath} />;
+}
+
+// the card of a token naming an object: the object in the context panel, where it may be changed
+// (the cell is being typed, so the consumer allows it; the view and its layer decide)
+function ObjectCellCard({ token, cell }) {
+  return <ObjectViewHost objectRef={token.data.ref} context="panel" isEditable sourcePath={cell?.sourcePath} />;
 }

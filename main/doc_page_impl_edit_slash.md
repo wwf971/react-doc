@@ -1,4 +1,4 @@
-<!-- Design of the slash mode of the default editors, and of any surface a component offers it in (its own actions). Parent document: doc_page_impl_edit.md. The cells of a component (a cell of a table, a field of a mode of a frontend object) are typed with it through the cell edit layer, doc_page_impl_edit_cell.md. -->
+<!-- Design of the slash mode of the default editors, and of any surface a component offers it in (its own actions). Parent document: doc_page_impl_edit.md. The cells of a component (a cell of a table, a field of a mode of a frontend object) are typed with it through the cell editing kit, doc_page_impl_edit_cell.md. -->
 
 # Slash Mode of the Default Editors: Design
 
@@ -90,7 +90,7 @@ Typing, deleting, pasting and undoing therefore all lead to the right state with
 {{name}       ended: a character of the trigger's endList, two spaces in a row, a line break
 ```
 
-The mode still follows from the text: the text from the first character of the trigger to the caret is parsed again after every input, the longest trigger first. The [cell edit layer](doc_page_impl_edit_cell.md#drawing-and-typing) uses them: the opening text of a brace token (`{{`, `{{@`) is a direct trigger of the action that completes it.
+The mode still follows from the text: the text from the first character of the trigger to the caret is parsed again after every input, the longest trigger first. The [cell editing kit](doc_page_impl_edit_cell.md#drawing-and-typing) uses them: the opening text of a brace token (`{{`, `{{@`) is a direct trigger of the action that completes it.
 
 ## Keys and pointer
 
@@ -216,7 +216,7 @@ It is drawn as a checkbox with its label, not as a button that is filled while o
 
 The slash mode is not tied to documents. Any surface built on `EditSourceSurface` offers it when it is handed a `slash`, and there are two ways to get one outside the block editors:
 
-- **A cell** (a cell of a table, a field of a mode of a frontend object: any small value typed in place) goes through the [cell edit layer](doc_page_impl_edit_cell.md), which builds the slash of a cell from its token kinds: the component defines what its tokens are (`cellTokenDefine`), asks for a cell (`useCell`) and draws it with `CellValue`, `CellEdit` or `CellField`. **This is the way for every cell-level value**: the cells of a page are then typed alike and hold the same things (a link, a view of an object) beside the component's own.
+- **A cell** (a cell of a table, a field of a mode of a frontend object: any small value typed in place) goes through the [cell editing kit](doc_page_impl_edit_cell.md), which builds the slash of a cell from its token kinds: the component defines what its tokens are (`cellTokenDefine`), asks for a cell (`useCell`) and draws it with `CellValue`, `CellEdit` or `CellField`. **This is the way for every cell-level value**: the cells of a page are then typed alike and hold the same things (a link, a view of an object) beside the component's own.
 - **Any other surface of a component** (a form's free text that holds no tokens, a search field with commands) asks for a slash itself with `useEditSlashConfig` (`comp-doc/slash/use-edit-slash-config.js`, exported by the package):
 
 ```js
@@ -239,7 +239,7 @@ What holds for both:
 | surface | actions | provided by |
 | --- | --- | --- |
 | a paragraph or list of a document | the page's registry | the edit layer (`config.edit.slash`) |
-| a cell of a component | the actions of the cell's token kinds: `/link`, `/object`, and the component's own | the [cell edit layer](doc_page_impl_edit_cell.md) (`useCell`) |
+| a cell of a component | the actions of the cell's token kinds: `/link`, `/object`, and the component's own | the [cell editing kit](doc_page_impl_edit_cell.md) (`useCell`) |
 | a cell of a Japanese-style CV (package cv) | `/query`, `/q`, or `{{`: a value of the profile as `{{path}}`, a segment at a time; `/link`, `/object` | the package cv, as a token kind of its cells |
 | a remark or a note of a reading list (the demonstration) | `/book`, or `{{`: another book of the list; `/link`, `/object` | the demonstration's mode, as a token kind of its cells |
 

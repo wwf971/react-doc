@@ -114,7 +114,7 @@ The names and paths of the assets are edited in the **Frontend objects** tab too
 
 ## Cells, and things inside an object
 
-Two texts of a reading list are **cells** of the cell edit layer (`main/doc_page_impl_edit_cell.md`): the **remark** of a book, a cell of the shelf's table at the top of this page, and the text of a **note**. Such a text is words with **tokens** in it, and each token is drawn by the layer it belongs to:
+Two texts of a reading list are **cells** of the cell editing kit (`main/doc_page_impl_edit_cell.md`): the **remark** of a book, a cell of the shelf's table at the top of this page, and the text of a **note**. Such a text is words with **tokens** in it, and each token is drawn by the layer it belongs to:
 
 ```text
 {{/book/sci-fi/the-left-hand-of-darkness}}

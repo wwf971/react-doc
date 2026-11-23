@@ -213,7 +213,7 @@ An object whose provider lists nothing inside it is written at once. What is wri
 | where | written | drawn by |
 | --- | --- | --- |
 | a paragraph or a list of a document | `` <!--renderComp=ObjectView-->`frontend:w5j7ozoijzl#/book/sci-fi/dune` ``: the inline form of `ObjectView` ([Inline components](doc_page_impl_mdx_li.md#inline-components)) | `ObjectView` in the placement `commentInline`, the context `inline` |
-| a cell of a component | `{{@frontend:w5j7ozoijzl#/book/sci-fi/dune}}`: the token kind `object/view` ([Cell editing](doc_page_impl_edit_cell.md#token-kinds)) | `ObjectViewHost`, the context `inline` |
+| a cell of a component | `{{@frontend:w5j7ozoijzl#/book/sci-fi/dune}}`: the token kind `object/view` ([Cell editing kit](doc_page_impl_edit_cell.md#token-kinds)) | `ObjectViewHost`, the context `inline` |
 
 Both draw the object through the registry, so the cell and the paragraph know no type: the view of the object's types is chosen as everywhere ([Object views](#object-views)).
 
@@ -305,6 +305,7 @@ compDefine(TaskCard, {
 | `inline` | inside a line of text |
 | `card` | a bounded box: a card of a list or a group, a node of a card diagram |
 | `block` | the width of a document: the object shown whole |
+| `panel` | a bounded box under something that names the object, where it is worked on: the card of a token naming it in a cell ([The card of a token](doc_page_impl_edit_cell.md#the-card-of-a-token)). A view here may change the thing in place (a value typed); `config.objectView.isEditableConsumer` says whether the consumer allows it, and a thing written through a layer of its own (a frontend object) checks that layer too. Without a view of its own a type is drawn by its card view |
 
 **Choosing the view.** For an object and a context, the candidates are the views of the context whose types the object is assignable to: the components of the component registry (the package's, the doc pages' and packages' mounted ones, the host's) and the components the providers serve, which today are those of the service templates' modules ([Services](#services)), brought by the backend peer and drawn only while a ready instance of the template serves its module. The nearest type wins, by rank (of two parents at one distance, the one the object's type lists first: a `doc.document` is drawn as a document before it is drawn as a collection), then the highest priority, then a component of the page before one of a service. A consumer may ask for a view by its id (`view` of `ObjectView`), used when it can draw the object. The **fallback view** (`common/ObjectViewFallback`) is registered for `core.object` in every context with the lowest priority, so it is no special case: it is the least specific view, and every object has one. It draws what every descriptor has: the icon of the type (the nearest ancestor's when its own names none), the label, the type, the status when not found, the summary, the provider and the reference, and in the block context the content, read on request.
 

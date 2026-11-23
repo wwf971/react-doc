@@ -86,7 +86,7 @@ export { atomKindDefine } from './lib/doc-edit-atom-kind.js';
 // the slash mode in a component's own surfaces (doc_page_impl_edit_slash.md#beyond-the-document-editors)
 export { useEditSlashConfig } from '../../comp-doc/slash/use-edit-slash-config.js';
 export { EditSlashToggle } from '../../comp-doc/slash/EditSlashToggle.jsx';
-// the cell edit layer (doc_page_impl_edit_cell.md): the small values a component lets the author
+// the cell editing kit (doc_page_impl_edit_cell.md): the small values a component lets the author
 // type in place (a cell of a table, a field of a mode of a frontend object), with tokens in
 // their text: a link, a view of an object, a value of the component's own data. a component
 // asks for a cell (useCell), draws a text with CellValue and types one with CellEdit, or uses
@@ -110,6 +110,8 @@ export { objectCellToken } from '../../comp-doc/object/object-cell.jsx';
 export {
   objectFrontendInnerRefBuild, objectFrontendRefBuild, objectFrontendRefSplit,
 } from './lib/doc-object-frontend.js';
+// the view of a thing inside a frontend object (its own type's view, the context panel), reaching the object
+export { useObjectFrontendInner } from '../../comp-doc/object-frontend/use-object-frontend-inner.js';
 // a block's turn to mount what is heavy, one block per frame (#reading-many-assets)
 export { useObjectFrontendDrawTurn } from '../../comp-doc/object-frontend/use-object-frontend-draw-turn.js';
 // the unified api registry (doc_page_impl_api.md): a host defines apis and

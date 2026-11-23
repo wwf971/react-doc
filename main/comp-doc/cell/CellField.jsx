@@ -115,6 +115,8 @@ export const CellField = observer(function CellField({
         tag="span"
         text={field.textBase}
         selectionInitial={field.point ? { type: 'point', ...field.point } : 'end'}
+        // the token clicked, or the one token of the text, marked at once: its card under it
+        isTokenMarkedOnOpen
         isLocked={field.status === 'submitting'}
         ariaLabel={ariaLabel}
         onTextChange={(draft) => cellStore.fieldDraftSet(key, draft)}

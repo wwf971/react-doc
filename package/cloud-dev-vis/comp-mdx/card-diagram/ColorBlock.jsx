@@ -14,7 +14,7 @@ const toneList = ['blue', 'teal', 'green', 'amber', 'red', 'violet', 'slate'];
 
 // A color block (card-diagram-usage.md#background-color-blocks): a light rectangle behind cards,
 // with labels at its bottom or its top, and columns inside it. The words of a label and of a column
-// are a text of the cell edit layer (doc_page_impl_edit_cell.md): an icon is a token among them,
+// are a text of the cell editing kit (doc_page_impl_edit_cell.md): an icon is a token among them,
 // `{{icon:database}} Source database` (CardIconToken.jsx), typed with /icon where the words are.
 //
 //   itemList?    [{ id, text, level?: 1 | 2 }]           the labels (none: a block without words);

@@ -2,7 +2,7 @@ import { action, makeAutoObservable, observable } from 'mobx';
 import { cellTextParse, cellTextPlainGet, cellTokenListResolve, cellTriggerListBuild } from '../lib/doc-cell.js';
 import { cellTokenSlashActionGet } from '../../../comp-doc/cell/cell-define.js';
 
-// The cell edit layer of the page (design: doc_page_impl_edit_cell.md).
+// The cell editing kit of the page (design: doc_page_impl_edit_cell.md).
 //
 // A cell is one small value a component draws and lets the author type in
 // place: a cell of a table, a field of a form, a line of a card, usually

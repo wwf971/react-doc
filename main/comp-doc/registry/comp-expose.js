@@ -1,7 +1,7 @@
 import { FileCode } from '../../frontend/UICommon.js';
 import { apiDefine, apiDefinitionIs } from '../../frontend/src/lib/doc-api.js';
 import { compIconDefault } from './comp-icon.jsx';
-import { OBJECT_VIEW_CONTEXT_LIST } from '../../frontend/src/lib/doc-object-ref.js';
+import { OBJECT_VIEW_CONTEXT_DEFAULT_LIST, OBJECT_VIEW_CONTEXT_LIST } from '../../frontend/src/lib/doc-object-ref.js';
 
 // What a component exposes about itself through its registry definition
 // (doc_page_impl_mdx_comp.md#what-a-component-exposes): the `expose` option
@@ -82,7 +82,7 @@ import { OBJECT_VIEW_CONTEXT_LIST } from '../../frontend/src/lib/doc-object-ref.
 //                  objects are accepted and defined here
 //   objectView     { typeList, contextList, priority }: the component draws
 //                  objects of these types (and their subtypes) in these
-//                  contexts (icon, inline, card, block), for the object
+//                  contexts (icon, inline, card, block, panel; all but panel when absent), for the object
 //                  registry (doc_page_impl_obj.md#object-views). it renders in
 //                  the placement objectView with data { ref, descriptor }
 //                  and config.objectView { context, isEditAllowed,
@@ -230,7 +230,7 @@ function objectViewNormalize(objectView) {
   if (!objectView || typeof objectView !== 'object' || Array.isArray(objectView)) {
     throw new Error('compDefine: expose.objectView must be { typeList, contextList, priority? }.');
   }
-  const { typeList, contextList = OBJECT_VIEW_CONTEXT_LIST, priority = 0 } = objectView;
+  const { typeList, contextList = OBJECT_VIEW_CONTEXT_DEFAULT_LIST, priority = 0 } = objectView;
   if (!Array.isArray(typeList) || typeList.length === 0 || !typeList.every((typeId) => REGEX_TYPE_ID.test(String(typeId)))) {
     throw new Error('compDefine: expose.objectView.typeList must list type ids (core.object, doc.document).');
   }

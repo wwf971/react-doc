@@ -180,7 +180,7 @@ export const DiagramVisualEdit = observer(function DiagramVisualEdit({ data, con
 	// being typed, where the keys stay the browser's: the typing it takes
 	// back reaches the draft through the field's input event, as the typing did
 	const keyDown = event => {
-		// a key a control inside took is the control's (the field of a cell of the cell edit layer
+		// a key a control inside took is the control's (the field of a cell of the cell editing kit
 		// takes Escape and Ctrl/⌘ + Enter for itself and lets them bubble): the editor does not act
 		// on it again (step out, save the session)
 		if (event.nativeEvent.isComposing || event.defaultPrevented) return;
