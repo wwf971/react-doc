@@ -1,4 +1,5 @@
-import { useContext, useEffect, useRef, useState } from 'react';
+import { useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { reaction } from 'mobx';
 import { observer } from 'mobx-react-lite';
 import {
 	Background,
@@ -87,11 +88,21 @@ export const DiagramERView = observer(function DiagramERView({ data = {}, config
 	// form a host passes it in
 	const heightDiagram = store.viewport.size.height === 'auto' ? 620 : store.viewport.size.height;
 	// canvasStore: the canvas model itself, for a layer of a feature drawn over the canvas (what its placer answered: store.placed)
-	const context = { config, registry, editor, measurementSet: store.measurementSet, edgeGeometry: edgeGeometry.current, search, canvasStore: store };
+	// one object while none of its parts changes: every node and line reads it, so a new one each
+	// time the host draws this view (a word typed in the editor) would draw all of them again
+	const context = useMemo(() => ({ config, registry, editor, measurementSet: store.measurementSet, edgeGeometry: edgeGeometry.current, search, canvasStore: store }), [config, registry, editor, store, search]);
 
 	useEffect(() => {
 		if (store.source !== sourceDiagram) store.sourceLoad(sourceDiagram, Boolean(editor));
 	}, [sourceDiagram, store]);
+	// while a value is typed the canvas draws the draft of before (rawShown) and keeps its places:
+	// a label growing as it is typed moves neither the copies of its node nor what stands beside it
+	const editStore = editor?.store;
+	useEffect(() => {
+		if (!editStore) return undefined;
+		const dispose = reaction(() => editStore.isShownBehind, isHeld => store.placeHoldSet(isHeld), { fireImmediately: true });
+		return () => { dispose(); store.placeHoldSet(false); };
+	}, [editStore, store]);
 
 	// the canvas, for what works a diagram from outside it: the apis of its lines (DiagramApiList.js)
 	const canvasEditor = useRef(editor);
@@ -254,6 +265,8 @@ const DiagramERCanvas = observer(function DiagramERCanvas({ store, viewState, is
 				const rect = wrapper.current?.getBoundingClientRect();
 				return rect ? screenToFlowPosition({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }) : null;
 			},
+			// a point of the screen on the canvas (something dropped from outside it)
+			screenToFlow: point => screenToFlowPosition(point),
 			// for the features of the editor (node-registry.js: feature): what a placer answered the
 			// last time the nodes were placed, a dragged place given up, and a box of the canvas on the screen
 			placedGet: placerId => store.placed.get(placerId),
@@ -391,6 +404,8 @@ const DiagramERCanvas = observer(function DiagramERCanvas({ store, viewState, is
 			<DiagramPinLayer pinList={store.graph?.pinList} registry={registry} config={config} />
 			{/* what the features of the editor draw over the canvas (a tool bar, the marks of a structure) */}
 			{(editor?.featureList ?? []).map(session => (session.CanvasLayer ? <session.CanvasLayer key={session.id} session={session} editor={editor} /> : null))}
+			{/* what a feature draws while the diagram is read, or edited where its session is not on */}
+			{(registry?.featureList ?? []).map(feature => (feature.ReadLayer && !(editor?.featureList ?? []).some(session => session.id === feature.id) ? <feature.ReadLayer key={`read:${feature.id}`} canvasStore={store} /> : null))}
 		</ReactFlow>
 	);
 });

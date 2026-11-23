@@ -2,6 +2,7 @@ import { routeNormalize, routeTypeHasAnchors } from './DiagramRoute.js';
 import { CARD_SIMPLE_HEIGHT, CARD_SIMPLE_WIDTH, cardSimpleAnchorOf, nodeDisplayRead } from './CardSimpleData.js';
 import { CARD_FOOTER_ANCHOR } from './TableCardSchema.js';
 import { nodeStyleRead } from './DiagramNodeStyle.js';
+import { NODE_SIZE_MODE_BY_ID, nodeSizeModeOf } from './DiagramNodeResize.js';
 
 const sides = ['left', 'right', 'top', 'bottom'];
 const lineTypes = ['straight', 'bezier', 'step', 'smoothstep', 'polyline'];
@@ -227,6 +228,10 @@ export function diagramNormalize(input, registry, resolve, height = 620) {
 		const anchorBottomDrawn = isCard && !isSimple ? { anchorBottomDrawn: CARD_FOOTER_ANCHOR } : {};
 		// a kind as wide as what it says, when no width is written
 		const widthFit = contract.isWidthFit && !isSimple && sizeResolved.width === 'auto' ? { isWidthFit: true } : {};
+		// a kind listing its size modes takes its box in one of them (DiagramNodeResize.js)
+		if (contract.sizeModeList && !isSimple && !contract.sizeModeList.includes(nodeSizeModeOf({ size: sizeResolved }))) {
+			throw new Error(`${id}: the size of a ${renderer.type ?? renderer.component} node is ${contract.sizeModeList.map(mode => `${NODE_SIZE_MODE_BY_ID[mode].sizeText} (${NODE_SIZE_MODE_BY_ID[mode].label.toLowerCase()})`).join(' or ')}.`);
+		}
 		for (const axis of ['width', 'height']) {
 			number(sizeDefault[axis], `${id}.sizeDefault.${axis}`, Number.MIN_VALUE);
 			if (sizeResolved[axis] !== 'auto' && contract.sizeMin?.[axis] && sizeResolved[axis] < contract.sizeMin[axis]) throw new Error(`${id}.${axis} is smaller than renderer minimum.`);

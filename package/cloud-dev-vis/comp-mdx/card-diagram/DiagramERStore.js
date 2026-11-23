@@ -47,6 +47,10 @@ class DiagramERStore {
 	// placer places while it is dragged (Map id -> { x, y }), which what follows it follows
 	placed = new Map();
 	placeOverride = null;
+	// while words are typed in the editor (placeHoldSet), a size measured moves nothing: the places
+	// follow when the typing pauses or ends, as the draft does (card-diagram-impl.md#history)
+	isPlaceHeld = false;
+	isPlacePending = false;
 	nodeList = [];
 	edgeList = [];
 	loadState = { status: 'idle', message: '' };
@@ -60,7 +64,7 @@ class DiagramERStore {
 		// the graph, the measurements and the temporary positions are plain data:
 		// nothing renders from them, and the nodes handed to React Flow are
 		// built from the graph, so they must not be observable proxies
-		makeAutoObservable(this, { rendererResolve: false, registry: false, graph: observable.ref, viewport: observable.ref, measurements: false, positionsTemporary: false, placed: observable.ref, placeOverride: false, nodeList: observable.shallow, edgeList: observable.shallow }, { autoBind: true });
+		makeAutoObservable(this, { rendererResolve: false, registry: false, graph: observable.ref, viewport: observable.ref, measurements: false, positionsTemporary: false, placed: observable.ref, placeOverride: false, isPlaceHeld: false, isPlacePending: false, nodeList: observable.shallow, edgeList: observable.shallow }, { autoBind: true });
 		this.sourceLoad(source);
 	}
 
@@ -89,6 +93,7 @@ class DiagramERStore {
 			this.viewport = this.graph.viewport;
 			const { positions, sizeById, placedById } = diagramPlacesGet(this.graph.nodes, this.graph.layout, this.measurements);
 			this.placed = placedById;
+			this.isPlacePending = false;
 			const pointNodes = [];
 			const endpointNode = (connection, role) => {
 				const endpoint = connection[role];
@@ -189,6 +194,14 @@ class DiagramERStore {
 		const previous = this.measurements[id];
 		if (previous && Math.abs(previous.width - size.width) < 0.5 && Math.abs(previous.height - size.height) < 0.5) return;
 		this.measurements[id] = size;
+		if (this.isPlaceHeld) this.isPlacePending = true;
+		else this.placesApply();
+	}
+
+	placeHoldSet(isHeld) {
+		this.isPlaceHeld = isHeld;
+		if (isHeld || !this.isPlacePending) return;
+		this.isPlacePending = false;
 		this.placesApply();
 	}
 

@@ -172,17 +172,21 @@ test('a tool places what it makes: free, into the group selected, or under the l
 
 test('the tree lists the groups with their members and lines, then the free elements, narrowed by a search', () => {
 	const { store, session } = sessionOf(groupValue);
-	assert.deepEqual(session.treeItemList.map(item => `${item.depth}:${item.kind}:${item.label}`), ['0:group:Group', '1:node:a', '2:node:b', '3:node:c', '2:line:to b', '0:free:Free elements', '1:node:free']);
+	const shapeOf = () => session.tree.rowListGet(session.treeModel, session.selectedKey).map((row) => { const item = session.treeModel.itemGet(row.key); return `${row.depth}:${item.kind}:${item.label}`; });
+	assert.deepEqual(shapeOf(), ['0:group:Group', '1:node:a', '2:node:b', '3:node:c', '2:line:to b', '0:free:Free elements', '1:node:free']);
 	store.select('b');
-	assert.equal(session.treeItemList.find(item => item.nodeId === 'b').isSelected, true);
+	assert.equal(session.selectedKey, 'member:g/m2');
 	assert.deepEqual(session.selected, { kind: 'node', nodeId: 'b', groupId: 'g', memberId: 'm2' });
 	// what holds the words typed, with what it stands under
-	session.panelSearchSet('to b');
-	assert.deepEqual(session.treeItemListShown.map(item => item.label), ['Group', 'a', 'to b']);
-	session.panelSearchSet('');
-	session.treeItemToggle('member:g/m1');
-	assert.deepEqual(session.treeItemList.map(item => item.label), ['Group', 'a', 'Free elements', 'free']);
-	assert.equal(session.treeItemList[1].hasChildren, true);
+	session.tree.searchSet('to b');
+	assert.deepEqual(shapeOf().map(text => text.split(':')[2]), ['Group', 'a', 'b', 'to b'], 'what is selected stays in sight');
+	session.tree.searchSet('');
+	session.tree.toggle('member:g/m1', undefined, session.treeModel);
+	assert.deepEqual(shapeOf().map(text => text.split(':')[2]), ['Group', 'a', 'Free elements', 'free']);
+	// a click on a row selects what it stands for
+	const editor = { select: nodeId => store.select(nodeId), selectConnection: id => store.selectConnection(id) };
+	session.treeItemSelect('node:free', editor);
+	assert.equal(session.selectedKey, 'node:free');
 });
 
 test('the focus of a group and the path of the editor are one selection', () => {
@@ -208,20 +212,31 @@ test('the tools are a mapping merged entry by entry, in the order of their ranks
 	assert.deepEqual(bar.childListOf('pattern').map(tool => tool.id), ['pattern-caption', 'pattern-badge']);
 });
 
-test('the edit card stands in the panel or beside the thing, as the author chose; a folded panel lets it float', () => {
-	const { session } = sessionOf(groupValue);
-	session.iconGet = name => name;
-	assert.equal(session.isCardDocked, true);
-	assert.deepEqual(session.cardHeadActionListGet(), []);
-	session.cardPlaceSet('float');
-	assert.equal(session.isCardDocked, false);
-	assert.deepEqual(session.cardHeadActionListGet().map(action => action.id), ['card-dock']);
-	session.cardHeadActionListGet()[0].act();
-	assert.equal(session.isCardDocked, true);
+test('the edit card stands in the panel or beside the thing, as the author chose; a folded panel lets it float', async () => {
+	const { DiagramPanelStore } = await import('../card-diagram/DiagramPanelStore.js');
+	const panel = new DiagramPanelStore({ cardPlace: 'dock' });
+	assert.equal(panel.isCardDocked, false, 'a panel without a tab docks nothing');
+	const dispose = panel.tabRegister({ id: 'structure', label: 'Structure', rank: 20, Body: () => null });
+	assert.equal(panel.isCardDocked, true);
+	panel.cardPlaceSet('float');
+	assert.equal(panel.isCardDocked, false);
+	panel.cardPlaceSet('dock');
 	// folded, the card floats; docked again, the panel opens
-	session.panelCollapsedSet(true);
-	assert.equal(session.isCardDocked, false);
-	session.cardPlaceSet('dock');
-	assert.equal(session.panel.isCollapsed, false);
-	assert.equal(session.isCardDocked, true);
+	panel.collapsedSet(true);
+	assert.equal(panel.isCardDocked, false);
+	panel.cardPlaceSet('dock');
+	assert.equal(panel.isCollapsed, false);
+	assert.equal(panel.isCardDocked, true);
+	// tabs by rank; the one chosen stays chosen while it is away for a moment
+	panel.tabRegister({ id: 'scenes', label: 'Scenes', rank: 10, Body: () => null });
+	assert.deepEqual(panel.tabListSorted.map(tab => tab.id), ['scenes', 'structure']);
+	panel.tabSet('structure');
+	dispose();
+	assert.equal(panel.tab.id, 'scenes');
+	panel.tabRegister({ id: 'structure', label: 'Structure', rank: 20, Body: () => null });
+	assert.equal(panel.tab.id, 'structure');
+	// the card of the first source answering one
+	panel.cardSourceRegister({ id: 'canvas', rank: 0, cardGet: () => null });
+	panel.cardSourceRegister({ id: 'scenes', rank: 10, cardGet: () => ({ model: { title: 'A scene' } }) });
+	assert.equal(panel.card.model.title, 'A scene');
 });

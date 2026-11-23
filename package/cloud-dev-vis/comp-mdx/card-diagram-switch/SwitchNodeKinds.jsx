@@ -10,6 +10,7 @@ import { SwitchContext, SwitchStaticScene } from './SwitchStatic.jsx';
 import { SwitchViewSwitcher, SwitchViewTabs } from './SwitchViewSwitcher.jsx';
 import { SWITCH_EMBED_CHROME_HEIGHT, SWITCH_TITLE_FONT_SIZE, SWITCH_TITLE_HEIGHT, switchBoxClipBuild, switchEmbedCardRectOf, switchEmbedMapBuild, switchPathViewBuild, switchPathViewRead, switchPresentationBuild, switchPresentationChildIsDrawn, switchStackFrameIsVisible, switchStackItemLayout, switchStackPresentationBuild, switchStackTitleBarNormalize, switchStackTitleBarRead } from './SwitchData.js';
 import { CARD_ICON_BY_NAME, CardBrief } from '../card-diagram/CompactCard.jsx';
+import { switchSceneEditFeature } from './SwitchSceneEditFeature.js';
 import { CardCell } from '../card-diagram/TableCard.jsx';
 
 // The two node kinds of the switching layer (card-diagram-flexible-switch.md):
@@ -485,5 +486,8 @@ export const switchNodeKindList = [sceneEmbedNodeKind, sceneStackNodeKind, scene
 
 // the registry of a series with the kinds of the layer
 export function switchRegistryBuild(registry) {
-	return nodeRegistryBuild({ id: `${registry.id}-switch`, label: registry.label, kindList: [...registry.kindList, ...switchNodeKindList], cardLegacyConvert: registry.cardLegacyConvert, featureList: registry.featureList });
+	// the features of the registry it is built from, and the switch layer's own in the editor of a
+	// block session (SwitchSceneEditFeature.js)
+	const featureList = [...(registry.featureList ?? []), ...((registry.featureList ?? []).some(feature => feature.id === switchSceneEditFeature.id) ? [] : [switchSceneEditFeature])];
+	return nodeRegistryBuild({ id: `${registry.id}-switch`, label: registry.label, kindList: [...registry.kindList, ...switchNodeKindList], cardLegacyConvert: registry.cardLegacyConvert, featureList });
 }

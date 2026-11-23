@@ -1,34 +1,14 @@
-import { makeAutoObservable, observable, reaction } from 'mobx';
-import { MEMBER_ROOT_ID, PARAMETRIC_DATA_KEY, PARAMETRIC_FEATURE_ID, pointRead, groupKeyOf, parametricLineListGet, parametricRead } from './ParametricData.js';
+import { computed, makeAutoObservable, observable, reaction } from 'mobx';
+import { MEMBER_ROOT_ID, PARAMETRIC_DATA_KEY, PARAMETRIC_FEATURE_ID, pointRead, groupKeyOf, memberIsFramedWhenRead, parametricLineListGet, parametricRead } from './ParametricData.js';
 import { parametricSolve } from './ParametricSolve.js';
 import { toolListBuild, toolMapMerge } from './ParametricTool.js';
 import { createModeParamOf } from './ParametricCreateMode.js';
 import { actionListBuild, focusCardModelBuild, focusRectGet, nodeSectionListBuild } from './ParametricEditModel.js';
+import { DiagramPanelTreeStore } from '../card-diagram/DiagramPanelTreeStore.js';
+import { GRAPH_CAMERA_REST, panelGraphZoomClamp } from '../card-diagram/DiagramPanelGraph.jsx';
 
 const KEY = PARAMETRIC_DATA_KEY;
 const ID_CHAR_LIST = '0123456789abcdefghijklmnopqrstuvwxyz';
-// where the edit card stands (panel.cardPlace), remembered in this browser for every diagram
-export const CARD_PLACE_DOCK = 'dock';
-export const CARD_PLACE_FLOAT = 'float';
-const CARD_PLACE_STORAGE_KEY = 'doc-param-card-place';
-function cardPlaceRead() {
-	try {
-		return globalThis.localStorage?.getItem(CARD_PLACE_STORAGE_KEY) === CARD_PLACE_FLOAT ? CARD_PLACE_FLOAT : CARD_PLACE_DOCK;
-	} catch {
-		return CARD_PLACE_DOCK;
-	}
-}
-function cardPlaceWrite(place) {
-	try {
-		globalThis.localStorage?.setItem(CARD_PLACE_STORAGE_KEY, place);
-	} catch {
-		// a browser keeping no storage: the choice lasts while the page is open
-	}
-}
-// the camera of the graph of relations at rest, and how far it zooms
-const GRAPH_CAMERA_REST = { x: 0, y: 0, zoom: 1 };
-const GRAPH_ZOOM_MIN = 0.3;
-const GRAPH_ZOOM_MAX = 3;
 const roundPoint = point => ({ x: Math.round(point.x), y: Math.round(point.y) });
 
 // an id nobody types: a few random characters, not one of those taken
@@ -58,7 +38,9 @@ export function idRandomGet(idTakenList = [], length = 6) {
 //   gesture       the gesture on the canvas while a tool is armed (ParametricCreateMode.js): where
 //                 the pointer is and went down, the keys held. The placement it stands for and the
 //                 ghost of what will be made are read off it
-//   panel         the state of the panel (ParametricPanel.jsx): folded, the search, the items folded
+//   tree          the state of the tree of the tab Structure (DiagramPanelTreeStore: what is open, the
+//                 pages, the search); graph: the camera of its graph of relations. The panel itself
+//                 (folded, its tab, where the edit card stands) is the editor's (DiagramPanelStore)
 //   toolBar       the state of the tool bar (ParametricToolBar.jsx): the dropdown open
 export class ParametricEditStore {
 	id = PARAMETRIC_FEATURE_ID;
@@ -66,9 +48,8 @@ export class ParametricEditStore {
 	toolArmedId = null;
 	toolModeId = null;
 	gesture = null;
-	// cardPlace: where the edit card of what is selected stands, the author's choice: 'dock' (in the
-	// third part of the panel) or 'float' (beside the thing, as everywhere else). Kept in this browser
-	panel = { isCollapsed: false, search: '', collapsedByKey: {}, graphCamera: null, cardPlace: cardPlaceRead() };
+	tree = new DiagramPanelTreeStore();
+	graph = { camera: null };
 	toolBar = { openId: null, detailId: null, modeId: null };
 	// the menu of a thing of the panel (a right-click on an item of its tree): { x, y, target, label }
 	menu = null;
@@ -84,7 +65,7 @@ export class ParametricEditStore {
 	// iconGet(name): an icon by its word (remove ...), from whoever draws
 	constructor({ store, registry, config = {}, canvas, isOnGet, catalog, toolMapGet, toolMapPatch, toolIconGet, iconGet, idGet = idRandomGet }) {
 		Object.assign(this, { store, registry, config, canvas, isOnGet, catalog, toolMapGet, toolMapPatch, toolIconGet, iconGet, idGet });
-		makeAutoObservable(this, { store: false, registry: false, config: false, canvas: false, isOnGet: false, catalog: false, toolMapGet: false, toolMapPatch: false, toolIconGet: false, iconGet: false, idGet: false, disposeList: false, gesture: observable.ref }, { autoBind: true });
+		makeAutoObservable(this, { store: false, registry: false, config: false, canvas: false, isOnGet: false, catalog: false, toolMapGet: false, toolMapPatch: false, toolIconGet: false, iconGet: false, idGet: false, disposeList: false, tree: false, gesture: observable.ref, section: computed.struct, nodeOutlineList: computed.struct, connectionEndList: computed.struct, lineList: computed.struct, treeIndex: computed.struct }, { autoBind: true });
 		// a node or a line focused is the selection: the focus of a group lets go
 		this.disposeList = [reaction(() => Boolean(this.store.display), (isShown) => { if (isShown) this.focus = null; })];
 	}
@@ -95,11 +76,15 @@ export class ParametricEditStore {
 
 	// ---------- the draft, read ----------
 
+	// read by content (computed.struct), as what follows from them: a word typed in a node changes
+	// neither, so the model, the lines and the tree of the panel are not read again for it
 	get section() { return this.store.value[KEY] ?? {}; }
+	get nodeOutlineList() { return this.store.nodes.map(node => ({ id: node.id, around: node.around })); }
+	get connectionEndList() { return this.store.connections.map(connection => ({ id: connection.id, source: { nodeId: connection.source?.nodeId }, target: { nodeId: connection.target?.nodeId } })); }
 	// the groups as written
 	get groupList() { return this.section.groupList ?? []; }
 	// the model of the draft (ParametricData.js); the draft is valid, so it reads
-	get model() { return parametricRead(this.section, { nodes: this.store.nodes, catalog: this.catalog }); }
+	get model() { return parametricRead(this.section, { nodes: this.nodeOutlineList, catalog: this.catalog }); }
 
 	groupGet(groupId) { return this.groupList.find(group => group.id === groupId); }
 	memberGet(groupId, memberId) { return (this.groupGet(groupId)?.memberList ?? []).find(member => member.id === memberId); }
@@ -172,21 +157,6 @@ export class ParametricEditStore {
 	// ---------- hooks of the editor (DiagramVisualEdit.jsx: a session) ----------
 
 	get flowClassName() { return this.toolArmedId ? 'is-parametric-tool-armed' : ''; }
-	// the edit card stands in the panel when the author docked it there and the panel is open; else
-	// it floats beside what is selected (a folded panel has no room for it)
-	get isCardDocked() { return this.panel.cardPlace === CARD_PLACE_DOCK && !this.panel.isCollapsed; }
-
-	// docked: the panel is opened if it was folded, so the card has its place
-	cardPlaceSet(place) {
-		this.panel.cardPlace = place === CARD_PLACE_DOCK ? CARD_PLACE_DOCK : CARD_PLACE_FLOAT;
-		if (this.panel.cardPlace === CARD_PLACE_DOCK) this.panel.isCollapsed = false;
-		cardPlaceWrite(this.panel.cardPlace);
-	}
-
-	// the button of the head of the card floating beside the thing (DiagramVisualEdit.jsx): into the panel
-	cardHeadActionListGet() {
-		return this.isCardDocked ? [] : [{ id: 'card-dock', label: 'Dock in the panel under the canvas', Icon: this.iconGet?.('dock'), act: () => this.cardPlaceSet(CARD_PLACE_DOCK) }].filter(action => action.Icon);
-	}
 
 	keyDown(event) {
 		if (event.key !== 'Escape') return false;
@@ -718,6 +688,17 @@ export class ParametricEditStore {
 		}, { groupKey: `parametric:member/${groupId}/${memberId}/name` });
 	}
 
+	// a layout member framed when the diagram is read, or not; what its layout type says is not written
+	memberFramedWhenReadSet(groupId, memberId, isFramed) {
+		const member = this.groupModelGet(groupId)?.memberById.get(memberId);
+		if (!member?.layout) return false;
+		const isDefault = isFramed === memberIsFramedWhenRead({ ...member, isFramedWhenRead: null }, this.catalog);
+		return this.store.changeApply((documentNext) => {
+			const path = [...this.memberPathOf(groupId, memberId), 'isFramedWhenRead'];
+			if (!isDefault) documentNext.setIn(path, isFramed); else if (documentNext.hasIn(path)) documentNext.deleteIn(path);
+		});
+	}
+
 	// the width or the height of a member taken from another member; memberIdFrom null: its own again
 	memberSizeBindingSet(groupId, memberId, axis, memberIdFrom) {
 		return this.store.changeApply((documentNext) => {
@@ -732,9 +713,10 @@ export class ParametricEditStore {
 
 	// ---------- what the panel lists ----------
 
-	// the words of a node in a list: what it says, then its kind
+	// the words of a node in a list: what it says, then its kind. Read off the draft the canvas
+	// draws (rawShown): a word typed reaches the lists of the panel when it reaches the copies
 	nodeLabelOf(nodeId) {
-		const node = this.store.nodeGet(nodeId);
+		const node = this.store.nodeShownGet?.(nodeId) ?? this.store.nodeGet(nodeId);
 		const data = node?.data ?? {};
 		const words = [data.name, data.title, data.label, data.text].find(value => typeof value === 'string' && value.trim());
 		return { label: words ?? nodeId, kindLabel: this.registry?.kindByType[node?.renderer?.type]?.label ?? node?.renderer?.component ?? 'Node' };
@@ -764,87 +746,96 @@ export class ParametricEditStore {
 	// the lines of the groups, each under the member of its end more to the left
 	get lineList() {
 		const solved = this.solve();
-		return parametricLineListGet(this.model, this.store.connections, (groupId, memberId) => solved.boxByKey.get(groupKeyOf(groupId, memberId))?.x);
+		return parametricLineListGet(this.model, this.connectionEndList, (groupId, memberId) => solved.boxByKey.get(groupKeyOf(groupId, memberId))?.x);
 	}
 
-	// the scene as a tree: the groups with their members under their direct parents, then the free
-	// elements. Flat, in the order drawn: { key, depth, kind, label, kindLabel, summary, hasChildren,
-	// isCollapsed, isSelected, select: what a click focuses, target: what its menu is of }
-	get treeItemList() {
-		const result = [];
-		const selected = this.selected;
-		const lineList = this.lineList;
-		const push = (item, childrenBuild) => {
-			const isCollapsed = Boolean(this.panel.collapsedByKey[item.key]);
-			result.push({ ...item, isCollapsed });
-			const count = result.length;
-			if (!isCollapsed) childrenBuild?.();
-			result[count - 1].hasChildren = isCollapsed ? Boolean(item.hasChildrenFolded) : result.length > count;
+	// the scene as a tree (the tab Structure, a paged tree of the panel: DiagramPanelTreeData.js): the
+	// groups with their members under their direct parents, the lines of a group under the member of
+	// their end more to the left, then the free elements. Read by content: a word typed reaches it when
+	// it reaches the canvas, and nothing is laid out again for a change that leaves it as it was.
+	//   item   { key, kind: group | node | layout | line | free, label, kindLabel, summary, isNameDefault?,
+	//            groupId?, memberId?, nodeId?, connectionId?, layoutType? }
+	get treeIndex() {
+		const itemByKey = {};
+		const childKeyListByKey = {};
+		const parentKeyByKey = {};
+		const rootKeyList = [];
+		const add = (item, parentKey) => {
+			itemByKey[item.key] = item;
+			parentKeyByKey[item.key] = parentKey;
+			if (parentKey) (childKeyListByKey[parentKey] ??= []).push(item.key);
+			else rootKeyList.push(item.key);
 		};
+		const lineList = this.lineList;
+		const lineListByMember = new Map();
+		for (const line of lineList) {
+			const at = `${line.groupId}/${line.memberIdDirect}`;
+			if (!lineListByMember.has(at)) lineListByMember.set(at, []);
+			lineListByMember.get(at).push(line);
+		}
+		const lineLabelOf = connectionId => (this.store.connectionShownGet?.(connectionId) ?? this.store.connectionGet(connectionId))?.label?.text;
 		for (const group of this.model.groupList) {
 			const groupWritten = this.groupGet(group.id);
-			const memberPush = (member, depth) => {
-				const names = this.memberLabelOf(group.id, member.id);
-				const lineOwnList = lineList.filter(line => line.groupId === group.id && line.memberIdDirect === member.id);
-				const childList = group.childListOf(member.id);
-				push({
-					key: `member:${group.id}/${member.id}`, depth, kind: member.layout ? 'layout' : 'node', ...names, summary: this.memberSummaryOf(group.id, member.id),
-					groupId: group.id, memberId: member.id, nodeId: member.nodeId, layoutType: member.layout?.type,
-					isSelected: member.nodeId ? selected?.kind === 'node' && selected.nodeId === member.nodeId : selected?.kind === 'member' && selected.groupId === group.id && selected.memberId === member.id,
-					hasChildrenFolded: childList.length + lineOwnList.length > 0,
-				}, () => {
-					for (const child of childList) memberPush(child, depth + 1);
-					for (const line of lineOwnList) {
-						const other = line.memberIdList.find(memberId => memberId !== member.id) ?? member.id;
-						result.push({ key: `line:${line.connectionId}`, depth: depth + 1, kind: 'line', label: this.store.connectionGet(line.connectionId)?.label?.text || `to ${this.memberLabelOf(group.id, other).label}`, kindLabel: 'Line', summary: '', connectionId: line.connectionId, groupId: group.id, isSelected: selected?.kind === 'line' && selected.connectionId === line.connectionId, hasChildren: false });
-					}
-				});
+			const groupKey = `group:${group.id}`;
+			add({ key: groupKey, kind: 'group', label: groupWritten?.name || 'Group', isNameDefault: !groupWritten?.name, kindLabel: '', summary: `root ${group.root.x}, ${group.root.y}`, groupId: group.id }, '');
+			const memberAdd = (member, parentKey) => {
+				const key = `member:${group.id}/${member.id}`;
+				add({ key, kind: member.layout ? 'layout' : 'node', ...this.memberLabelOf(group.id, member.id), summary: this.memberSummaryOf(group.id, member.id), groupId: group.id, memberId: member.id, nodeId: member.nodeId, layoutType: member.layout?.type }, parentKey);
+				for (const child of group.childListOf(member.id)) memberAdd(child, key);
+				for (const line of lineListByMember.get(`${group.id}/${member.id}`) ?? []) {
+					const other = line.memberIdList.find(memberId => memberId !== member.id) ?? member.id;
+					add({ key: `line:${line.connectionId}`, kind: 'line', label: lineLabelOf(line.connectionId) || `to ${this.memberLabelOf(group.id, other).label}`, kindLabel: 'Line', summary: '', connectionId: line.connectionId, groupId: group.id }, key);
+				}
 			};
-			push({ key: `group:${group.id}`, depth: 0, kind: 'group', label: groupWritten?.name || 'Group', isNameDefault: !groupWritten?.name, kindLabel: 'Group', summary: `root ${group.root.x}, ${group.root.y}`, groupId: group.id, isSelected: selected?.kind === 'group' && selected.groupId === group.id, hasChildrenFolded: group.memberList.length > 0 }, () => {
-				for (const member of group.childListOf(MEMBER_ROOT_ID)) memberPush(member, 1);
-			});
+			for (const member of group.childListOf(MEMBER_ROOT_ID)) memberAdd(member, groupKey);
 		}
 		const lineIdSet = new Set(lineList.map(line => line.connectionId));
 		const nodeFreeList = this.store.nodes.filter(node => !this.model.memberByNodeId.has(node.id));
 		const connectionFreeList = this.store.connections.filter(connection => !lineIdSet.has(connection.id));
 		if (nodeFreeList.length + connectionFreeList.length > 0) {
-			push({ key: 'free', depth: 0, kind: 'free', label: 'Free elements', kindLabel: '', summary: `${nodeFreeList.length + connectionFreeList.length}`, isSelected: false, hasChildrenFolded: true }, () => {
-				for (const node of nodeFreeList) result.push({ key: `node:${node.id}`, depth: 1, kind: 'node', ...this.nodeLabelOf(node.id), summary: '', nodeId: node.id, isSelected: selected?.kind === 'node' && selected.nodeId === node.id, hasChildren: false });
-				for (const connection of connectionFreeList) result.push({ key: `line:${connection.id}`, depth: 1, kind: 'line', label: connection.label?.text || connection.id, kindLabel: 'Line', summary: '', connectionId: connection.id, isSelected: selected?.kind === 'line' && selected.connectionId === connection.id, hasChildren: false });
-			});
+			add({ key: 'free', kind: 'free', label: 'Free elements', kindLabel: '', summary: '' }, '');
+			for (const node of nodeFreeList) add({ key: `node:${node.id}`, kind: 'node', ...this.nodeLabelOf(node.id), summary: '', nodeId: node.id }, 'free');
+			for (const connection of connectionFreeList) add({ key: `line:${connection.id}`, kind: 'line', label: lineLabelOf(connection.id) || connection.id, kindLabel: 'Line', summary: '', connectionId: connection.id }, 'free');
 		}
-		return result;
+		return { itemByKey, childKeyListByKey, parentKeyByKey, rootKeyList };
 	}
 
-	// the tree narrowed by the words typed: the items holding every word, and what they stand under
-	get treeItemListShown() {
-		const wordList = this.panel.search.toLowerCase().split(/\s+/).filter(Boolean);
-		const list = this.treeItemList;
-		if (!wordList.length) return list;
-		const isKept = list.map(item => wordList.every(word => `${item.label} ${item.kindLabel} ${item.summary}`.toLowerCase().includes(word)));
-		const isShown = isKept.slice();
-		list.forEach((item, index) => {
-			if (!isKept[index]) return;
-			let depth = item.depth;
-			for (let before = index - 1; before >= 0 && depth > 0; before -= 1) if (list[before].depth < depth) { isShown[before] = true; depth = list[before].depth; }
-		});
-		return list.filter((item, index) => isShown[index]);
+	// the model the paged tree reads (DiagramPanelTreeData.js): one object while the index is the same
+	get treeModel() {
+		const { itemByKey, childKeyListByKey, parentKeyByKey, rootKeyList } = this.treeIndex;
+		return {
+			rootKeyList,
+			itemGet: key => itemByKey[key],
+			childKeyListGet: key => childKeyListByKey[key] ?? [],
+			parentKeyGet: key => parentKeyByKey[key] ?? '',
+			searchTextGet: (key) => { const item = itemByKey[key]; return item ? `${item.label} ${item.kindLabel ?? ''} ${item.summary ?? ''}` : ''; },
+			// everything open at first: a long level is paged
+			isExpandedDefault: () => true,
+		};
+	}
+
+	// the key of what is selected in the tree
+	get selectedKey() {
+		const selected = this.selected;
+		if (!selected) return null;
+		if (selected.kind === 'line') return `line:${selected.connectionId}`;
+		if (selected.kind === 'group') return `group:${selected.groupId}`;
+		if (selected.kind === 'member') return `member:${selected.groupId}/${selected.memberId}`;
+		return selected.memberId ? `member:${selected.groupId}/${selected.memberId}` : `node:${selected.nodeId}`;
 	}
 
 	// the camera of the graph of relations in the panel ({ x, y, zoom }: where the graph is drawn in
 	// its part, and how large), for the thing it is of (key): another thing selected starts from the
-	// rest. Zoomed by the wheel around the pointer, panned by a drag (ParametricPanel.jsx)
-	get graphCamera() { return this.panel.graphCamera?.key === this.graphKey ? this.panel.graphCamera : { key: this.graphKey, ...GRAPH_CAMERA_REST }; }
+	// rest. Zoomed by the wheel around the pointer, panned by a drag (DiagramPanelGraph.jsx)
+	get graphCamera() { return this.graph.camera?.key === this.graphKey ? this.graph.camera : { key: this.graphKey, ...GRAPH_CAMERA_REST }; }
 	get graphKey() { const selected = this.selected; return selected ? JSON.stringify(selected) : ''; }
-	graphCameraSet(camera) { this.panel.graphCamera = { ...camera, key: this.graphKey, zoom: Math.min(GRAPH_ZOOM_MAX, Math.max(GRAPH_ZOOM_MIN, camera.zoom)) }; }
-	graphCameraReset() { this.panel.graphCamera = null; }
-
-	panelSearchSet(text) { this.panel.search = text; }
-	panelCollapsedSet(isCollapsed) { this.panel.isCollapsed = isCollapsed; }
-	treeItemToggle(key) { this.panel.collapsedByKey = { ...this.panel.collapsedByKey, [key]: !this.panel.collapsedByKey[key] }; }
+	graphCameraSet(camera) { this.graph.camera = { ...camera, key: this.graphKey, zoom: panelGraphZoomClamp(camera.zoom) }; }
+	graphCameraReset() { this.graph.camera = null; }
 
 	// a click on an item of the tree focuses what it stands for
-	treeItemSelect(item, editor) {
+	treeItemSelect(itemOrKey, editor) {
+		const item = typeof itemOrKey === 'string' ? this.treeIndex.itemByKey[itemOrKey] : itemOrKey;
+		if (!item) return;
 		if (item.nodeId) editor.select(item.nodeId);
 		else if (item.connectionId) editor.selectConnection(item.connectionId);
 		else if (item.kind === 'group') this.focusSet({ kind: 'group', groupId: item.groupId });

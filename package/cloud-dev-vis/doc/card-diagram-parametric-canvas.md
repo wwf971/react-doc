@@ -17,7 +17,7 @@ A feature layer over the [card diagram framework](card-diagram.md), beside the [
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
-The layer is drawn only while a diagram is **edited**, and only in a viewport that asks for it. What it writes is data of the diagram, so a group is placed the same way wherever the diagram is read. How to use it, for authors: [Drawing on a Card Diagram](card-diagram-usage-parametric-canvas.md).
+Its editing layer (the tool bar, the panel, the marks to grab) is drawn only while a diagram is **edited**, and only in a viewport that asks for it. What it writes is data of the diagram, so a group is placed the same way wherever the diagram is read, and a layout such as a row of stages keeps its frame and its name there when it is framed when read (the default of a layout, not of a pattern: [On the canvas](#on-the-canvas)). How to use it, for authors: [Drawing on a Card Diagram](card-diagram-usage-parametric-canvas.md).
 
 ## The concepts
 
@@ -103,6 +103,7 @@ parametric:
           constraint: { type: between, t: 0.5, y: -70 }
         - id: stages
           layout: { type: array, direction: row, gap: 24 }
+          isFramedWhenRead: false                     # a layout's frame and name only while edited
           parent: source
           constraint: { type: offset, y: 70, pointParent: bottom-left }
         - { id: a, node: stage-a, parent: stages }    # placed by the array, in the order written
@@ -126,7 +127,7 @@ places   top-down    the origin
 copies               a repeat: every node under it again, moved by the step of each copy
 ```
 
-It runs as a **placer** of the engine ([Features](card-diagram-impl.md#features)): each time the nodes of a diagram are placed, so again with every measurement, since a card whose height follows its content changes what stands below it. A copy a repeat spawns is a node the feature derives: drawn like its source, with no handles, nobody's to edit.
+It runs as a **placer** of the engine ([Features](card-diagram-impl.md#features)): each time the nodes of a diagram are placed, so again with every measurement, since a card whose height follows its content changes what stands below it. A copy a repeat spawns is a node the feature derives: drawn like its source, with no handles, nobody's to edit. While words are typed in the source the copies keep what they say, their size and their place, and follow when the typing pauses or ends ([History](card-diagram-impl.md#history)); so do the tree and the graph of the panel.
 
 ## The editor
 
@@ -143,9 +144,11 @@ Everything the layer changes goes through `DiagramEditStore.changeApply`, so eve
 | Drawn | Does |
 | --- | --- |
 | the origin of a group, a round mark with the name of the group | a click focuses the group; a drag moves the whole group. Lying on a resize handle of the member selected, it steps aside (faded, the pointer passing to the handle) |
-| the box of a layout member, a dashed frame with its name | a click on the name focuses it |
+| the box of a layout member, a dashed frame with its name | a click on the name focuses it. Faded when it is not framed when read |
 | the relations of the member selected | its parents framed, a dashed line from each to it |
 | while a tool is armed, the ghost of what the gesture will make | follows the pointer; the gesture places it ([Creating](#creating)) |
+
+**When the diagram is read** (or edited where the viewport does not offer the layer), the feature draws over the canvas the frame of each layout member **framed when read**, with its name, answering nothing (`feature.ReadLayer`, `ParametricReadLayer.jsx`, from the model the diagram was read with and the boxes its placer answered). A layout is framed when read unless it says otherwise (`isFramedWhenRead: false`; the edit card of a layout, *Framed when read*); a pattern is not unless it says so (`isFramedWhenRead` of its layout type, `false` for Captioned and Badged: a frame would box a caption with its subject). The origins of the groups and the relations are aids to editing and are never drawn when reading. A block of scenes (the switch layer) draws its scenes with a canvas of its own and does not draw these frames yet.
 
 A right-click on a card, a line or the empty canvas opens the panel of a double-click with what can be done there: put under another member, another constraint type, take out of the group, add to a group, remove the node or the line (in red, with the icon of removing), the tools. It is the same panel as the menu of an item of the tree, and the same size: it sets its own line height, so the text around the canvas does not make its rows taller.
 
@@ -229,15 +232,15 @@ The create panel of the framework, opened by a double-click on the empty canvas 
 
 ### The panel
 
-As wide as the viewport. In the page it stands under the viewport and floats over what follows, so nothing is added to the flow of the page (the no-jitter rule of `doc_page_impl_edit.md`); in the block popup it is docked at the bottom. It folds to one line.
+The layer brings the tab **Structure** to [the panel of the editor](card-diagram-impl.md#the-panel) (`ParametricPanel.jsx`, registered by its session: `panelTabGet`), which stands under the viewport (in the block popup, docked at the bottom) and folds to one line. In a block of scenes it stands beside the tab Scenes of the block ([card-diagram-flexible-switch.md](card-diagram-flexible-switch.md#the-scenes-tab)), the head switching between them.
 
 | Part | Shows |
 | --- | --- |
-| tree | the groups with their members under their direct parents, then the free elements; a search; a click focuses, a right-click opens what can be done |
-| relations | what is selected among what it follows and what follows it, as a graph of icon nodes (a diagram without a canvas). The part is a small canvas: the wheel zooms around the pointer and never scrolls the page, a drag pans, a button puts it back; its camera is kept for the thing selected |
-| properties | the edit card of what is selected, when it is docked here |
+| tree | the groups with their members under their direct parents, the lines of a group under a member of their ends, then the free elements: a [paged tree](card-diagram-impl.md#the-paged-tree), so a group of hundreds of members or a diagram of thousands of free nodes is shown a page at a time, each long level with its pager and its filter; a search in the head; a click selects, a right-click opens what can be done |
+| relations | what is selected among what it follows and what follows it, as a graph of icon nodes (a diagram without a canvas), in the small canvas of the panel: the wheel zooms around the pointer and never scrolls the page, a drag pans, a button puts it back; its camera is kept for the thing selected |
+| properties | the panel's one column: the edit card of what is selected, the node or line (with the sections of the feature) or the group or layout member focused |
 
-**Where the edit card stands is the author's choice**: docked in the panel, or floating beside what is selected, as a card stands everywhere else in the framework. The head of the panel says it and switches it (*Edit card: In the panel · Beside it*), and so does the card itself: the docked one has a button floating it beside the thing, the floating one a button docking it in the panel. The choice is kept in the browser, for every diagram. Floating, the panel is the tree and the relations alone; a folded panel lets a docked card float meanwhile, and docking it opens the panel again. The engine knows nothing of the panel: a feature says it docks the card (`isCardDocked`) and gives the floating card the buttons of its head (`cardHeadActionListGet`), and the card takes buttons of its head from whoever shows it (`headActionList` of `DiagramEditCard`, `DiagramEditCardContent`).
+**Where the edit card stands is the author's choice**, the panel's (*Edit card: In the panel · Beside it*, and a button of the card itself): docked in the column, or floating beside what is selected as a card stands everywhere else in the framework; kept in the browser for every diagram. The tree and the graph of relations read what the canvas draws (`nodeShownGet`), so a word being typed reaches them when it reaches the copies.
 
 ## Drawing kinds
 
@@ -246,7 +249,7 @@ Beside the cards of a series, the layer brings two kinds to draw with (`Parametr
 | Kind | Data | Drawn |
 | --- | --- | --- |
 | `shape` | `shape` (rect, rounded, ellipse, diamond, triangle, hexagon, parallelogram), `text`, `textSize`, `strokeWidth`, `isDashed` | its outline at the size of its node (an SVG without kept aspect; a rectangle is a box of css, so its corners keep their radius), filled and edged by the style of the node (`style.fill`, `style.stroke`), its words in the middle |
-| `text` | `text`, `textSize` (s to xl), `weight`, `align`, `tone` | words as wide as they are; `style.fill` puts a color behind them, which is how a badge is drawn |
+| `text` | `text`, `textSize` (s to xl), `weight`, `align`, `tone` | its box by its [size mode](card-diagram-impl.md#the-selection-and-resizing): as wide as its words (no size, the default; nothing to resize), or a width they wrap at (`size: { width }`, its height following; its width resized); the edit card switches (**Box**). `style.fill` puts a color behind them, which is how a badge is drawn |
 
 Their colors are the [style of a node](card-diagram-impl.md#the-style-of-a-node), not a property of the kind. Their words are a cell of the cell edit layer, typed where they stand (an icon is a token among them); a text typed empty goes, a shape keeps its outline. A shape is drawn to a size, so its tool places by a box dragged out ([Creating](#creating)); the tool bar has one tool per shape under **Shapes**, and **Text**.
 
@@ -312,4 +315,5 @@ Tests: `comp-mdx/card-diagram-parametric-canvas/*.test.js`, run as in [card-diag
 | `ParametricApi.js` | the apis of the feature, for an agent |
 | `doc/card-diagram-usage-parametric-canvas.md` | the document for authors, beside `card-diagram-usage.md` |
 | `ParametricFeature.jsx` | the feature: the above wired into the hooks of the engine |
-| `ParametricCanvasLayer.jsx`, `ParametricToolBar.jsx`, `ParametricPanel.jsx`, `ParametricPanelGraph.js` | what is drawn: the marks over the canvas, the gesture surface and the ghost, the tool bar, the panel |
+| `ParametricCanvasLayer.jsx`, `ParametricToolBar.jsx`, `ParametricPanel.jsx`, `ParametricPanelGraph.js` | what is drawn: the marks over the canvas, the gesture surface and the ghost, the tool bar, the tab Structure of the panel and its graph |
+| `ParametricReadLayer.jsx` | what is drawn when the diagram is read: the frames of the layouts framed when read |

@@ -4,7 +4,8 @@ import { parametricGraphResolveBuild } from './ParametricSolve.js';
 import { ParametricEditStore } from './ParametricEditStore.js';
 import { PARAMETRIC_TOOL_KEY, parametricToolMapDefault, toolMapMerge } from './ParametricTool.js';
 import { ParametricCanvasLayer } from './ParametricCanvasLayer.jsx';
-import { ParametricPanel } from './ParametricPanel.jsx';
+import { ParametricReadLayer } from './ParametricReadLayer.jsx';
+import { parametricPanelTabBuild } from './ParametricPanel.jsx';
 import { iconOf, toolIconOf } from './ParametricToolBar.jsx';
 import { parametricKindList } from './ParametricShape.jsx';
 import { parametricApiListBuild } from './ParametricApi.js';
@@ -23,6 +24,8 @@ import './ParametricCanvas.css';
 // one). A series wanting more builds its own: parametricFeatureBuild({ constraintTypeList: [...constraintTypeListDefault, mine] }).
 export function parametricFeatureBuild({ constraintTypeList, layoutTypeList, createModeList, creatorList, kindList = parametricKindList, toolMap = parametricToolMapDefault } = {}) {
 	const catalog = parametricCatalogBuild({ constraintTypeList, layoutTypeList, createModeList, creatorList });
+	// the frames of the layouts framed when read, over every canvas of a diagram reading the section
+	const ReadLayer = ({ canvasStore }) => <ParametricReadLayer canvasStore={canvasStore} catalog={catalog} />;
 	return {
 		id: PARAMETRIC_FEATURE_ID,
 		label: 'Parametric canvas',
@@ -33,6 +36,7 @@ export function parametricFeatureBuild({ constraintTypeList, layoutTypeList, cre
 		// the tool bar, kept in the config layers
 		configDefineList: [{ key: PARAMETRIC_TOOL_KEY, type: 'any', valueDefault: null, isUserSettable: false, description: 'The tools of the tool bar of the parametric canvas, by id: what each one makes and its parameters, its place on the bar. Changed from the tool bar itself.' }],
 		graphResolve: parametricGraphResolveBuild(catalog),
+		ReadLayer,
 		// the apis of a diagram, for an agent (ParametricApi.js)
 		apiListBuild: parametricApiListBuild({ catalog, toolMap }),
 		// the session of the visual editor (DiagramVisualEdit.jsx). stores: the stores of the page,
@@ -48,7 +52,8 @@ export function parametricFeatureBuild({ constraintTypeList, layoutTypeList, cre
 				toolMapPatch: isConfigKept ? (patch) => { void configStore.layerCompValueSet('client', compId, PARAMETRIC_TOOL_KEY, toolMapMerge(toolMapConfigGet(), patch)); } : undefined,
 			});
 			session.CanvasLayer = ParametricCanvasLayer;
-			session.Panel = ParametricPanel;
+			// its tab of the panel of the editor: Structure (DiagramPanel.jsx)
+			session.panelTabGet = editorGet => parametricPanelTabBuild(session, editorGet);
 			return session;
 		},
 	};

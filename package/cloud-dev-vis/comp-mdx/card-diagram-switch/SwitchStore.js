@@ -1,4 +1,5 @@
 import { ScrollHorizontalStore } from '../../../../main/comp-doc/scroll/ScrollHorizontalStore.js';
+import { PathNavHistory } from './PathNav.js';
 import { makeAutoObservable, observable, runInAction } from 'mobx';
 import { applyNodeChanges } from '@xyflow/react';
 import { yamlParse } from '../../../../main/frontend/src/lib/yaml.js';
@@ -67,8 +68,6 @@ export class SwitchStore {
 	// where the title of a scene focused stands: left or center (compConfig SceneTitleAlign)
 	titleAlign = 'left';
 	isBoxAdjust = false;
-	historyList = [];
-	forwardList = [];
 	message = '';
 	box = null;
 	measureVersion = 0;
@@ -124,11 +123,13 @@ export class SwitchStore {
 		// how far the path of the bar is moved when it is wider than its place (SwitchPathBar):
 		// its own store, kept with the block
 		this.pathScroll = new ScrollHorizontalStore();
+		// back and forward over the scenes visited: the history of a path-based view (PathNav.js)
+		this.history = new PathNavHistory();
 		makeAutoObservable(this, {
-			cameraLive: false, animationStore: false, searchStore: false, pathScroll: false, isSeekBusy: false, seek: false, seekEnd: false, showAt: false, planRun: false, stepEnter: false, stepExit: false, pathSet: false, stepRun: false, registry: false, resolve: false, scope: false, entryByPath: false, sceneDescByPath: false, viewChosenByKey: false, cameraByPath: false, titleNodeByText: false, embedBodyByKey: false, stackElementByKey: false, stackScrollByKey: false, stackAreaByKey: false, stackItemByKey: false, itemInitial: false, maskElement: false, maskWorldElement: false, styleElement: false, viewportApi: false,
+			cameraLive: false, animationStore: false, searchStore: false, pathScroll: false, history: false, isSeekBusy: false, seek: false, seekEnd: false, showAt: false, planRun: false, stepEnter: false, stepExit: false, pathSet: false, stepRun: false, registry: false, resolve: false, scope: false, entryByPath: false, sceneDescByPath: false, viewChosenByKey: false, cameraByPath: false, titleNodeByText: false, embedBodyByKey: false, stackElementByKey: false, stackScrollByKey: false, stackAreaByKey: false, stackItemByKey: false, itemInitial: false, maskElement: false, maskWorldElement: false, styleElement: false, viewportApi: false,
 			captureHintTimer: false, flowWaiterList: false, measureWaiterList: false, morph: false, step: false, providerVersion: false, sceneEditToken: false, runToken: false, stackScrollKeyByKey: false, stackHeightFullByKey: false, stackFullKeySet: false,
 			provider: observable.ref, nodeListFlow: observable.shallow, edgeListFlow: observable.shallow, plan: observable.ref, mask: observable.ref, box: observable.ref, embedHeld: observable.ref,
-			historyList: observable.ref, forwardList: observable.ref, measurePathList: observable.ref, captureHint: observable.ref, command: observable.ref, sceneEdit: observable.ref,
+			measurePathList: observable.ref, captureHint: observable.ref, command: observable.ref, sceneEdit: observable.ref,
 		}, { autoBind: true });
 		this.providerSet(provider, pathInitial);
 	}
@@ -1093,31 +1094,29 @@ export class SwitchStore {
 			return this.cameraReset();
 		}
 		if (this.plan) this.planFinishNow();
-		if (isHistory) {
-			this.historyList = [...this.historyList.slice(-30), this.pathCurrent];
-			this.forwardList = [];
-		}
+		if (isHistory) this.history.visit(this.pathCurrent);
 		const stepList = [...this.routeBuild(this.pathCurrent, path), ...(itemId ? [{ type: 'scroll', path, itemId }] : [])];
 		return this.planRun(stepList, path, cameraTo);
 	}
 
+	// the scenes visited before this one, the last last; and those left by going back
+	get historyList() {
+		return this.history.historyList;
+	}
+
+	get forwardList() {
+		return this.history.forwardList;
+	}
+
 	back() {
-		const list = this.historyList;
-		if (list.length === 0) return;
-		const path = list[list.length - 1];
-		this.historyList = list.slice(0, -1);
-		this.forwardList = [...this.forwardList.slice(-30), this.pathCurrent];
-		void this.pathSet(path, { isHistory: false });
+		const path = this.history.backTake(this.pathCurrent);
+		if (path) void this.pathSet(path, { isHistory: false });
 	}
 
 	// the way back undone, as far as it went
 	forward() {
-		const list = this.forwardList;
-		if (list.length === 0) return;
-		const path = list[list.length - 1];
-		this.forwardList = list.slice(0, -1);
-		this.historyList = [...this.historyList.slice(-30), this.pathCurrent];
-		void this.pathSet(path, { isHistory: false });
+		const path = this.history.forwardTake(this.pathCurrent);
+		if (path) void this.pathSet(path, { isHistory: false });
 	}
 
 	// one level up the path: the nearest folder above that is a scene, '' at the top

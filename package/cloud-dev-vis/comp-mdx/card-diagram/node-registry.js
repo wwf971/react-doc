@@ -12,11 +12,12 @@ import { Waypoints } from '../../../../main/frontend/UICommon.js';
 //   kind
 //     type        the renderer type authored in `renderer: { type }`
 //     label       its name in the create panel and in messages
-//     contract    { dataNormalize?, anchorListGet, sizeDefault, sizeMin?, resizeAxisList?, styleList? }:
+//     contract    { dataNormalize?, anchorListGet, sizeDefault, sizeMin?, resizeAxisList?, sizeModeList?, styleList? }:
 //                 what the diagram may assume about the node (DiagramERData.js). resizeAxisList: what
 //                 its resize handles change, where the rule of DiagramNodeResize.js (read from the
-//                 node) is wrong for the kind; styleList: the keys of node.style its card draws
-//                 (DiagramNodeStyle.js)
+//                 node) is wrong for the kind; sizeModeList: the ways its box is taken (fit, wrap,
+//                 box; DiagramNodeResize.js), the first the default, switched in the edit card;
+//                 styleList: the keys of node.style its card draws (DiagramNodeStyle.js)
 //     schema      the card schema (TableCardSchema.js) when the node is a
 //                 card the editor knows rows and fields of; null otherwise
 //     Card        the component drawing the node: { node, schema, anchorRef,
@@ -48,6 +49,10 @@ import { Waypoints } from '../../../../main/frontend/UICommon.js';
 //                   the value of its key; it throws for what it refuses. data is kept as
 //                   graph.featureById[id]; nodeList are nodes it derives (already normalized, id
 //                   starting with ~, isDerived); placer places nodes (DiagramERData.js: diagramPlacesGet)
+//     ReadLayer     a component, { canvasStore }: what it draws over the canvas (inside React Flow)
+//                   while the diagram is read, and while it is edited where its session is not on
+//                   (the session draws its own CanvasLayer then). It reads graph.featureById[id] and
+//                   what its placer answered (canvasStore.placed)
 //     editCreate({ store, registry, config, canvas, stores, isOnGet }) -> a session of the visual editor, or nothing
 //                   (DiagramVisualEdit.jsx: what a session may answer). stores: the stores of the page
 //     configDefineList   keys of the component config its diagram components declare for it

@@ -3,7 +3,7 @@ import test from 'node:test';
 import { cardDiagramNodeRegistry } from './card-diagram-node-registry.js';
 import { diagramNormalize } from './DiagramERData.js';
 import { DiagramEditStore } from './DiagramEditStore.js';
-import { nodeResizeAxisListOf, nodeResizeHandlePointListOf } from './DiagramNodeResize.js';
+import { nodeResizeAxisListOf, nodeResizeHandlePointListOf, nodeSizeModeOf } from './DiagramNodeResize.js';
 
 const registry = cardDiagramNodeRegistry;
 const nodeOf = (id, type, extra = {}) => ({ id, renderer: { type }, position: { x: 0, y: 0 }, handles: [], ...extra });
@@ -22,6 +22,7 @@ test('what the resize handles of a node change is read from the node, for every 
 		nodeOf('label', 'card-label', { data: { title: 'L' } }),
 		nodeOf('icon', 'card-icon', { size: { width: 180, height: 32 }, data: { title: 'I' } }),
 		nodeOf('text', 'text', { data: { text: 'words' } }),
+		nodeOf('text-wrap', 'text', { size: { width: 200 }, data: { text: 'words' } }),
 		nodeOf('shape', 'shape', { size: { width: 100, height: 60 }, data: { shape: 'ellipse' } }),
 		nodeOf('caption', 'card-caption', { size: { width: 100, height: 16 }, data: { text: 'c' } }),
 	]), registry);
@@ -32,7 +33,9 @@ test('what the resize handles of a node change is read from the node, for every 
 	assert.deepEqual(axisOf(graph, 'table-sized'), ['width', 'height']);
 	assert.deepEqual(axisOf(graph, 'label'), []);
 	assert.deepEqual(axisOf(graph, 'icon'), ['width']);
-	assert.deepEqual(axisOf(graph, 'text'), ['width']);
+	// a text as its size mode says: fitting its words, nothing; wrapped at a width, that width
+	assert.deepEqual(axisOf(graph, 'text'), []);
+	assert.deepEqual(axisOf(graph, 'text-wrap'), ['width']);
 	assert.deepEqual(axisOf(graph, 'caption'), []);
 	assert.deepEqual(nodeResizeAxisListOf({ ...graph.nodes[0], isDerived: true }), []);
 	assert.equal(nodeResizeHandlePointListOf({ x: 0, y: 0, width: 10, height: 4 }, ['width']).length, 6);
@@ -55,4 +58,23 @@ test('a resize writes what changed: the axes given, the place only when it moved
 	assert.equal(store.nodeResize('locked', { x: 5, y: 5, width: 300, height: 80, isMoved: false, axisList: ['width'] }), true);
 	assert.equal(store.undo(), true);
 	assert.equal(store.nodeGet('locked').size, undefined);
+});
+
+test('a text takes its box by its size mode: fitting its words, or a width it wraps at; switched as one step, nothing moving', () => {
+	const store = new DiagramEditStore(JSON.stringify(diagramOf([nodeOf('text', 'text', { data: { text: 'words' } })])), 'diagram', undefined, registry);
+	assert.equal(nodeSizeModeOf(store.nodeGet('text')), 'fit');
+	// to a width: the width it is drawn at, so nothing moves
+	assert.equal(store.nodeSizeModeSet('text', 'wrap', { width: 87.4, height: 22 }), true);
+	assert.deepEqual(store.nodeGet('text').size, { width: 89 });
+	assert.equal(nodeSizeModeOf(store.nodeGet('text')), 'wrap');
+	// the width resized, the height still following the words
+	assert.equal(store.nodeResize('text', { width: 150, isMoved: false, axisList: ['width'] }), true);
+	assert.deepEqual(store.nodeGet('text').size, { width: 150 });
+	// back to fitting its words: no size at all
+	assert.equal(store.nodeSizeModeSet('text', 'fit'), true);
+	assert.equal(store.nodeGet('text').size, undefined);
+	assert.equal(store.history.length, 3);
+	// a mode the kind does not list is refused, and so is a size written in it
+	assert.equal(store.nodeSizeModeSet('text', 'box', { width: 100, height: 40 }), false);
+	assert.throws(() => diagramNormalize(diagramOf([nodeOf('text', 'text', { size: { width: 100, height: 40 }, data: { text: 'words' } })]), registry), /no size \(fits the words\) or a width alone/);
 });

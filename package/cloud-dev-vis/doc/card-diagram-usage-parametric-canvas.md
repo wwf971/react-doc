@@ -92,7 +92,8 @@ parametric:
 | change what is selected | its edit card: beside it, or docked in the panel under the canvas (the head of the panel switches it) |
 | resize what is selected | drag a resize handle on the frame of the selection: a corner keeps the ratio (Shift: any shape), an edge changes one side; a card as high as its content changes its width. The other way round with the setting `DiagramResizeCorner: free` |
 | type words where they stand | click them: the words of a shape, a text, a label of a color block |
-| move, reorder, remove, put under another | right-click a card, a line or an item of the tree of the panel |
+| move, reorder, remove, put under another | right-click a card, a line or an item of the tree of the panel (its tab **Structure**) |
+| find something in a large drawing | the tree of the panel: its search, and a long level shown a page at a time, with a filter of its own |
 | color a node | its edit card, **Style**: a tone, none, or a color of your own ([The style of a node](card-diagram-impl.md#the-style-of-a-node)) |
 
 Escape or a right-click lets an armed tool go; Ctrl/⌘ + Z takes back any step.
@@ -118,6 +119,8 @@ A **layout member** places nothing itself and arranges what is put under it; a c
 | array | `{ type: array, direction: row \| column, gap, align }` | its children one after another; a drop reorders them |
 | repeat | `{ type: repeat, count, direction, gap }` | its one child spawned `count` times |
 | grid | `{ type: grid, columns, gapX, gapY }` | its children in rows of `columns`, each column as wide as its widest |
+
+A layout is drawn with a dashed frame and its name (a row named *Stages*, say), also when the diagram is read; its edit card turns that off (**Framed when read**, `isFramedWhenRead: false`), and the frame then shows only while the diagram is edited, faded. A pattern is not framed when read unless its card turns it on.
 
 A **pattern** is a layout whose children fill named **slots**: what each slot is to the others is fixed, only its parameters change. A tool of **Patterns** makes it whole, its slots filled; a member put under a pattern takes a free slot, and a pattern whose slots are all filled says so.
 
@@ -184,9 +187,11 @@ Two kinds come with the layer, in every diagram whose series has it:
 | Kind | Data | Notes |
 | --- | --- | --- |
 | `shape` | `shape: rect \| rounded \| ellipse \| diamond \| triangle \| hexagon \| parallelogram`, `text`, `textSize: s \| m \| l`, `strokeWidth`, `isDashed` | drawn to the size of its node; its fill and its edge are its style |
-| `text` | `text`, `textSize: s \| m \| l \| xl`, `weight: bold`, `align`, `tone` | as wide as its words; `style: { fill }` puts a color behind them (a badge) |
+| `text` | `text`, `textSize: s \| m \| l \| xl`, `weight: bold`, `align`, `tone` | as wide as its words, or, with `size: { width }`, wrapped at that width (its height following); `style: { fill }` puts a color behind them (a badge) |
 
 Their words hold icons as the rest of the framework's texts do: `/icon` where they are typed, `{{icon:database}}` written.
+
+A text's box is chosen in its edit card, **Size** › **Box**: *Fits the words* (the default: the box follows the words, Shift + Enter breaks a line, nothing to resize) or *A width, the words wrap* (its width set there or by the handles on its sides, its height following the words). Switching keeps the box it has, so nothing moves.
 
 ## In a block of scenes
 

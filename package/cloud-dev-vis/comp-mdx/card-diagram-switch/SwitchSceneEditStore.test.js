@@ -83,3 +83,109 @@ sceneList:
 	const places = diagramPlacesGet(graph.nodes, graph.layout, {});
 	assert.deepEqual(places.positions.get('m'), { x: 140, y: 20 });
 });
+
+const blockSource = `version: 1
+title: The shop
+sceneList:
+  - path: /overview
+    label: Overview
+    diagram:
+      nodes:
+        - { id: d, renderer: { type: scene-embed }, data: { scene: /overview/detail, view: cards } }
+        - { id: go, renderer: { type: scene-link }, link: /overview/detail@matrix, data: { title: Go } }
+  - path: /overview/detail
+    label: Detail
+    viewDefault: cards
+    viewList:
+      - id: cards
+        diagram: { nodes: [] }
+      - id: matrix   # the matrix view
+        diagram: { nodes: [] }
+  - path: /archive/old
+    label: Old
+    diagram:
+      nodes:
+        - { id: back, renderer: { type: scene-link }, link: /overview, data: { title: Back } }
+`;
+
+test('a block as a tree: the block, its scenes by path, views under their scene, folders for paths without a scene', async () => {
+	const { switchSceneTreeIndexBuild, switchSceneTreeModelBuild, switchSceneRefIndexBuild } = await import('./SwitchSceneEditTree.js');
+	const value = yamlParse(blockSource);
+	const model = switchSceneTreeModelBuild(switchSceneTreeIndexBuild(value));
+	const walk = (key, depth = 0) => [`${'  '.repeat(depth)}${key}`, ...model.childKeyListGet(key).flatMap(child => walk(child, depth + 1))];
+	assert.deepEqual(walk('block'), ['block', '  scene:/overview', '    scene:/overview/detail', '      view:/overview/detail@cards', '      view:/overview/detail@matrix', '  folder:/archive', '    scene:/archive/old']);
+	assert.equal(model.itemGet('view:/overview/detail@cards').summary, 'default');
+	assert.equal(model.parentKeyGet('scene:/archive/old'), 'folder:/archive');
+	assert.equal(model.itemGet('block').summary, '3 scenes');
+	const { inByPath } = switchSceneRefIndexBuild(value);
+	assert.deepEqual(inByPath.get('/overview/detail').map(ref => `${ref.kind}:${ref.fromPath}${ref.suffix}`), ['embed:/overview', 'link:/overview@matrix']);
+});
+
+test('the commands of the block: a scene made, moved with every reference, views made and renamed; each one step', () => {
+	const store = new SwitchSceneEditStore(blockSource);
+	const reportList = [];
+	store.onReport = () => reportList.push(store.sourceDraft);
+	// a new scene below another: made at once, focused, on the canvas
+	assert.equal(store.sceneCreate('/overview'), '/overview/scene-1');
+	assert.equal(store.focusKey, 'scene:/overview/scene-1');
+	assert.equal(store.targetKey, '/overview/scene-1');
+	assert.equal(yamlParse(store.sourceBase).sceneList[2].path, '/overview/scene-1', 'after what stands below its parent');
+	// moved: what is below follows, every reference too, the comments stay
+	const tokenBefore = store.editToken;
+	assert.equal(store.scenePathSet('/overview', '/home'), '/home');
+	const moved = yamlParse(store.sourceBase);
+	assert.deepEqual(moved.sceneList.map(scene => scene.path), ['/home', '/home/detail', '/home/scene-1', '/archive/old']);
+	assert.equal(moved.sceneList[0].diagram.nodes[0].data.scene, '/home/detail');
+	assert.equal(moved.sceneList[0].diagram.nodes[1].link, '/home/detail@matrix');
+	assert.equal(moved.sceneList[3].diagram.nodes[0].link, '/home');
+	assert.match(store.sourceBase, /# the matrix view/);
+	assert.equal(store.targetKey, '/home/scene-1', 'the scene on the canvas moved with it');
+	assert.equal(store.editToken, tokenBefore, 'its diagram is the same: the editor stays open');
+	assert.equal(store.scenePathSet('/home/detail', '/archive/old'), null);
+	assert.match(store.message, /is a scene already/);
+	// a view renamed: the default, the references and the embedded scene asking for it follow
+	store.viewIdSet('/home/detail', 'cards', 'grid');
+	const renamed = yamlParse(store.sourceBase);
+	assert.equal(renamed.sceneList[1].viewDefault, 'grid');
+	assert.equal(renamed.sceneList[0].diagram.nodes[0].data.view, 'grid');
+	// a scene of one diagram becomes a scene of views with its first new view
+	assert.equal(store.viewAdd('/archive/old'), 'view-1');
+	const views = yamlParse(store.sourceBase).sceneList[3];
+	assert.deepEqual(views.viewList.map(view => view.id), ['main', 'view-1']);
+	assert.equal(views.diagram, undefined);
+	assert.equal(store.targetKey, '/archive/old@view-1');
+	assert.equal(store.viewRemove('/archive/old', 'view-1') !== null, true);
+	assert.equal(store.viewRemove('/archive/old', 'main'), null, 'the last view stays');
+	assert.equal(store.viewListCollapse('/archive/old') !== null, true);
+	assert.ok(yamlParse(store.sourceBase).sceneList[3].diagram);
+	assert.equal(store.history.length, 6, 'the two refused are no steps');
+	assert.ok(reportList.length >= 6, 'the page is told the document after every command');
+	// undone step by step back to the start
+	while (store.undo());
+	assert.equal(store.sourceBase, blockSource);
+});
+
+test('what the canvas changed becomes one step of the block, before a command or another scene; an undo puts the document back', () => {
+	const store = new SwitchSceneEditStore(blockSource);
+	const draft = yamlParse(store.textOf(store.target));
+	draft.nodes.push({ id: 'new', renderer: { type: 'card-note' }, data: { title: 'New' } });
+	store.draftSet('/overview', yamlStringify(draft));
+	assert.equal(store.value.sceneList[0].diagram.nodes.length, 3, 'the tree and the relations read the draft');
+	assert.equal(store.isUndoAvailable, true);
+	store.sceneSet('/archive/old', 'label', 'Very old');
+	assert.deepEqual(store.history.past.map(entry => entry.stateBefore.label), ['Drawing in /overview', '/archive/old: label']);
+	assert.equal(store.draftByKey.size, 0);
+	const tokenBefore = store.editToken;
+	store.undo();
+	assert.equal(store.editToken, tokenBefore, 'the diagram on the canvas did not change: the editor stays');
+	store.undo();
+	assert.equal(store.editToken, tokenBefore + 1, 'the drawing undone: the editor opens again on the diagram as it was');
+	assert.equal(store.sourceBase, blockSource);
+	store.redo();
+	assert.equal(yamlParse(store.sourceBase).sceneList[0].diagram.nodes.length, 3);
+	// a removed scene: its focus goes to what is above it; what names it stays
+	store.focusSet('scene:/overview/detail');
+	store.sceneRemove('/overview/detail');
+	assert.equal(store.focusKey, 'scene:/overview');
+	assert.equal(yamlParse(store.sourceBase).sceneList[0].diagram.nodes[0].data.scene, '/overview/detail');
+});

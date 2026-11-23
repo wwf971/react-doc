@@ -438,6 +438,12 @@
 	pointer-events: none;
 }
 
+/* a layout not framed when the diagram is read: faded while it is edited */
+.doc-param-layout-box.is-unframed-when-read:not(.is-selected) { opacity: 0.45; }
+
+/* drawn while the diagram is read (ParametricReadLayer.jsx): the same frame, answering nothing */
+.doc-param-layout-box.is-read .doc-param-layout-tab { pointer-events: none; cursor: default; }
+
 .doc-param-layout-box.is-selected {
 	border-style: solid;
 	border-color: var(--color-fd-primary);
@@ -487,303 +493,7 @@
 	opacity: 0.72;
 }
 
-/* ---------- the panel (ParametricPanel.jsx) ---------- */
-
-/* in the page: under the viewport, as wide as it, over what follows (nothing is added to the flow) */
-.doc-vis-edit.has-feature-panel {
-	position: relative;
-}
-
-.doc-param-panel {
-	position: absolute;
-	top: calc(100% + 6px);
-	right: 0;
-	left: 0;
-	z-index: 30;
-	display: flex;
-	flex-direction: column;
-	box-sizing: border-box;
-	height: 270px;
-	border: 1px solid var(--color-fd-border);
-	border-radius: 6px;
-	background: var(--color-fd-background);
-	box-shadow: 0 6px 20px rgb(15 23 42 / 14%);
-	color: var(--color-fd-foreground);
-	font-family: ui-sans-serif, system-ui, sans-serif;
-	font-size: 0.74rem;
-	line-height: 1.35;
-	text-align: left;
-	cursor: auto;
-}
-
-.doc-param-panel.is-collapsed {
-	height: auto;
-}
-
-/* in the block popup: docked at its bottom, the canvas taking the room above */
-.doc-vis-edit.is-popup > .doc-param-panel {
-	position: static;
-	flex: 0 0 auto;
-	height: 280px;
-	border-width: 1px 0 0;
-	border-radius: 0;
-	box-shadow: none;
-}
-
-.doc-vis-edit.is-popup > .doc-param-panel.is-collapsed {
-	height: auto;
-}
-
-.doc-param-panel-head {
-	display: flex;
-	flex: 0 0 auto;
-	align-items: center;
-	gap: 0.45rem;
-	min-height: 28px;
-	padding: 0 0.5rem 0 0.6rem;
-	border-bottom: 1px solid var(--color-fd-border);
-}
-
-.doc-param-panel.is-collapsed .doc-param-panel-head {
-	border-bottom: 0;
-}
-
-.doc-param-panel-count {
-	margin: 0;
-}
-
-.doc-param-panel-fold {
-	margin-left: auto;
-}
-
-/* the switch of the edit card stands before the fold button and takes the free room itself */
-.doc-param-card-place + .doc-param-panel-fold {
-	margin-left: 0.3rem;
-}
-
-.doc-param-search {
-	display: flex;
-	align-items: center;
-	gap: 0.3rem;
-	width: 220px;
-	max-width: 40%;
-	margin-left: 0.4rem;
-	padding: 0.1rem 0.3rem;
-	border: 1px solid var(--color-fd-border);
-	border-radius: 3px;
-	color: var(--color-fd-muted-foreground);
-}
-
-.doc-param-search input {
-	flex: 1 1 auto;
-	min-width: 0;
-	border: 0;
-	background: transparent;
-	color: var(--color-fd-foreground);
-	font: inherit;
-	outline: none;
-}
-
-.doc-param-search:focus-within {
-	border-color: var(--color-fd-primary);
-}
-
-.doc-param-panel-body {
-	display: grid;
-	flex: 1 1 auto;
-	grid-template-columns: minmax(240px, 34%) minmax(0, 1fr) minmax(240px, 30%);
-	min-height: 0;
-}
-
-/* the edit card floating beside the thing: the panel is the tree and the relations alone */
-.doc-param-panel-body.is-card-floating {
-	grid-template-columns: minmax(240px, 34%) minmax(0, 1fr);
-}
-
-/* where the edit card stands: a label and two choices, in the compact buttons of the edit layer */
-.doc-param-card-place {
-	display: inline-flex;
-	flex: 0 0 auto;
-	align-items: center;
-	gap: 0.4rem;
-	margin-left: auto;
-}
-
-.doc-param-card-place-label {
-	color: var(--color-fd-muted-foreground);
-	white-space: nowrap;
-}
-
-.doc-param-card-place .doc-button-group {
-	--doc-button-group-height: 20px;
-	box-shadow: none;
-}
-
-.doc-param-card-place .doc-button-group > button {
-	gap: 0.25rem;
-	font-size: 0.7rem;
-	white-space: nowrap;
-}
-
-.doc-param-panel-body > * {
-	min-width: 0;
-	min-height: 0;
-	overflow: auto;
-}
-
-.doc-param-panel-body > * + * {
-	border-left: 1px solid var(--color-fd-border);
-}
-
-.doc-param-empty {
-	margin: 0.6rem 0.7rem;
-}
-
-/* the tree: tight rows, as a file explorer lists files */
-.doc-param-tree {
-	padding: 0.25rem 0;
-}
-
-.doc-param-tree-item {
-	display: flex;
-	align-items: center;
-	gap: 0.3rem;
-	min-height: 22px;
-	padding-right: 0.5rem;
-	white-space: nowrap;
-	cursor: pointer;
-	user-select: none;
-}
-
-.doc-param-tree-item:hover {
-	background: var(--color-fd-accent);
-}
-
-.doc-param-tree-item.is-selected {
-	background: color-mix(in srgb, var(--color-fd-primary) 13%, transparent);
-}
-
-.doc-param-tree-fold {
-	display: inline-flex;
-	flex: 0 0 auto;
-	align-items: center;
-	justify-content: center;
-	width: 14px;
-	height: 14px;
-	padding: 0;
-	border: 0;
-	border-radius: 2px;
-	background: transparent;
-	color: var(--color-fd-muted-foreground);
-	cursor: pointer;
-}
-
-.doc-param-tree-icon {
-	flex: 0 0 auto;
-	color: var(--color-fd-muted-foreground);
-}
-
-.doc-param-tree-item.is-group .doc-param-tree-icon,
-.doc-param-tree-item.is-layout .doc-param-tree-icon {
-	color: var(--color-fd-primary);
-}
-
-.doc-param-tree-item.is-group .doc-param-tree-label,
-.doc-param-tree-item.is-free .doc-param-tree-label {
-	font-weight: 600;
-}
-
-/* the words of a thing keep their room: its kind gives way first, then how it is placed */
-.doc-param-tree-label {
-	flex: 0 1 auto;
-	min-width: 2.5rem;
-	overflow: hidden;
-	text-overflow: ellipsis;
-}
-
-/* a name nobody gave: the word of the thing, dimmed */
-.doc-param-tree-label.is-default {
-	color: var(--color-fd-muted-foreground);
-}
-
-.doc-param-tree-kind {
-	flex: 0 30 auto;
-	min-width: 0;
-	overflow: hidden;
-	color: var(--color-fd-muted-foreground);
-	font-size: 0.68rem;
-	text-overflow: ellipsis;
-}
-
-.doc-param-tree-summary {
-	flex: 1 1000 0%;
-	min-width: 0;
-	margin-left: 0.3rem;
-	overflow: hidden;
-	color: var(--color-fd-muted-foreground);
-	font-size: 0.68rem;
-	text-align: right;
-	text-overflow: ellipsis;
-}
-
-/* the relations of what is selected: a small canvas of its own, zoomed by the wheel and panned by a
-   drag (it never scrolls, and the page never scrolls under it) */
-.doc-param-panel-body > .doc-param-graph {
-	position: relative;
-	overflow: hidden;
-	background: color-mix(in srgb, var(--color-fd-muted, #f1f5f9) 35%, var(--color-fd-background));
-	cursor: grab;
-	overscroll-behavior: contain;
-	touch-action: none;
-}
-
-.doc-param-graph:active {
-	cursor: grabbing;
-}
-
-.doc-param-graph-view {
-	position: absolute;
-	top: 0;
-	left: 0;
-	transform-origin: 0 0;
-}
-
-.doc-param-graph-view .doc-card-icon,
-.doc-param-graph-view [data-node-id] {
-	cursor: pointer;
-}
-
-.doc-param-graph-reset {
-	position: absolute;
-	top: 6px;
-	right: 6px;
-	width: 20px !important;
-	height: 20px !important;
-	border: 1px solid var(--color-fd-border) !important;
-	background: var(--color-fd-background) !important;
-}
-
-/* the tree and the properties scroll by themselves; at their end the page does not take the wheel */
-.doc-param-tree,
-.doc-param-card {
-	overscroll-behavior: contain;
-}
-
-/* the edit card docked: the look of the card, without its popup */
-.doc-param-card.doc-vis-card-panel {
-	padding: 0.35rem 0.7rem 0.5rem;
-	font-size: 0.76rem;
-}
-
-/* the menu of an item of the tree: the panel of a right-click, where the pointer was */
-.doc-param-menu {
-	position: fixed;
-	z-index: 1600;
-}
-
-body:has(.doc-block-popup .doc-vis-edit) .doc-param-menu {
-	z-index: calc(var(--doc-vis-modal-z-index, 100000) + 2);
-}
+/* the panel is the editor's (card-diagram/DiagramPanel.css): the tab Structure draws in it */
 
 /* ---------- the kinds it draws with (ParametricShape.jsx) ----------
    a shape: its outline drawn to the size of its node, filled and edged by the style of the node
@@ -825,8 +535,15 @@ body:has(.doc-block-popup .doc-vis-edit) .doc-param-menu {
 	font-family: ui-sans-serif, system-ui, sans-serif;
 	font-size: 0.8rem;
 	line-height: 1.35;
-	white-space: pre-wrap;
+	/* fit: the box is as wide as the words, lines broken only where they say */
+	white-space: pre;
 }
+/* wrap: the words wrap at the width of the box, a long word too, typed or read alike (an editable
+   field breaks long words by itself: what is read must break them the same way, or the lines seen
+   while typing are gone once the field closes and the words run out of the box and its fill) */
+.doc-param-text[data-size-mode='wrap'] { white-space: pre-wrap; overflow-wrap: break-word; }
+.doc-param-text[data-size-mode='wrap'] .doc-param-text-words,
+.doc-param-text[data-size-mode='wrap'] .doc-param-text-words[data-open] > .doc-cell-edit { display: block; }
 .doc-param-text[data-text-size='s'] { font-size: 0.68rem; }
 .doc-param-text[data-text-size='l'] { font-size: 1.05rem; }
 .doc-param-text[data-text-size='xl'] { font-size: 1.5rem; line-height: 1.2; letter-spacing: -0.01em; }

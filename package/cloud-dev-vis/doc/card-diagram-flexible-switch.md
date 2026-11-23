@@ -36,6 +36,7 @@ a scene (or a view of it) may also say
   transition?             { secondPortal, secondMorph, secondCamera, secondScroll }
 ```
 
+- **A viewport shows one namespace**, a tree of paths, made of **sources**: the scenes of the block's own document, and **mounts**, the scenes of another source under a path ([Sources of scenes](#sources-of-scenes)). The provider a viewport asks is the one of its namespace.
 - **The text of a block** is read by the `loadBuild(source, { registry, sourceRef, onEvent, config })` its component was made with (`cardDiagramSwitchCompCreate(registry, name, { loadBuild })`), which answers `{ spec: { root, title?, height?, depthMax? }, provider }`. By default the text is a document of scenes (`switchDocLoadBuild`); a component drawing scenes from data of its own reads that data instead, as `DiagramAwsArchitecture` reads the description of a system ([aws.md](aws.md#scenes-generated-from-a-description)).
 - A **diagram a provider builds in code** may give one object to many of its parts (one style to every line, one renderer to every node), however many they are: the scene is loaded with each written out where it stands.
 - A **bounding box** is the part of a scene shown by default, and shown when the scene is embedded. Without one it is everything the scene draws.
@@ -43,6 +44,50 @@ a scene (or a view of it) may also say
 - A **switch** is the way from the scene shown to another: a list of steps, each drawn from a progress.
 
 The [animation layer](card-diagram-animation.md) has its own word *scene*, what the targets look like at a state of one diagram (`AnimationData.js`). It has nothing to do with these: everything named scene in this document has a path.
+
+## Sources of scenes
+
+Where the scenes of a viewport are defined. Every path that is a scene belongs to exactly one **source**, and the viewport asks one provider, made of its sources:
+
+<!--renderComp=DiagramText-->
+```text
+viewport                              a block of scenes, or a component's view
+├── settings                          title, height, root, depthMax, transition: the block's
+└── namespace                         one tree of paths
+    ├── own scenes                    sceneList of the block's document (inline, or its asset item)
+    └── mounts                        mountList: the scenes of another source under a path
+        /shop  ◄── from: an asset item holding a document of scenes
+                   its /overview    shows as  /shop/overview   (read-only here)
+```
+
+| Source | Defines its scenes | Edited |
+| --- | --- | --- |
+| a **document of scenes** (`sceneList`), the block's own text or the item of an asset-backed block | written | in the block: its text, or Visual ([Editing a block of scenes](#editing-a-block-of-scenes)) |
+| a **mount** (`mountList`) of a document held in an asset item | written there | where it is held; read-only in the block that mounts it |
+| a **generator**: a component's code over its data (`DiagramAwsArchitecture`, the migration explorer, a zettel) | by code | its data; a scene edited in place where its provider says so ([below](#a-scene-edited-in-place)) |
+
+A generator is a viewport whose namespace is one source at `/`: nothing of it changes with mounts.
+
+**A mount** (`switchMountRead`, `SwitchMount.js`) is `{ path, label?, from: { asset: { store, name | itemId, versionId? } }, sourcePath? }`: the source's `sourcePath` (`/` by default, all of it) shown at `path`. The composite provider (`switchProviderCompose`) routes a path to the source owning it and **translates both ways**: the paths of the source, the menus of the path bar, and every [reference](#references) of its diagrams (a link to `/overview/db` in the mounted document is drawn as a link to `/shop/overview/db`; one to a part not mounted names nothing, and says where it pointed). The host names mounted scenes by their viewport paths, as any other.
+
+- **One owner per path.** An own scene below a mount, or at it when the source has a scene there, and two mounts at or below each other, are refused, naming both. An own scene above a mount is fine: `/shop` may be an own scene whose cards lead into `/shop/overview`.
+- **What a source keeps.** A mounted document keeps its `defaults`; its `title`, `height`, `root`, `depthMax`, `transition` and `featureList` are its own block's and are not read here. A mounted scene is drawn with the viewport's registry; a document mounting another one is not read (one level of mounts).
+- **Loading.** A mount is read as a reference block reads its item (`DocAssetStore.refQuery`, `refLoad`; `useSwitchMounts`): the block draws its viewport once every mount is read or failed, saying so meanwhile. A mount that cannot be read (no such item, no text, not a document of scenes) is a scene at its path saying why; the rest of the namespace works. The provider's `signature` is the document's and the versions of its mounts, so an item given a new head rebuilds it and the viewport keeps its path.
+- **Writing.** What a reader writes (a box adjusted) writes the source owning the scene; in a mounted scene it is refused with where the scene is held.
+- **Compatible.** A document without `mountList` is read as before, with the provider of its document alone. Mounting a generator (a component exposing its `loadBuild` as a scene source, its registry joined) and the items of a frontend object are designed for later ([TODO](../../../main/doc_page_impl_TODO.md#switch-mount-generator)).
+
+### References
+
+A **reference** is a path written in a diagram that names a scene (`SwitchRef.js`: one walk for everything reading or rewriting them):
+
+| Kind | Written |
+| --- | --- |
+| `link` | `link` of a node or a line, and a `link` anywhere in the data of a node (a cell of a matrix, a tab, an item of a stack) |
+| `embed` | `data.scene` of an embedded scene (`data.view` asks for one of its views) |
+| `stack` | `scene` of an item of a stack |
+| `alias` | `data.focusPath` of a stack |
+
+A reference is a path, maybe with a view (`@id`) or an item (`#id`); only text starting with `/` is one (`command:` is not). Beside them, `tabs.of` of a scene and `root` of a document name scenes. A reference may name nothing (its scene removed or moved): it says so where it is drawn, in the graph of relations, and in the card of the node holding it, and is never taken away for it.
 
 ## One canvas, no canvas inside a canvas
 
@@ -209,7 +254,7 @@ A `scene-box` node (a kind of the [base series](card-diagram-impl.md#node-regist
 
 ## The path bar
 
-`SwitchPathBar` stands left aligned over the viewport: one button per segment, whose click switches to it; the chevron before a segment lists the scenes beside it, the last chevron the scenes below. Three buttons stand before the path. Back and forward walk the scenes visited, as in a browser: a new way forgets what lay forward (`store.back`, `store.forward`). Up goes one level up the path, to the nearest folder that is a scene (`store.up`), and is itself a step that back can undo. **A path wider than its place does not wrap and has no scrollbar**: it is a strip moved by the wheel over it or by a drag (`ScrollHorizontal`, its offset in `store.pathScroll`, kept with the block), the page not scrolling meanwhile; a switch brings the segment of the scene shown into sight with what follows it (the view switcher, the chevron of the scenes below), and every segment says its full label in its title. At the right: the buttons of the host before the viewport's own (`trailing` of `SwitchPathBar`, `barTrailing` of `SwitchViewport`: the picture menu of a block, copy or download, PNG or SVG, of the scene as it stands now, through the capture of the [animation](card-diagram-animation.md#pictures)), the commands of the scene when it has some (**+**, [below](#commands)), find, the camera back to the default of the scene, the bounding box, then **the buttons of the host at the end of the bar** (`end`, `barEnd`: what takes the viewport elsewhere, as an app opening it as large as its window). The buttons are those of a panel's header (`.doc-button-icon.is-panel` of the page's shared styles) and the bar has the header's sides, so in the block popup the ones at the right stand right under its maximize and close buttons; nothing is reserved beside them.
+`SwitchPathBar` stands left aligned over the viewport. It is the bar of [a path-based view](#a-path-based-view-anywhere) (`PathNavBar`) walking the scenes, with what is the switch's own added: the switcher of views after the last segment and the buttons at the right. One button per segment, whose click switches to it; the chevron before a segment lists the scenes beside it, the last chevron the scenes below. Three buttons stand before the path. Back and forward walk the scenes visited, as in a browser: a new way forgets what lay forward (`store.back`, `store.forward`, over a `PathNavHistory`). Up goes one level up the path, to the nearest folder that is a scene (`store.up`), and is itself a step that back can undo. **A path wider than its place does not wrap and has no scrollbar**: it is a strip moved by the wheel over it or by a drag (`ScrollHorizontal`, its offset in `store.pathScroll`, kept with the block), the page not scrolling meanwhile; a switch brings the segment of the scene shown into sight with what follows it (the view switcher, the chevron of the scenes below), and every segment says its full label in its title. At the right: the buttons of the host before the viewport's own (`trailing` of `SwitchPathBar`, `barTrailing` of `SwitchViewport`: the picture menu of a block, copy or download, PNG or SVG, of the scene as it stands now, through the capture of the [animation](card-diagram-animation.md#pictures)), the commands of the scene when it has some (**+**, [below](#commands)), find, the camera back to the default of the scene, the bounding box, then **the buttons of the host at the end of the bar** (`end`, `barEnd`: what takes the viewport elsewhere, as an app opening it as large as its window). The buttons are those of a panel's header (`.doc-button-icon.is-panel` of the page's shared styles) and the bar has the header's sides, so in the block popup the ones at the right stand right under its maximize and close buttons; nothing is reserved beside them.
 
 **An item of a menu** shows its `label` (the simple mode). When it has a `labelItemList` (the complex mode), it shows that instead, a list of things of different types, and `label` stays what the segment of the path bar and a screen reader say:
 
@@ -229,6 +274,33 @@ sceneList:
 After the last segment stands [the switcher](#the-views-of-a-scene) of a scene with views.
 
 A reader's camera is remembered per path, and so per view, while the block lives, and is where a return to the path arrives; the fit button forgets it. The block lives longer than a mount of it: `useSwitchStore` keeps the store in the block's component state ([stores kept across mounts](../../../main/doc_page_impl_mdx_comp_state.md#stores-kept-across-mounts)), so when the document enters or leaves edit mode the block comes back at the scene, the view and the camera the reader left, with its cards measured, and paints them in its first frame (a new canvas starts from `cameraLive`, the camera the last one had). A provider built again on the new mount is taken as it is (`providerAdopt`) when its `signature` is the one of the provider the store holds; a provider without a signature, or with another, reads the scenes anew (`providerSet`). The animation over it (`SwitchAnimationStore`) is kept with it.
+
+## A path-based view anywhere
+
+The path bar and the history behind it are a **side feature of this layer**: anything else that shows one place of a tree of paths at a time uses the same two parts, so a reader walks a folder of papers as they walk scenes, and there is one bar to maintain. The switch layer is built on them itself (`SwitchPathBar`, `SwitchStore.history`); the first other user is the mode Papers of the package cv (`@cv-dev/cv/doc/cv-sheet.md#the-papers`).
+
+```text
+PathNav.js       the tree is a provider: { root, labelGet(path), childListGet(path), isFound?(path) }
+                 (a switch provider's words, without its scenes)
+                 PathNavHistory    back and forward, as a browser: visit, backTake, forwardTake
+                 PathNavStore      the state of a view whose host has none: the place shown, its
+                                   history, the strip of the bar, how far each place was scrolled
+                 pathNavBuild(store, provider) -> nav: what the bar reads, from the data as it is now
+PathNavBar.jsx   the bar: back, forward, up, the segments, the menus beside and below; slots for the
+                 host (pathEnd after the path, trailing at the right), the noun of its titles
+```
+
+- **The store knows no provider.** What a place is comes from the provider when the view is drawn (`pathNavBuild`), so the store may be kept across mounts ([stores kept across mounts](../../../main/doc_page_impl_mdx_comp_state.md#stores-kept-across-mounts)) while the data changes under it. A place that is gone (a paper removed) shows the nearest place above it that is one, else the root.
+- **A root `/`** is a place of its own, the first segment of every path (the top of an object's folders); a root such as `/overview` stays the first segment as the switch layer reads it (`pathNavChain`).
+- **Up** goes to the nearest folder above that is a place, and is a step back can undo, as in a block of scenes.
+- **What it draws under the bar is the host's**: a table of a folder, a sheet of a paper. The bar has no height of its own to change: its path is a strip that never wraps.
+
+```jsx
+const store = useCompStateStore(config, 'nav', () => new PathNavStore({ path: '/' }));
+const nav = pathNavBuild(store, provider);            // provider: the host's tree, built from its data
+<PathNavBar nav={nav} label="Path of the papers" trailing={...} />
+{whatIsAt(nav.pathCurrent)}
+```
 
 ## Commands
 
@@ -311,18 +383,86 @@ What every scene follows, beside [those of the framework](card-diagram-usage.md#
 
 ## Editing a block of scenes
 
-A block has two edit modes: its **text**, as every block has, and **Visual** (`SwitchSceneEdit.jsx`), the visual editor of the framework on one diagram of the document at a time. A menu above the canvas chooses which: a scene with a diagram of its own, or one view of a scene (`/system/storage @overview`). Everything of the editor is there, its history, the panel of a card, the arrangers.
+A block has two edit modes: its **text**, as every block has, and **Visual** (`SwitchSceneEdit.jsx`): the diagram of one scene, or of one view of a scene, in the visual editor of the framework (its history, the panel of a card, the arrangers), and under it [the panel](card-diagram-impl.md#the-panel) with the tab **Scenes**, where the block is organized.
 
+<!--renderComp=DiagramText-->
 ```text
-targets      every scene with a diagram, every view with one, in the order of the document
-open         the diagram as the editor reads it: version 1, the defaults of the document where it has none
-choose another   what was done to the first is kept as its draft; choosing it again opens the draft
-Save         the whole document written once: each draft in the place of its diagram (setIn on the parsed
-             document), the defaults it was given taken away again, everything else of the text as it was,
-             comments included
+Editing  Overview › Orders  @Matrix ▾           the path of what is on the canvas; its views
+[the visual editor]                             one diagram, with its own history
+[Scenes | Structure]  4 scenes  ⌕  ↶ ↷  Edit card [In the panel|Beside it]
+tree of the block   │ relations of the item │ its properties
 ```
 
-The page is told the document, never the diagram of one scene, so its dirty mark and its Save are the block's (`SwitchSceneEditStore.js`). The **feature layers** a document names at its top (`featureList: [parametric-canvas]`) are offered for every scene it edits, as `viewport.featureList` of one diagram offers them for itself; the registry of the layer keeps the features of the registry it is built from, so their data is read in every scene ([Features](card-diagram-impl.md#features)). A scene made of tabs of another has no diagram of its own: it is edited through the scene it arranges. A component whose scenes are generated from data offers no visual mode of its document (`cardDiagramSwitchDefineOptionsBuild({ isSceneEditable: false })`): what an author changes there is the data, as text, or wherever the data is written from, or, where its provider says so, a scene edited in place ([A scene edited in place](#a-scene-edited-in-place)), its draft written back as data.
+The page is told the document, never the diagram of one scene, so its dirty mark and its Save are the block's. The **feature layers** a document names at its top (`featureList: [parametric-canvas]`) are offered for every scene it edits (their tabs join the panel: Structure), as `viewport.featureList` of one diagram offers them for itself; the registry of the layer keeps the features of the registry it is built from, so their data is read in every scene ([Features](card-diagram-impl.md#features)). A component whose scenes are generated from data offers no visual mode of its document (`cardDiagramSwitchDefineOptionsBuild({ isSceneEditable: false })`): what an author changes there is the data, as text, or wherever the data is written from, or, where its provider says so, a scene edited in place ([A scene edited in place](#a-scene-edited-in-place)), its draft written back as data.
+
+### The scenes tab
+
+**The tree of the block** (`SwitchSceneEditTree.js`, a [paged tree](card-diagram-impl.md#the-paged-tree)):
+
+| Item | Key | Its children | A click |
+| --- | --- | --- | --- |
+| the block | `block` | the top level | focuses it |
+| a scene | `scene:{path}` | its views, its tab members, then the scenes and folders below its path, in the order of the document | focuses it and opens it on the canvas (its default view, when it has views) |
+| a view | `view:{path}@{id}` | | focuses it and opens it |
+| a folder | `folder:{path}` | what is below it: a path with scenes below it and none of its own | focuses it |
+| a mount | `mount:{path}` | the scenes its source has there, read from its provider when opened | focuses it |
+| a mounted scene | `scene:{path}` | its views, what is below it | focuses it; never opened for editing (held elsewhere) |
+| a tab member | `tab:{path}` | | focuses it |
+
+A row shows its label, the last segment of its path when the label says something else, a summary (its number of children when folded, "3 views", where a mount reads from, which view is the default or the hover one) and marks (**first**: the root). The scene or view on the canvas is marked by a bar at the left of its row, apart from the focus. The keys focus without opening, so browsing hundreds of scenes loads no diagram; Enter opens.
+
+**The relations of what is focused** (the middle part, `SwitchSceneEditGraph.js`): a tree read downward, what leads to it above (the scene its path is under, the scenes embedding, stacking or linking to it, the scene of tabs it is a member of), each line running down one lane at the left into it, and what it leads to below (the scenes below it, those it embeds, stacks, links to in any of its views, the scene it arranges). One node per other scene and side, its relations joined in its words, the line in the look of the strongest (path slate, embed and stack blue, tabs violet, link teal and dashed, a legend in a corner); at most six a side, the rest one node whose click lists them all. A reference naming nothing is a red node. A click goes there, as a click in the tree. Incoming references are those of the block's own scenes; a mounted scene's outgoing ones are read from its source.
+
+**The properties of what is focused** (`SwitchSceneEditCard.js`): the edit card of the framework, given a small editor of the block session, so it looks and types as a node's card. With nothing focused it is the card of the scene on the canvas.
+
+| Focused | Its card |
+| --- | --- |
+| the block | title, first scene, height, depth drawn; the parametric canvas offered; the seconds of a transition |
+| a scene | label, title, title hidden, description; its path: segment and the scene it is under (renaming or moving it moves what is below it and rewrites every reference to them); its views: default, hover, switcher, searched; **Named by**: every reference to it, each a button opening the scene holding it with its node selected |
+| a view | id (renaming it rewrites the references naming `@id`, the choices and the embedded scenes asking for it), label, title, description; shown by default, on hover, when focused, when embedded, alone in its card. A choice written as rules in the text is kept, shown read-only |
+| a folder, a mount, a mounted scene, a tab | what it is; a mount: its label, segment, store, item, the part shown |
+
+**What can be done** is a click (open), the card's values, and a right-click on a row: the panel of a right-click (action-only, searchable) with the item's commands, the same as its card's buttons:
+
+| Item | Commands |
+| --- | --- |
+| the block | New scene at the top; New mount (asks the name of the asset item) |
+| a scene | Edit it on the canvas; Link to it from the scene edited; Embed it in the scene edited; New scene below; New view; Make it the first scene; Move up, Move down; Remove the scene (what is below it stays); Remove it with the N scenes below |
+| a view | Edit it; Link to it; Embed it; Duplicate it; Move up, Move down; Back to one diagram (the last view); Remove the view (never the last) |
+| a folder | Make it a scene; New scene below |
+| a mount | Remove the mount (the references to its scenes stay, naming nothing) |
+| a mounted scene | Link to it; Embed it |
+
+Creating asks nothing first: a new scene is `scene-N` below the scene it is asked for, labelled `Scene N`, with an empty diagram, focused and opened; a new view is `view-N` (its first new view turns a scene of one diagram into a scene of views, its diagram becoming the view `main`); a duplicated view keeps the ids of its nodes, so a switch between the two is a morph. A scene or view dragged from the tree onto the canvas is a link to it there; with Alt (⌥), an embedded scene.
+
+### The block session
+
+`SwitchSceneEditStore.js` holds the document being edited (`sourceBase`), the draft of the diagram on the canvas (`draftByKey`, from the editor's reports), the focus of the tab, the panel, and the history of the block. Every command of the panel goes through one place:
+
+```text
+docChange(change, { label, groupKey?, targetKeyOf? })
+  commit the canvas      its changes since the last commit, one step of the block ("Drawing in /overview")
+  change the document    on the parsed yaml (comments kept); a throw refuses it with its message
+  read it                switchDocNormalize: refused when the viewport would not read it
+  record                 one step of the block's history (a typed value grouped by its key)
+  resolve                the focus gone: the item above it; the scene on the canvas moved: where it went
+                         (targetKeyOf), gone: the nearest scene above; the editor opened again only when
+                         the diagram on it changed (editToken)
+  tell the page          editDraftChange with the whole document
+```
+
+**One history for the block, beside the canvas's.** The canvas keeps its own fine-grained history while a scene is open (Ctrl/⌘ + Z on the canvas, the editor's bar). What it changed becomes one step of the block's history when it is committed: before any command of the panel, before another scene is opened, before an undo of the block. The block's history is therefore linear over the whole document: its undo (the ↶ of the tab, Ctrl/⌘ + Z in the tree) puts the document back exactly, whatever was done in which scene, and when the diagram on the canvas changes with it the editor opens again on it. An undo of the canvas after a commit is a new change, committed later as a step: nothing is lost either way. The history belongs to the session and is never written.
+
+**Renaming and moving rewrite references** (`switchDocPathMove`, `switchDocViewIdMove`): a scene moved takes what is below it, and every reference to them in every own scene, `tabs.of`, `root` and the mounts below it follow, keeping `@view` and `#item`; a path taken, or inside a mount, refuses it. **Removing keeps what depends on it** (rule 7 of the framework): the scenes below a removed scene stay, the references naming it stay and say they name nothing; removing with what is below is an action of its own, naming the count.
+
+### The switch layer in the editor
+
+The switch registry (`switchRegistryBuild`) lists a feature with an editing session and no data, `scene-switch` (`SwitchSceneEditFeature.js`), whose session exists only while a diagram is edited for a block session (`config.sceneEdit`), so a plain diagram never sees it:
+
+- the edit card of a node or a line naming a scene has a section **Scene**: *Opens* (a link: a scene, or a view of one, searchable among the namespace, mounted scenes included), *Shows* and *Its view* (an embedded scene); a reference naming nothing says so; **Edit that scene**;
+- the panel of a double-click offers **Link to a scene…**, **Embed a scene…** (a searchable list) and **New scene, linked from here** (a link where the panel was opened, then the new scene below the one edited, which opens); a right-click on a node or a line with a link, **Open its scene**;
+- a row of the tree dropped on the canvas (`dropAccept`, `drop`) makes a link or an embedded scene there;
+- something selected on the canvas lets go of the focus of the tab (`focusClear`), and the panel asks the canvas through the session (`editorAttach`: `sceneEdit.canvasApi`).
 
 ## Adding to it
 
@@ -352,11 +492,15 @@ The rules that must hold:
 | `SwitchCanvas.jsx` | the canvas, the lines with html labels (the pointer on a line or on its label, or a keyboard on its button, marks both, the whole line with a band in its color: `switchEdgeHoverStyleBuild`. The state is each line's own, so a hover renders that line alone), the mask, the measuring host |
 | `SwitchStatic.jsx` | a scene without React Flow; `SwitchContext` |
 | `SwitchNodeKinds.jsx` | `scene-embed`, `scene-stack`, `scene-tabs`, `switchRegistryBuild` |
-| `SwitchPathBar.jsx` | the path bar |
+| `SwitchPathBar.jsx` | the path bar of the scenes: `PathNavBar` with the views and the buttons of the switch |
+| `PathNav.js`, `PathNavBar.jsx`, `PathNavBar.css` | [a path-based view anywhere](#a-path-based-view-anywhere): the history, the state of a view, the bar; this layer's and any other's |
 | `SwitchViewSwitcher.jsx` | the menu of the views of a scene |
 | `SwitchAnimation.jsx`, `SwitchAnimationStore.js` | under the animation layer |
 | `CardDiagramSwitch.jsx` | `SwitchViewport`, the block of a document, `cardDiagramSwitchCompCreate` with its `loadBuild`, the hooks a generator of scenes uses |
-| `SwitchSceneEdit.jsx`, `SwitchSceneEditStore.js` | the visual edit mode: one scene or view at a time, drafts, the document written again ([Editing a block of scenes](#editing-a-block-of-scenes)) |
+| `SwitchSceneEdit.jsx`, `SwitchSceneEditStore.js` | the visual edit mode: the path of what is edited, the block session (the document, its commands, its history, the panel) ([Editing a block of scenes](#editing-a-block-of-scenes)) |
+| `SwitchSceneEditTree.js`, `SwitchSceneEditGraph.js`, `SwitchSceneEditCard.js`, `SwitchSceneEditPanel.jsx` | the tab Scenes: the tree of a block and its references (pure), the graph of relations, the cards and commands of its items, the tab ([The scenes tab](#the-scenes-tab)) |
+| `SwitchSceneEditFeature.js` | the switch layer in the editor: the section Scene of a card, links and embedded scenes placed, a row dropped ([The switch layer in the editor](#the-switch-layer-in-the-editor)) |
+| `SwitchMount.js`, `SwitchRef.js` | the sources of a viewport: mounts and the composite provider; the references of a diagram, read and rewritten ([Sources of scenes](#sources-of-scenes)) |
 | `SwitchSceneEditor.jsx` | a scene of a provider edited where it is drawn: the editor over the canvas, its draft, its camera ([A scene edited in place](#a-scene-edited-in-place)) |
 | `card-diagram-switch-comp.js`, `SwitchSource.js`, `comp.yaml` | the registration, the starting text, the build-time dependencies |
 | `comp-mdx/card-diagram/SceneBoxCard.jsx` | the bounding box, in the base series |

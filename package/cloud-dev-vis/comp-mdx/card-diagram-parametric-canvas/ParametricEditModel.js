@@ -1,4 +1,4 @@
-import { POINT_BY_NAME, MEMBER_ROOT_ID, pointNameOf, groupKeyOf } from './ParametricData.js';
+import { POINT_BY_NAME, MEMBER_ROOT_ID, pointNameOf, groupKeyOf, memberIsFramedWhenRead } from './ParametricData.js';
 
 // What the parametric canvas shows of a thing in the editor, as data (card-diagram-parametric-canvas.md#the-editor):
 // the sections it adds to the edit card of a node, the edit card of a group or of a layout member,
@@ -136,6 +136,8 @@ export function focusCardModelBuild(session, focus, editor) {
 	return modelOf(memberWritten.name || layoutType.label, 'Layout', [
 		{ id: 'layout', label: layoutType.label, actionList: [], note: layoutType.description, propertyList: [
 			{ id: 'name', label: 'Name', kind: 'text', value: memberWritten.name ?? '', placeholder: layoutType.label, set: value => changeOf(editor, () => session.memberNameSet(focus.groupId, focus.memberId, String(value).trim())) },
+			// its frame and name are drawn while the diagram is edited; when it is read, if so
+			{ id: 'isFramedWhenRead', label: 'Framed when read', kind: 'bool', value: memberIsFramedWhenRead(member, session.catalog), set: value => changeOf(editor, () => session.memberFramedWhenReadSet(focus.groupId, focus.memberId, Boolean(value))) },
 			...paramPropertyListBuild(layoutType.propertyList, id => member.layout[id], (id, value, isTyped) => changeOf(editor, () => session.memberLayoutParamSet(focus.groupId, focus.memberId, id, value, { groupKey: isTyped ? `parametric:${focus.groupId}/${focus.memberId}/layout/${id}` : null }))),
 		] },
 		placementSectionBuild(session, focus.groupId, focus.memberId, editor),

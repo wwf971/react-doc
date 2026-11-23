@@ -10,12 +10,13 @@
 //   pinned to the viewport, or drawn simple (a mark)
 //                                     nothing
 //
-// contract.resizeAxisList: ['width', 'height'] | ['width'] | ['height'] | [] (a text: its width, so its
-// words wrap; an icon: its width; what a generator writes: nothing).
+// contract.resizeAxisList: ['width', 'height'] | ['width'] | ['height'] | [] (an icon: its width; what
+// a generator writes: nothing). A kind that lists its size modes (below) is resized as its mode says.
 export const NODE_RESIZE_AXIS_LIST = ['width', 'height'];
 
 export function nodeResizeAxisListOf(node, contract) {
 	if (!node || node.isDerived || node.around || node.pin !== undefined || node.display === 'simple') return [];
+	if (contract?.sizeModeList) return NODE_SIZE_MODE_BY_ID[nodeSizeModeOf(node)].axisList;
 	if (Array.isArray(contract?.resizeAxisList)) return contract.resizeAxisList.filter(axis => NODE_RESIZE_AXIS_LIST.includes(axis));
 	if (node.isWidthFit) return [];
 	return node.size?.height === 'auto' ? ['width'] : ['width', 'height'];
@@ -31,4 +32,36 @@ export function nodeResizeHandlePointListOf(box, axisList) {
 	if (isWidth) pointList.push([0, 0.5], [1, 0.5]);
 	if (isHeight) pointList.push([0.5, 0], [0.5, 1]);
 	return pointList.map(([fx, fy]) => ({ x: box.x + box.width * fx, y: box.y + box.height * fy }));
+}
+
+// The size modes of a node: how its box is taken, for a kind whose box follows what it says (a
+// text). contract.sizeModeList lists the modes of the kind, the first being that of a node with no
+// size written; the edit card switches between them (Box) when there are several. The mode is read
+// from the size as written, never written beside it, so the two cannot disagree:
+//
+//   fit    no size: as wide and as high as its words, lines broken only where they say; nothing
+//          to resize (the box is derived from the words)
+//   wrap   a width alone: its words wrap within it (a long word too), its height follows them;
+//          its width resized
+//   box    a width and a height (no kind lists it yet: a text whose words overflow or shrink)
+export const NODE_SIZE_MODE_BY_ID = {
+	fit: { id: 'fit', label: 'Fits the words', sizeText: 'no size', axisList: [] },
+	wrap: { id: 'wrap', label: 'A width, the words wrap', sizeText: 'a width alone', axisList: ['width'] },
+	box: { id: 'box', label: 'A width and a height', sizeText: 'a width and a height', axisList: ['width', 'height'] },
+};
+
+// the mode of a node as normalized (size: { width, height }, each a number or 'auto')
+export function nodeSizeModeOf(node) {
+	if (node.size?.width === 'auto' || node.size?.width === undefined) return node.size?.height === 'auto' || node.size?.height === undefined ? 'fit' : 'box';
+	return node.size?.height === 'auto' || node.size?.height === undefined ? 'wrap' : 'box';
+}
+
+// the size a node takes in a mode, from the box it has now (as measured, else as written): the
+// same box at the moment of the switch, so nothing jumps; undefined: no size at all. Rounded up,
+// a pixel spare: the browser rounds what it measures, and a box a hair narrower than its words
+// would wrap the last of them
+export function nodeSizeOfMode(mode, boxNow) {
+	if (mode === 'fit') return undefined;
+	const width = Math.max(1, Math.ceil(boxNow.width) + 1);
+	return mode === 'wrap' ? { width } : { width, height: Math.max(1, Math.ceil(boxNow.height) + 1) };
 }

@@ -4,7 +4,7 @@ import { DiagramEditStore } from '../card-diagram/DiagramEditStore.js';
 import { diagramNormalize } from '../card-diagram/DiagramERData.js';
 import { nodeRegistryBuild } from '../card-diagram/node-registry.js';
 import { cardDiagramNodeRegistry, cardNoteNodeKind } from '../card-diagram/card-diagram-node-registry.js';
-import { PARAMETRIC_FEATURE_ID } from './ParametricData.js';
+import { PARAMETRIC_FEATURE_ID, memberIsFramedWhenRead } from './ParametricData.js';
 import { layoutTypeBadge, layoutTypeCaption, layoutTypeGrid } from './ParametricLayout.js';
 import { ParametricEditStore } from './ParametricEditStore.js';
 import { parametricCanvasFeature } from './ParametricFeature.jsx';
@@ -140,4 +140,26 @@ test('a member resized by its corners keeps the corner where it was put: its siz
 	assert.deepEqual([box.x, box.y, box.width, box.height], [120, -10, 100, 80]);
 	assert.equal(store.history.length, 1);
 	assert.equal(session.nodeResize('free', { x: 0, y: 0, width: 10, height: 10 }), false);
+});
+
+test('a layout is framed when the diagram is read as its type says, a pattern not; the card writes only what differs', () => {
+	const { store, session } = sessionOf({ parametric: { groupList: [{ id: 'g', root: { x: 0, y: 0 }, memberList: [
+		{ id: 'row', name: 'Stages', layout: { type: 'array', direction: 'row', gap: 20 } },
+		{ id: 'cap', layout: { type: 'caption', side: 'bottom', gap: 6 } },
+	] }] } });
+	const memberOf = id => session.groupModelGet('g').memberById.get(id);
+	assert.equal(memberIsFramedWhenRead(memberOf('row'), session.catalog), true);
+	assert.equal(memberIsFramedWhenRead(memberOf('cap'), session.catalog), false);
+	// set against what the type says: written; back to it: taken out again
+	assert.equal(session.memberFramedWhenReadSet('g', 'row', false), true);
+	assert.equal(session.memberGet('g', 'row').isFramedWhenRead, false);
+	assert.equal(memberIsFramedWhenRead(memberOf('row'), session.catalog), false);
+	assert.equal(session.memberFramedWhenReadSet('g', 'row', true), true);
+	assert.equal('isFramedWhenRead' in session.memberGet('g', 'row'), false);
+	assert.equal(session.memberFramedWhenReadSet('g', 'cap', true), true);
+	assert.equal(session.memberGet('g', 'cap').isFramedWhenRead, true);
+	assert.equal(store.history.length, 3);
+	// only a layout has a frame, and the value is a boolean
+	assert.throws(() => sessionOf({ nodes: [{ id: 'n', renderer: { type: 'text' }, data: { text: 'n' }, handles: [] }], parametric: { groupList: [{ id: 'g', root: { x: 0, y: 0 }, memberList: [{ id: 'm', node: 'n', isFramedWhenRead: true }] }] } }), /isFramedWhenRead is of a layout member/);
+	assert.throws(() => sessionOf({ parametric: { groupList: [{ id: 'g', root: { x: 0, y: 0 }, memberList: [{ id: 'row', layout: { type: 'array' }, isFramedWhenRead: 'yes' }] }] } }), /isFramedWhenRead is true or false/);
 });

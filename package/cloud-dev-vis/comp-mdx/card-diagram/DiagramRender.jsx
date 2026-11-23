@@ -137,7 +137,7 @@ export const DiagramNode = observer(function DiagramNode({ id, data }) {
 			{resizeAxisList.length ? <DiagramResizeHandles nodeId={id} editor={editor} axisList={resizeAxisList} handleList={node.handles} sizeMin={contract?.sizeMin} cornerMode={config.compConfig?.DiagramResizeCorner} /> : null}
 			{node.handles.map(handle => geometry.handles.find(item => item.id === handle.id) ?? { ...handle, left: '50%', top: '50%', isHidden: true }).map(handle => {
 				const isSelected = Boolean(connectionSelected) && ['source', 'target'].some(role => !endpointIsDangling(connectionSelected[role]) && connectionSelected[role].nodeId === id && connectionSelected[role].handleId === handle.id);
-				const count = editor ? editor.store.handleConnectionListGet(id, handle.id).length : 0;
+				const count = editor ? editor.store.handleConnectionCountGet(id, handle.id) : 0;
 				return <Handle key={handle.id} id={handle.id} type={handle.direction === 'in' ? 'target' : 'source'} position={positions[handle.anchor.side]} isConnectable={isConnectable}
 					className={`doc-er-table-handle is-${handle.direction}${isSelected ? ' is-selected' : ''}${count ? ' is-occupied' : ''}${editor ? ' is-editable' : ''}${handle.isMarkerHidden && !editor ? ' is-marker-hidden' : ''}`}
 					title={editor ? `${handle.id}: ${count === 0 ? 'drag to connect' : `${count} connection${count === 1 ? '' : 's'}; click to select one, drag to connect`}` : undefined}

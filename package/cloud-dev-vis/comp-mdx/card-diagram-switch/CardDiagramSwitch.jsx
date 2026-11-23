@@ -16,6 +16,7 @@ import { SwitchPathBar } from './SwitchPathBar.jsx';
 import { SwitchSceneEdit } from './SwitchSceneEdit.jsx';
 import { switchRegistryBuild } from './SwitchNodeKinds.jsx';
 import { switchDocNormalize, switchPathNormalize, switchPathViewRead, switchProviderFromDoc } from './SwitchData.js';
+import { switchMountProviderBuild, switchProviderCompose } from './SwitchMount.js';
 import '../card-diagram-animation/CardDiagramAnimation.css';
 import './CardDiagramSwitch.css';
 
@@ -48,6 +49,34 @@ export function useSwitchStore({ provider, registry, pathInitial, scope, config,
 		else store.providerSet(provider);
 	}, [store, provider]);
 	return store;
+}
+
+// The mounts of a document (card-diagram-flexible-switch.md#sources-of-scenes), read from the asset
+// store as a reference block reads its item, and the one provider of the viewport made of them:
+//   { isReading, provider, entryList: [{ mount, provider?, spec?, message }] }
+// Without mounts, the document's provider as it is. A mount whose item cannot be read, or is not a
+// document of scenes, is an entry with its message: a scene at its path says it, the rest works
+const SWITCH_MOUNT_LIST_NONE = [];
+export function useSwitchMounts(load) {
+	const { assetStore } = useDocStores();
+	const mountList = load.spec?.mountList ?? SWITCH_MOUNT_LIST_NONE;
+	const refList = useMemo(() => mountList.map(mount => ({ ...mount.from.asset, message: '' })), [mountList]);
+	useEffect(() => { for (const ref of refList) void assetStore?.refLoad?.(ref); }, [assetStore, refList]);
+	const resultList = refList.map(ref => (assetStore?.refQuery ? assetStore.refQuery(ref) : { status: 'error', message: 'This page has no asset store to read the scenes from.' }));
+	const isReading = resultList.some(result => result.status === 'loading');
+	// what each mount stands on: its text when read, the reason when not
+	const key = resultList.map((result, index) => (result.status === 'done' ? `${refList[index].store}/${result.item?.itemId}@${result.versionId}` : `${result.status}:${result.message}`)).join('|');
+	return useMemo(() => {
+		if (!mountList.length || !load.provider) return { isReading: false, provider: load.provider, entryList: [] };
+		if (isReading) return { isReading: true, provider: null, entryList: [] };
+		const entryList = mountList.map((mount, index) => {
+			const result = resultList[index];
+			if (result.status !== 'done') return { mount, message: `The scenes of ${mount.path} cannot be read: ${result.message || 'the asset item is not there.'}` };
+			if (!result.version?.isText) return { mount, message: `The scenes of ${mount.path} cannot be read: the asset item holds no text.` };
+			return { mount, ...switchMountProviderBuild(mount, result.version.text) };
+		});
+		return { isReading: false, entryList, provider: switchProviderCompose({ own: load.provider, mountList: entryList, signature: `${load.provider.signature ?? ''}\u0000${key}` }) };
+	}, [load, key, isReading]); // eslint-disable-line react-hooks/exhaustive-deps
 }
 
 function switchScrollFreeze(element) {
@@ -151,17 +180,21 @@ const CardDiagramSwitchBase = observer(function CardDiagramSwitchBase({ data = {
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [source, loadBuild]);
 	const title = data.title || load.spec?.title || 'Scenes';
+	// the scenes mounted from elsewhere, read before the viewport is drawn
+	const mounted = useSwitchMounts(load);
 	// the visual edit mode: one scene of the document at a time, in the editor of the framework
 	const isVisualEdit = config.isEdit && config.edit?.modeId === 'visual';
 	return (
 		<BlockPopupSurface config={config} title={title} className="doc-switch-shell not-prose">
-			{({ isInPopup }) => (isVisualEdit ? <SwitchSceneEdit data={data} config={config} onEvent={onEvent} registry={registry} isInPopup={isInPopup} /> : load.message ? (
+			{({ isInPopup }) => (isVisualEdit ? <SwitchSceneEdit data={data} config={config} onEvent={onEvent} registry={registry} isInPopup={isInPopup} mounted={mounted} /> : load.message ? (
 				<div className="doc-er-diagram-message is-error" role="alert">
 					<strong>The scenes could not be read.</strong>
 					<span>{load.message}</span>
 				</div>
+			) : mounted.isReading ? (
+				<div className="doc-er-diagram-message" role="status"><span>Reading the scenes mounted from elsewhere…</span></div>
 			) : (
-				<CardDiagramSwitchBody load={load} data={data} config={config} registry={registry} scope={`.doc-switch-${instanceId}`} isInPopup={isInPopup} rootRef={rootRef} title={title} copyStore={copyStore} source={source} onEvent={onEvent} />
+				<CardDiagramSwitchBody load={{ ...load, provider: mounted.provider }} data={data} config={config} registry={registry} scope={`.doc-switch-${instanceId}`} isInPopup={isInPopup} rootRef={rootRef} title={title} copyStore={copyStore} source={source} onEvent={onEvent} />
 			))}
 		</BlockPopupSurface>
 	);

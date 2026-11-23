@@ -3,9 +3,11 @@
 //
 //   parametric
 //     groupList   [{ id, name?, root: { x, y }, memberList }]
-//   member        { id, name?, node | layout, parent? | parentList?, constraint?, slot?, size? }
+//   member        { id, name?, node | layout, parent? | parentList?, constraint?, slot?, size?, isFramedWhenRead? }
 //     node        the id of the node of the diagram it places (an object member)
 //     layout      { type, ... }: it arranges its children and places nothing itself (a layout member)
+//     isFramedWhenRead   of a layout member: drawn framed with its name when the diagram is read
+//                 too (while it is edited every layout is); as its layout type says when absent
 //     parent      the member it follows; `root` (the origin of the group) when absent.
 //                 parentList for a constraint of several parents, the first the direct one
 //     constraint  { type, ... } of a constraint type (ParametricConstraint.js); `offset` when absent.
@@ -94,7 +96,7 @@ export const copyNodeIdBuild = (groupId, memberId, index, nodeId) => `~copy:${gr
 //   groupList        [{ id, name, root, memberList, memberById, childListOf(memberId), descendantListOf(memberId) }]
 //   memberByNodeId   Map nodeId -> { groupId, memberId }
 //   copyList         [{ nodeId, nodeIdSource, groupId, memberId, index }]: the nodes the repeats spawn
-// a member read: { id, name, nodeId, layout, slot, parentIdList, constraint, sizeBinding }
+// a member read: { id, name, nodeId, layout, slot, parentIdList, constraint, sizeBinding, isFramedWhenRead }
 export function parametricRead(value, { nodes = [], catalog }) {
 	const model = { groupList: [], memberByNodeId: new Map(), copyList: [] };
 	if (value === undefined || value === null) return model;
@@ -140,7 +142,11 @@ export function parametricRead(value, { nodes = [], catalog }) {
 			if (own(memberInput, 'parent') && own(memberInput, 'parentList')) throw new Error(`${fieldMember} has parent or parentList, not both.`);
 			const parentIdList = own(memberInput, 'parentList') ? [...memberInput.parentList] : [memberInput.parent ?? MEMBER_ROOT_ID];
 			if (!Array.isArray(parentIdList) || parentIdList.length === 0 || parentIdList.some(parentId => typeof parentId !== 'string')) throw new Error(`${fieldMember}.parentList is a list of member ids.`);
-			const member = { id, name: typeof memberInput.name === 'string' ? memberInput.name : '', nodeId, layout, slot: memberInput.slot ?? null, parentIdList, constraint: null, sizeBinding: null, input: memberInput };
+			if (own(memberInput, 'isFramedWhenRead')) {
+				if (!layout) throw new Error(`${fieldMember}: isFramedWhenRead is of a layout member (the frame around what it arranges).`);
+				if (typeof memberInput.isFramedWhenRead !== 'boolean') throw new Error(`${fieldMember}.isFramedWhenRead is true or false.`);
+			}
+			const member = { id, name: typeof memberInput.name === 'string' ? memberInput.name : '', nodeId, layout, slot: memberInput.slot ?? null, parentIdList, constraint: null, sizeBinding: null, isFramedWhenRead: memberInput.isFramedWhenRead ?? null, input: memberInput };
 			memberById.set(id, member);
 			return member;
 		});
@@ -232,4 +238,11 @@ export function parametricLineListGet(model, connections, xOf) {
 		result.push({ connectionId: connection.id, groupId: sourceAt.groupId, memberIdList: [sourceAt.memberId, targetAt.memberId], memberIdDirect: isTargetLeft ? targetAt.memberId : sourceAt.memberId });
 	}
 	return result;
+}
+
+// a layout member drawn framed with its name when the diagram is read (while it is edited every
+// layout is): as written, else as its layout type says (a pattern is not)
+export function memberIsFramedWhenRead(member, catalog) {
+	if (!member?.layout) return false;
+	return member.isFramedWhenRead ?? catalog.layoutTypeByType[member.layout.type]?.isFramedWhenRead ?? true;
 }

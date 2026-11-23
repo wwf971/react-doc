@@ -1,0 +1,89 @@
+/* The path bar of a path-based view (PathNavBar.jsx), the switch layer's and any other's
+   (card-diagram-flexible-switch.md#the-path-bar): the segments of the path at the left, what acts
+   on the place shown at the right. Its buttons are those of a panel's header (.doc-button-icon.is-panel),
+   and its sides are the header's, so in the block popup they stand right under the maximize and
+   close buttons. The class names are the switch layer's, which drew it first. */
+.doc-switch-bar {
+	flex: none;
+	display: flex;
+	align-items: center;
+	gap: 0.35rem;
+	min-height: 2.25rem;
+	padding: 0.25rem 0.75rem;
+	border-bottom: 1px solid var(--color-fd-border);
+	background: color-mix(in srgb, var(--color-fd-muted) 45%, transparent);
+}
+/* the path: a strip moved by the wheel or a drag when it is wider than its place (ScrollHorizontal) */
+.doc-switch-path { flex: 1 1 0; min-width: 0; }
+.doc-switch-path-list { flex-wrap: nowrap; }
+.doc-switch-path-item { flex: none; display: inline-flex; align-items: center; }
+.doc-switch-path-segment {
+	padding: 0.15rem 0.45rem;
+	border: 0;
+	border-radius: 0.3rem;
+	background: none;
+	color: var(--color-fd-muted-foreground);
+	font: inherit;
+	font-size: 0.8rem;
+	line-height: 1.3;
+	white-space: nowrap;
+	cursor: pointer;
+}
+.doc-switch-path-segment:hover { background: var(--color-fd-accent); color: var(--color-fd-foreground); }
+.doc-switch-path-segment[aria-current='page'] { color: var(--color-fd-foreground); font-weight: 650; }
+.doc-switch-path-gap { flex: none; color: var(--color-fd-muted-foreground); opacity: 0.6; }
+.doc-switch-path-chevron {
+	flex: none;
+	display: inline-flex;
+	align-items: center;
+	gap: 0.1rem;
+	padding: 0.1rem;
+	border: 0;
+	border-radius: 0.25rem;
+	background: none;
+	color: var(--color-fd-muted-foreground);
+	font: inherit;
+	font-size: 0.68rem;
+	line-height: 1;
+	cursor: pointer;
+}
+.doc-switch-path-chevron:hover, .doc-switch-path-chevron[aria-expanded='true'] { background: var(--color-fd-accent); color: var(--color-fd-foreground); }
+.doc-switch-path-chevron.is-more { padding-inline: 0.15rem 0.35rem; }
+.doc-switch-path-menu {
+	display: grid;
+	gap: 0.05rem;
+	min-width: 12rem;
+	max-width: 24rem;
+	max-height: 18rem;
+	overflow-y: auto;
+	overscroll-behavior-y: contain;
+	padding: 0.3rem;
+	border: 1px solid var(--color-fd-border);
+	border-radius: 0.4rem;
+	background: var(--color-fd-background);
+	box-shadow: 0 6px 20px rgb(15 23 42 / 16%);
+	font-family: ui-sans-serif, system-ui, sans-serif;
+	line-height: 1.35;
+}
+.doc-switch-path-menu > button {
+	display: grid;
+	gap: 0.05rem;
+	padding: 0.3rem 0.55rem;
+	border: 0;
+	border-radius: 0.3rem;
+	background: none;
+	color: var(--color-fd-foreground);
+	font: inherit;
+	font-size: 0.78rem;
+	text-align: left;
+	cursor: pointer;
+}
+.doc-switch-path-menu > button:hover { background: var(--color-fd-accent); }
+.doc-switch-path-menu > button[data-current] { font-weight: 650; }
+.doc-switch-path-menu > button > em { color: var(--color-fd-muted-foreground); font-size: 0.68rem; font-style: normal; }
+.doc-switch-bar-trailing { flex: none; display: inline-flex; align-items: center; gap: 0.25rem; }
+/* an unsaved edit elsewhere holds the bar: it goes nowhere until Save or Cancel (isHeld) */
+.doc-switch-bar.is-editing .doc-switch-path { pointer-events: none; opacity: 0.6; }
+/* an item of a menu with more than words in it (labelItemList of a scene) */
+.doc-switch-path-menu-label { display: inline-flex; align-items: center; gap: 0.4rem; }
+.doc-switch-path-menu-label svg { flex: none; color: var(--color-fd-muted-foreground); }

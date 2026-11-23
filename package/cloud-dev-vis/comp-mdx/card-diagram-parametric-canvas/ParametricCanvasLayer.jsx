@@ -2,7 +2,7 @@ import { useContext, useEffect, useRef } from 'react';
 import { observer } from 'mobx-react-lite';
 import { ViewportPortal, useReactFlow, useViewport } from '@xyflow/react';
 import { DiagramRenderContext } from '../card-diagram/DiagramRender.jsx';
-import { MEMBER_ROOT_ID, groupKeyOf } from './ParametricData.js';
+import { MEMBER_ROOT_ID, groupKeyOf, memberIsFramedWhenRead } from './ParametricData.js';
 import { rootOverrideKeyOf } from './ParametricSolve.js';
 import { ParametricToolBar } from './ParametricToolBar.jsx';
 import { nodeResizeAxisListOf, nodeResizeHandlePointListOf } from '../card-diagram/DiagramNodeResize.js';
@@ -15,7 +15,9 @@ import { nodeResizeAxisListOf, nodeResizeHandlePointListOf } from '../card-diagr
 //                                   drop writes its place). It steps aside (faded, no pointer) while
 //                                   it lies on a resize handle of the member selected
 //   the box of each layout member   a dashed frame around what it arranges, with its name: a click
-//                                   on the name focuses it. An empty one says what goes into it
+//                                   on the name focuses it. An empty one says what goes into it; one
+//                                   not framed when the diagram is read is drawn faded
+//                                   (ParametricReadLayer.jsx draws the others when it is read)
 //   the relations of what is selected   a line from each parent to the member selected
 //   while a tool is armed           the gesture surface: it takes the pointer over the whole canvas
 //                                   (so a box can start over a card), hands every pointer event to
@@ -58,7 +60,7 @@ export const ParametricCanvasLayer = observer(function ParametricCanvasLayer({ s
 						const names = session.memberLabelOf(group.id, member.id);
 						const size = isEmpty ? LAYOUT_EMPTY_SIZE : { width: box.width, height: box.height };
 						return (
-							<div key={`${group.id}/${member.id}`} className={`doc-param-layout-box${isSelected ? ' is-selected' : ''}${isEmpty ? ' is-empty' : ''}`} style={{ transform: `translate(${box.x - 6}px, ${box.y - 6}px)`, width: size.width + 12, height: size.height + 12 }}>
+							<div key={`${group.id}/${member.id}`} className={`doc-param-layout-box${isSelected ? ' is-selected' : ''}${isEmpty ? ' is-empty' : ''}${memberIsFramedWhenRead(member, session.catalog) ? '' : ' is-unframed-when-read'}`} style={{ transform: `translate(${box.x - 6}px, ${box.y - 6}px)`, width: size.width + 12, height: size.height + 12 }}>
 								<button type="button" className="doc-param-layout-tab nodrag nopan" title={`${names.label}: ${session.memberSummaryOf(group.id, member.id)}`} onClick={(event) => { event.stopPropagation(); session.focusSet({ kind: 'member', groupId: group.id, memberId: member.id }); }}>{names.label}</button>
 								{isEmpty ? <span className="doc-param-layout-empty">Select it, then place things with a tool</span> : null}
 							</div>

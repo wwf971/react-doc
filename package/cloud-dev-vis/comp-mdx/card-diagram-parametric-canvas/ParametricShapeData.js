@@ -8,7 +8,8 @@ import { cardIconTextStrip } from '../card-diagram/CardIconTokenData.js';
 //           drawn to the size of its node; filled and edged by the style of the node (style.fill,
 //           style.stroke: DiagramNodeStyle.js), the words in its middle
 //   text    { text, textSize?: s | m | l | xl, weight?: normal | bold, align?: left | center | right, tone? }
-//           words standing by themselves, as wide as they are; style.fill puts a color behind them
+//           words standing by themselves; their box by the size mode of the node (fit: as wide as
+//           they are; wrap: a width they wrap at; DiagramNodeResize.js); style.fill puts a color behind them
 //
 // The words of both are a text of the cell edit layer: an icon is a token among them ({{icon:NAME}}).
 export const SHAPE_LIST = ['rect', 'rounded', 'ellipse', 'diamond', 'triangle', 'hexagon', 'parallelogram'];

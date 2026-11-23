@@ -100,6 +100,7 @@ sceneList:
 | `compConfig` `SceneTitleAlign` | not a key of the document: a component key a doc page sets in its config (`left`, the default, or `center`), for where the title of a scene focused stands ([The title of a scene](card-diagram-flexible-switch.md#the-title-of-a-scene)) |
 | `depthMax` | how deep scenes inside cards are drawn, 3 by default (`data.depthMax` of the marker wins): a card past it shows a note and opens the scene on a click ([Depth](card-diagram-flexible-switch.md#presentation-context)) |
 | `defaults` | what every `diagram` starts with |
+| `mountList` | scenes held elsewhere shown under a path of this block ([Scenes held elsewhere](#scenes-held-elsewhere)) |
 | `transition` | `secondPortal`, `secondMorph`, `secondCamera`, `secondScroll`: how long a step lasts |
 
 A diagram is the [usual format](../comp-mdx/power-platform/comp-diagram-er.md), with one more field on a node and on a connection, and on a cell of a [matrix](card-diagram-impl.md#node-registries): **`link`**, the path a click on it opens (`/path#item` also scrolls to an item of a stack there). On a connection, the label becomes the button.
@@ -588,4 +589,29 @@ transitionList:                                  # absent: the states run as a c
 
 ## Reading and editing
 
-Reading writes nothing but the box the reader adjusted. In edit mode a block is edited two ways: as its yaml text, or **Visual**, the default: a menu above the canvas chooses a scene, or one view of a scene, and its diagram opens in the visual editor of the framework, cards, lines, arrangers and history included. Another can be chosen at any time; what was done is kept, and Save writes every edited diagram into its place in the document, leaving the rest of the text and its comments as they were ([Editing a block of scenes](card-diagram-flexible-switch.md#editing-a-block-of-scenes)). A block whose scenes are generated from data, such as `DiagramAwsArchitecture`, is edited as text only.
+Reading writes nothing but the box the reader adjusted. In edit mode a block is edited two ways: as its yaml text, or **Visual**, the default: the diagram of one scene, or one view of a scene, in the visual editor of the framework (cards, lines, arrangers and its history), and under it the panel with the tab **Scenes**:
+
+| To | Do |
+| --- | --- |
+| go to a scene or a view | click it in the tree (the keys only select it, Enter opens it), or in the graph of relations beside the tree; a long list of scenes is shown a page at a time, with a filter of its own, and the search of the tab finds anything |
+| see how scenes lead to each other | select one: the graph shows what leads to it above and what it leads to below (below its path, embedded, linked, in tabs); its card lists every reference to it, each opening where it stands |
+| change a scene, a view, the block | its card in the panel: label, title, path segment and the scene it is under (references follow), the default and hover views, the first scene |
+| make, order, remove scenes and views | right-click its row: New scene below, New view, Duplicate, Move up or down, Remove |
+| link to a scene, or embed it | drag its row onto the canvas (Alt: embedded), or double-click the canvas: Link to a scene…, Embed a scene…, New scene, linked from here; a link's card says which scene it opens |
+| undo | Ctrl/⌘ + Z on the canvas takes back a step of the diagram; the ↶ of the tab (or Ctrl/⌘ + Z in the tree) a step of the block, a whole drawing in a scene left included |
+
+Save writes the document, leaving the rest of the text and its comments as they were ([Editing a block of scenes](card-diagram-flexible-switch.md#editing-a-block-of-scenes)). A block whose scenes are generated from data, such as `DiagramAwsArchitecture`, is edited as text only.
+
+## Scenes held elsewhere
+
+A block may show the scenes of a document held in an asset item under a path of its own, beside its own scenes: a **mount**. Its paths and the links inside it are translated (its `/overview` shows as `/shop/overview`), and they are read-only here; the block links to them, embeds them, stacks them like any scene.
+
+```yaml
+mountList:
+  - path: /shop
+    label: Shop
+    from: { asset: { store: local, name: shop scenes } }   # the item holding a document of scenes
+    sourcePath: /                                         # the part of it shown; all of it by default
+```
+
+An own scene may not stand inside a mount, nor two mounts inside each other. A mount that cannot be read is a scene at its path saying why ([Sources of scenes](card-diagram-flexible-switch.md#sources-of-scenes)).

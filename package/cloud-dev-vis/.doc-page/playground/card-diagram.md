@@ -330,6 +330,51 @@ sceneList:
             - { id: item, renderer: { type: card-note }, position: { x: 320, y: 320 }, size: { width: 200, height: auto }, data: { title: Item, text: Only in this view, tone: green } }
 ```
 
+## A block of many scenes
+
+Edit it, Visual: the panel under the canvas lists the scenes as a tree, thirty under one scene, shown a page at a time with a filter of their own. Click one to edit it, right-click it for what can be done, drag it onto the canvas for a link to it.
+
+<!--renderComp=CardDiagramSwitch,height=420,title=Many scenes-->
+```yaml
+version: 1
+sceneList:
+  - path: /catalog
+    label: Catalog
+    diagram:
+      nodes:
+        - { id: first, renderer: { type: scene-link }, position: { x: 0, y: 0 }, link: /catalog/item-01, data: { title: The first item } }
+  - { path: /catalog/item-01, label: Item 1, diagram: { nodes: [{ id: n, renderer: { type: card-note }, position: { x: 0, y: 0 }, size: { width: 180, height: auto }, data: { title: Item 1 } }] } }
+  - { path: /catalog/item-02, label: Item 2, diagram: { nodes: [{ id: n, renderer: { type: card-note }, position: { x: 0, y: 0 }, size: { width: 180, height: auto }, data: { title: Item 2 } }] } }
+  - { path: /catalog/item-03, label: Item 3, diagram: { nodes: [{ id: n, renderer: { type: card-note }, position: { x: 0, y: 0 }, size: { width: 180, height: auto }, data: { title: Item 3 } }] } }
+  - { path: /catalog/item-04, label: Item 4, diagram: { nodes: [{ id: n, renderer: { type: card-note }, position: { x: 0, y: 0 }, size: { width: 180, height: auto }, data: { title: Item 4 } }] } }
+  - { path: /catalog/item-05, label: Item 5, diagram: { nodes: [{ id: n, renderer: { type: card-note }, position: { x: 0, y: 0 }, size: { width: 180, height: auto }, data: { title: Item 5 } }] } }
+  - { path: /catalog/item-06, label: Item 6, diagram: { nodes: [{ id: n, renderer: { type: card-note }, position: { x: 0, y: 0 }, size: { width: 180, height: auto }, data: { title: Item 6 } }] } }
+  - { path: /catalog/item-07, label: Item 7, diagram: { nodes: [{ id: n, renderer: { type: card-note }, position: { x: 0, y: 0 }, size: { width: 180, height: auto }, data: { title: Item 7 } }] } }
+  - { path: /catalog/item-08, label: Item 8, diagram: { nodes: [{ id: n, renderer: { type: card-note }, position: { x: 0, y: 0 }, size: { width: 180, height: auto }, data: { title: Item 8 } }] } }
+  - { path: /catalog/item-09, label: Item 9, diagram: { nodes: [{ id: n, renderer: { type: card-note }, position: { x: 0, y: 0 }, size: { width: 180, height: auto }, data: { title: Item 9 } }] } }
+  - { path: /catalog/item-10, label: Item 10, diagram: { nodes: [{ id: n, renderer: { type: card-note }, position: { x: 0, y: 0 }, size: { width: 180, height: auto }, data: { title: Item 10 } }] } }
+  - { path: /catalog/item-11, label: Item 11, diagram: { nodes: [{ id: n, renderer: { type: card-note }, position: { x: 0, y: 0 }, size: { width: 180, height: auto }, data: { title: Item 11 } }] } }
+  - { path: /catalog/item-12, label: Item 12, diagram: { nodes: [{ id: n, renderer: { type: card-note }, position: { x: 0, y: 0 }, size: { width: 180, height: auto }, data: { title: Item 12 } }] } }
+  - { path: /catalog/item-13, label: Item 13, diagram: { nodes: [{ id: n, renderer: { type: card-note }, position: { x: 0, y: 0 }, size: { width: 180, height: auto }, data: { title: Item 13 } }] } }
+  - { path: /catalog/item-14, label: Item 14, diagram: { nodes: [{ id: n, renderer: { type: card-note }, position: { x: 0, y: 0 }, size: { width: 180, height: auto }, data: { title: Item 14 } }] } }
+  - { path: /catalog/item-15, label: Item 15, diagram: { nodes: [{ id: n, renderer: { type: card-note }, position: { x: 0, y: 0 }, size: { width: 180, height: auto }, data: { title: Item 15 } }] } }
+  - { path: /catalog/item-16, label: Item 16, diagram: { nodes: [{ id: n, renderer: { type: card-note }, position: { x: 0, y: 0 }, size: { width: 180, height: auto }, data: { title: Item 16 } }] } }
+  - { path: /catalog/item-17, label: Item 17, diagram: { nodes: [{ id: n, renderer: { type: card-note }, position: { x: 0, y: 0 }, size: { width: 180, height: auto }, data: { title: Item 17 } }] } }
+  - { path: /catalog/item-18, label: Item 18, diagram: { nodes: [{ id: n, renderer: { type: card-note }, position: { x: 0, y: 0 }, size: { width: 180, height: auto }, data: { title: Item 18 } }] } }
+  - { path: /catalog/item-19, label: Item 19, diagram: { nodes: [{ id: n, renderer: { type: card-note }, position: { x: 0, y: 0 }, size: { width: 180, height: auto }, data: { title: Item 19 } }] } }
+  - { path: /catalog/item-20, label: Item 20, diagram: { nodes: [{ id: n, renderer: { type: card-note }, position: { x: 0, y: 0 }, size: { width: 180, height: auto }, data: { title: Item 20 } }] } }
+  - { path: /catalog/item-21, label: Item 21, diagram: { nodes: [{ id: n, renderer: { type: card-note }, position: { x: 0, y: 0 }, size: { width: 180, height: auto }, data: { title: Item 21 } }] } }
+  - { path: /catalog/item-22, label: Item 22, diagram: { nodes: [{ id: n, renderer: { type: card-note }, position: { x: 0, y: 0 }, size: { width: 180, height: auto }, data: { title: Item 22 } }] } }
+  - { path: /catalog/item-23, label: Item 23, diagram: { nodes: [{ id: n, renderer: { type: card-note }, position: { x: 0, y: 0 }, size: { width: 180, height: auto }, data: { title: Item 23 } }] } }
+  - { path: /catalog/item-24, label: Item 24, diagram: { nodes: [{ id: n, renderer: { type: card-note }, position: { x: 0, y: 0 }, size: { width: 180, height: auto }, data: { title: Item 24 } }] } }
+  - { path: /catalog/item-25, label: Item 25, diagram: { nodes: [{ id: n, renderer: { type: card-note }, position: { x: 0, y: 0 }, size: { width: 180, height: auto }, data: { title: Item 25 } }] } }
+  - { path: /catalog/item-26, label: Item 26, diagram: { nodes: [{ id: n, renderer: { type: card-note }, position: { x: 0, y: 0 }, size: { width: 180, height: auto }, data: { title: Item 26 } }] } }
+  - { path: /catalog/item-27, label: Item 27, diagram: { nodes: [{ id: n, renderer: { type: card-note }, position: { x: 0, y: 0 }, size: { width: 180, height: auto }, data: { title: Item 27 } }] } }
+  - { path: /catalog/item-28, label: Item 28, diagram: { nodes: [{ id: n, renderer: { type: card-note }, position: { x: 0, y: 0 }, size: { width: 180, height: auto }, data: { title: Item 28 } }] } }
+  - { path: /catalog/item-29, label: Item 29, diagram: { nodes: [{ id: n, renderer: { type: card-note }, position: { x: 0, y: 0 }, size: { width: 180, height: auto }, data: { title: Item 29 } }] } }
+  - { path: /catalog/item-30, label: Item 30, diagram: { nodes: [{ id: n, renderer: { type: card-note }, position: { x: 0, y: 0 }, size: { width: 180, height: auto }, data: { title: Item 30 } }] } }
+```
+
 ## Arrangers
 
 This diagram is an ER diagram with its cards and lines left in a mess. Open it for editing and use **Arrange** in the edit panel: *Route the lines* keeps the cards where they are and replaces the anchors of every line; *Place the cards in columns and route the lines* also moves the cards. Either is one undo step. Move a card and apply it again.

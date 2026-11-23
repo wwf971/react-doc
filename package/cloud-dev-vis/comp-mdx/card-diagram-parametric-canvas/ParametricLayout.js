@@ -11,6 +11,9 @@ import { choiceRead, numberRead } from './ParametricData.js';
 //     slotList?                   [{ id, label, create? }]: a pattern, a child fills one slot each.
 //                                 create { kind, data?, style?, size? }: what fills the slot when the
 //                                 pattern is made whole by a tool (ParametricEditStore.layoutCreate)
+//     isFramedWhenRead?           false: a member of the type is not framed when the diagram is read
+//                                 unless it says so (a pattern: a frame would box a caption with its
+//                                 subject); framed otherwise (ParametricData.js: memberIsFramedWhenRead)
 //     paramDefault                what a new layout of the type starts with
 //     read(input, field)          validated; throws naming the field
 //     arrange(layout, childList)  childList: [{ id, slot, size }] in order -> { size, placeById,
@@ -147,6 +150,7 @@ const sideLabels = { top: 'Above', bottom: 'Below', left: 'Left', right: 'Right'
 export const layoutTypeCaption = {
 	type: 'caption',
 	label: 'Captioned',
+	isFramedWhenRead: false,
 	description: 'A thing and its caption on a side of it: the caption follows it wherever it goes.',
 	slotList: [
 		{ id: 'subject', label: 'Subject', create: { kind: 'shape', data: { shape: 'rounded' }, size: { width: 160, height: 100 } } },
@@ -191,6 +195,7 @@ const cornerLabels = { 'top-left': 'Top left', 'top-right': 'Top right', 'bottom
 export const layoutTypeBadge = {
 	type: 'badge',
 	label: 'Badged',
+	isFramedWhenRead: false,
 	description: 'A thing and a badge on one of its corners.',
 	slotList: [
 		{ id: 'subject', label: 'Subject', create: { kind: 'shape', data: { shape: 'rounded' }, size: { width: 160, height: 100 } } },

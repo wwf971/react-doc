@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { observer } from 'mobx-react-lite';
 import { Plus, Shapes, Undo2, Waypoints } from '../../../../main/frontend/UICommon.js';
 import { useDocStores } from '../../../../main/frontend/src/store/context.js';
@@ -9,6 +9,9 @@ import { DiagramEditStore } from './DiagramEditStore.js';
 import { DiagramEditCard } from './DiagramEditCard.jsx';
 import { ActionMenu, ValueMenu } from './DiagramValueControls.jsx';
 import { diagramCanvasListGet } from './DiagramCanvasRegistry.js';
+import { DiagramPanelStore } from './DiagramPanelStore.js';
+import { DiagramPanel, panelCardHeadActionListGet } from './DiagramPanel.jsx';
+import { cardModelBuild } from './DiagramEditCardModel.js';
 import { endpointIsDangling, pointNodeIdBuild } from './DiagramERData.js';
 import './DiagramVisualEdit.css';
 
@@ -46,6 +49,9 @@ const dropOf = (connection, from) => connection.source === from.nodeId && (conne
 //   createSourceList, createActionList, createRequest   of the panel of a double-click
 //   featureList   ids of features of the registry offered here, beside those the viewport of the
 //                 draft names (viewport.featureList)
+//   panel         the panel under the canvas (DiagramPanelStore), kept by a host that opens several
+//                 diagrams one after another and draws it itself (a block of scenes); absent, the
+//                 editor keeps one of its own and draws it (card-diagram-impl.md#the-panel)
 //
 // The features of the registry (node-registry.js: feature) join the editor of a diagram through a
 // **session** each (feature.editCreate), which the editor asks before it does what it does by
@@ -65,16 +71,35 @@ const dropOf = (connection, from) => connection.source === from.nodeId && (conne
 //   createTextGet(target, editor)           { label, take(text, position) }: what words typed in the
 //                                           create panel of the empty canvas make (a text), offered
 //                                           first (DiagramCreatePanel.jsx: textTake); the first session's
-//   cardSectionListGet(target, editor)      sections added to the edit card of a node
+//   cardSectionListGet(target, editor)      sections added to the edit card of a node or a line:
+//                                           { kind: node, nodeId } | { kind: line, connectionId }
 //   cardGet(editor)                         { model, anchorRectGet, close }: the edit card of its focus
-//   isCardDocked                            it shows the edit card of what is selected in a place of
-//                                           its own (its panel): no card floats beside the principal
 //   cardHeadActionListGet(editor)           buttons of the head of the card floating beside the
-//                                           principal: [{ id, label, Icon, act }] (dock it)
+//                                           principal: [{ id, label, Icon, act }]
+//   editorAttach(editorGet)                 the editor opened: editorGet answers it as it is now, for
+//                                           what the session is asked from outside the editor
+//   panelTabGet(editorGet)                  its tab of the panel under the canvas (DiagramPanel.jsx:
+//                                           { id, label, Icon, rank, Head, Body }), registered while
+//                                           the feature is on; editorGet: the editor as it is now
+//   dropAccept(dataTransfer), drop(dataTransfer, position, editor)   something dragged from outside
+//                                           the canvas (a row of a tree of the panel) and dropped on
+//                                           it: whether the session takes it, and what it makes there
 //   dispose()                               the editor is gone
-//   CanvasLayer, Panel                      components, { session, editor }: over the canvas (inside
-//                                           React Flow), and beside the viewport (ParametricPanel.jsx)
+//   CanvasLayer                             a component, { session, editor }: over the canvas (inside
+//                                           React Flow)
 //   flowClassName                           a class of the canvas (a pointer of its own)
+// whether the draft changed, and its history: drawn by itself, so the first word typed (the draft
+// turns dirty, an undo becomes possible) draws this and not the whole editor
+const DiagramEditStatus = observer(function DiagramEditStatus({ store, editor, isLocked }) {
+	return <>
+		<span className={`doc-vis-dirty${store.isDirty ? ' is-dirty' : ''}`} role="status">{store.isDirty ? 'Unsaved changes' : 'No changes'}</span>
+		{editor ? <span className="doc-vis-history" role="group" aria-label="History">
+			<button type="button" className="doc-button-icon" title="Undo (Ctrl/⌘ + Z)" aria-label="Undo" disabled={isLocked || !store.history.isUndoAvailable} onClick={() => editor.undo({ isFromControl: true })}><Undo2 size={14} /></button>
+			<button type="button" className="doc-button-icon is-mirrored" title="Redo (Ctrl/⌘ + Shift + Z)" aria-label="Redo" disabled={isLocked || !store.history.isRedoAvailable} onClick={() => editor.redo({ isFromControl: true })}><Undo2 size={14} /></button>
+		</span> : null}
+	</>;
+});
+
 export const DiagramVisualEdit = observer(function DiagramVisualEdit({ data, config, onEvent, kind, registry, isInPopup = false, renderContent }) {
 	const stores = useDocStores();
 	const { compById, sourceStore } = stores;
@@ -93,8 +118,11 @@ export const DiagramVisualEdit = observer(function DiagramVisualEdit({ data, con
 	const isLocked = session.status === 'submitting';
 	const { store } = result;
 	// the sessions of the features of the registry, kept with the editor; the ones this viewport offers
+	// the panel under the canvas: the host's, or one of the editor's own (a diagram, not a card)
+	const [panelOwn] = useState(() => (result.store && kind === 'diagram' && !config.panel ? new DiagramPanelStore() : null));
+	const panel = config.panel ?? panelOwn;
 	const [featureSessionList] = useState(() => (result.store && kind === 'diagram' ? (registry?.featureList ?? []).map(feature => feature.editCreate?.({
-		store: result.store, registry, config, canvas, stores,
+		store: result.store, registry, config, canvas, stores, panel,
 		isOnGet: () => Boolean(config.featureList?.includes(feature.id) || result.store.value.viewport?.featureList?.includes(feature.id)),
 	})).filter(Boolean) : []));
 	const featureList = featureSessionList.filter(item => item.isOn);
@@ -190,6 +218,21 @@ export const DiagramVisualEdit = observer(function DiagramVisualEdit({ data, con
 			focusRoot();
 		}
 	};
+	// something dragged from outside the canvas (a row of a tree of the panel): a feature taking it
+	// places what it makes where it is dropped
+	const dropSessionOf = dataTransfer => (editorRef.current && !isLocked ? featureList.find(item => item.dropAccept?.(dataTransfer)) : null);
+	const canvasDragOver = (event) => {
+		if (!event.target.closest?.('.react-flow') || !dropSessionOf(event.dataTransfer)) return;
+		event.preventDefault();
+		event.dataTransfer.dropEffect = 'copy';
+	};
+	const canvasDrop = (event) => {
+		const session = event.target.closest?.('.react-flow') ? dropSessionOf(event.dataTransfer) : null;
+		if (!session) return;
+		event.preventDefault();
+		const position = canvas.current?.screenToFlow?.({ x: event.clientX, y: event.clientY }) ?? canvas.current?.centerGet?.() ?? { x: 0, y: 0 };
+		session.drop(event.dataTransfer, position, editorRef.current, { isAlt: event.altKey });
+	};
 	const editor = store && isAllowed ? {
 		store, isLocked, change, canvas, kind,
 		// ---- the features this viewport offers (their sessions) ----
@@ -250,6 +293,8 @@ export const DiagramVisualEdit = observer(function DiagramVisualEdit({ data, con
 		anchorSelect: (connectionId, anchorId) => { store.anchorSelect(connectionId, anchorId); focusRoot(); },
 		focusRoot,
 		nodePositionGet: nodeId => canvas.current?.positionGet(nodeId),
+		// its box as drawn ({ width, height }), or null before it is measured
+		nodeSizeGet: nodeId => canvas.current?.nodeSizeGet?.(nodeId) ?? null,
 		// a drag from a handle: a new line, or, when a connection at the handle
 		// is selected (or the handle takes one line and has it), that line
 		// detached from the handle and carried by the pointer
@@ -394,25 +439,48 @@ export const DiagramVisualEdit = observer(function DiagramVisualEdit({ data, con
 		frame = requestAnimationFrame(open);
 		return () => cancelAnimationFrame(frame);
 	}, [createRequest?.key]); // eslint-disable-line react-hooks/exhaustive-deps
+	// the tabs the features on here bring to the panel, and the card of what is selected on the
+	// canvas for its properties column: registered while the editor is open (before the first paint,
+	// so a panel kept by a host never shows a tab missing while another diagram opens)
+	const featureTabKey = editor ? featureList.filter(item => item.panelTabGet).map(item => item.id).join(' ') : '';
+	useLayoutEffect(() => {
+		if (!panel || !featureTabKey) return undefined;
+		const disposeList = featureSessionList.filter(item => item.isOn && item.panelTabGet).map(item => panel.tabRegister(item.panelTabGet(() => editorRef.current)));
+		return () => disposeList.forEach(dispose => dispose());
+	}, [panel, featureTabKey]); // eslint-disable-line react-hooks/exhaustive-deps
+	const isEditorOpen = Boolean(editor);
+	// the sessions given the editor, for what they are asked from outside it (a panel kept by a host)
+	useLayoutEffect(() => {
+		if (isEditorOpen) featureSessionList.forEach(item => item.editorAttach?.(() => editorRef.current));
+	}, [isEditorOpen]); // eslint-disable-line react-hooks/exhaustive-deps
+	useLayoutEffect(() => {
+		if (!panel || !isEditorOpen) return undefined;
+		return panel.cardSourceRegister({
+			id: 'canvas', rank: 0,
+			cardGet: () => {
+				const editorNow = editorRef.current;
+				if (!editorNow) return null;
+				if (editorNow.store.display) return { model: cardModelBuild(editorNow), editor: editorNow };
+				const featureCardNow = featureSessionList.filter(item => item.isOn).map(item => item.cardGet?.(editorNow)).find(Boolean);
+				return featureCardNow ? { model: featureCardNow.model, editor: editorNow } : null;
+			},
+		});
+	}, [panel, isEditorOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 	// the edit card of a focus of a feature (a thing that is not a node or a line), hidden like the
 	// card of the path while something else is going on
-	const isCardDocked = featureList.some(item => item.isCardDocked);
-	const cardHeadActionList = editor && !isCardDocked ? featureList.flatMap(item => item.cardHeadActionListGet?.(editor) ?? []) : [];
+	const isCardDocked = Boolean(panel?.isCardDocked);
+	const cardHeadActionList = editor && !isCardDocked ? [...panelCardHeadActionListGet(panel), ...featureList.flatMap(item => item.cardHeadActionListGet?.(editor) ?? [])] : [];
 	const featureCard = editor && !isCardDocked && !store.display && !store.cell && !store.interaction && !store.create ? featureList.map(item => item.cardGet?.(editor)).find(Boolean) ?? null : null;
-	return <div ref={root} tabIndex={-1} className={`doc-vis-edit${editor ? ' is-active' : ''}${isInPopup ? ' is-popup' : ''}${editor && featureList.some(item => item.Panel) ? ' has-feature-panel' : ''}`} onKeyDown={keyDown} onClick={event => {
+	return <div ref={root} tabIndex={-1} className={`doc-vis-edit${editor ? ' is-active' : ''}${isInPopup ? ' is-popup' : ''}${editor && panelOwn?.hasTabs ? ' has-feature-panel' : ''}`} onKeyDown={keyDown} onDragOver={canvasDragOver} onDrop={canvasDrop} onClick={event => {
 		if (event.target === event.currentTarget || event.target.classList.contains('doc-vis-card-static')) editor?.clearSelection();
 	}}>
 		{result.message || reasonRefused ? <div role="alert" className="doc-edit-message doc-vis-edit-message">{result.message || reasonRefused}</div> : null}
-		{store ? renderContent({ data: { ...data, source: store.rawDraft, raw: store.rawDraft }, editor }) : null}
-		{editor ? featureList.map(item => (item.Panel ? <item.Panel key={item.id} session={item} editor={editor} isInPopup={isInPopup} /> : null)) : null}
+		{store ? renderContent({ data: { ...data, source: store.rawShown, raw: store.rawShown }, editor }) : null}
+		{editor && panelOwn ? <DiagramPanel panel={panelOwn} isInPopup={isInPopup} /> : null}
 		<EditFloatingPanel label={config.editLabel ?? (kind === 'diagram' ? 'Diagram' : 'Table')} head={store ? <>
-			<span className={`doc-vis-dirty${store.isDirty ? ' is-dirty' : ''}`} role="status">{store.isDirty ? 'Unsaved changes' : 'No changes'}</span>
-			{editor ? <span className="doc-vis-history" role="group" aria-label="History">
-				<button type="button" className="doc-button-icon" title="Undo (Ctrl/⌘ + Z)" aria-label="Undo" disabled={isLocked || !store.history.isUndoAvailable} onClick={() => editor.undo({ isFromControl: true })}><Undo2 size={14} /></button>
-				<button type="button" className="doc-button-icon is-mirrored" title="Redo (Ctrl/⌘ + Shift + Z)" aria-label="Redo" disabled={isLocked || !store.history.isRedoAvailable} onClick={() => editor.redo({ isFromControl: true })}><Undo2 size={14} /></button>
-			</span> : null}
+			<DiagramEditStatus store={store} editor={editor} isLocked={isLocked} />
 			{kind === 'diagram' && editor && (!isFixed || config.createActionList?.length || config.createSourceList?.length) ? <button type="button" className="doc-button-icon" title={isFixed ? 'What can be added here (or double-click the canvas)' : 'Add a node or a connection (or double-click the canvas)'} aria-label="Add" disabled={isLocked} onClick={() => editor.createOpen(canvas.current?.centerGet())}><Plus size={14} /></button> : null}
-			{kind === 'diagram' && editor && !isFixed && registry?.arrangerList?.length ? <ActionMenu label="Arrange: replaces the anchors of the lines" isLocked={isLocked} actionList={registry.arrangerList.map(arranger => ({ id: arranger.id, label: arranger.label, title: arranger.description, isDisabled: arranger.isApplicable ? !arranger.isApplicable(store.value) : false }))} onAction={arrangerId => change(() => {
+			{kind === 'diagram' && editor && !isFixed && registry?.arrangerList?.length ? <ActionMenu label="Arrange: replaces the anchors of the lines" isLocked={isLocked} actionList={registry.arrangerList.map(arranger => ({ id: arranger.id, label: arranger.label, title: arranger.description, isDisabled: store.arrangerUnavailableIdList.includes(arranger.id) }))} onAction={arrangerId => change(() => {
 				const arranger = registry.arrangerList.find(item => item.id === arrangerId);
 				const geometry = diagramCanvasListGet().find(item => item.editorGet()?.store === store)?.geometryGet?.();
 				const reportList = store.arrangeApply(arranger, { geometry });

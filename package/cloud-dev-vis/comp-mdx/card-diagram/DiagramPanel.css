@@ -1,0 +1,542 @@
+/* ---------- the panel of the visual editor (DiagramPanel.jsx) ----------
+   in the page: under the viewport, as wide as it, over what follows (nothing is added to the flow);
+   whoever draws it is its frame (position: relative): the editor of a diagram, or the host keeping
+   one panel for several diagrams (a block of scenes) */
+.doc-vis-edit.has-feature-panel,
+.doc-vis-panel-host {
+	position: relative;
+}
+
+.doc-vis-panel {
+	position: absolute;
+	top: calc(100% + 6px);
+	right: 0;
+	left: 0;
+	z-index: 30;
+	display: flex;
+	flex-direction: column;
+	box-sizing: border-box;
+	height: 290px;
+	border: 1px solid var(--color-fd-border);
+	border-radius: 6px;
+	background: var(--color-fd-background);
+	box-shadow: 0 6px 20px rgb(15 23 42 / 14%);
+	color: var(--color-fd-foreground);
+	font-family: ui-sans-serif, system-ui, sans-serif;
+	font-size: 0.74rem;
+	line-height: 1.35;
+	text-align: left;
+	cursor: auto;
+}
+
+.doc-vis-panel.is-collapsed {
+	height: auto;
+}
+
+/* in the block popup: docked at its bottom, the canvas taking the room above */
+.doc-vis-panel.is-popup {
+	position: static;
+	flex: 0 0 auto;
+	height: 300px;
+	border-width: 1px 0 0;
+	border-radius: 0;
+	box-shadow: none;
+}
+
+.doc-vis-panel.is-popup.is-collapsed {
+	height: auto;
+}
+
+.doc-vis-panel-head {
+	display: flex;
+	flex: 0 0 auto;
+	align-items: center;
+	gap: 0.45rem;
+	min-height: 30px;
+	padding: 0 0.5rem 0 0.6rem;
+	border-bottom: 1px solid var(--color-fd-border);
+}
+
+.doc-vis-panel.is-collapsed .doc-vis-panel-head {
+	border-bottom: 0;
+}
+
+.doc-vis-panel-title {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.35rem;
+}
+
+/* the tabs: the compact buttons of the edit layer, as the switch of the edit card */
+.doc-vis-panel-tabs,
+.doc-vis-panel-card-place .doc-button-group {
+	--doc-button-group-height: 20px;
+	box-shadow: none;
+}
+
+.doc-vis-panel-tabs > button,
+.doc-vis-panel-card-place .doc-button-group > button {
+	gap: 0.25rem;
+	font-size: 0.7rem;
+	white-space: nowrap;
+}
+
+.doc-vis-panel-tabs > button[aria-selected='true'] {
+	font-weight: 600;
+}
+
+.doc-vis-panel-count {
+	margin: 0;
+	white-space: nowrap;
+}
+
+.doc-vis-panel-fold {
+	margin-left: auto;
+}
+
+/* the switch of the edit card stands before the fold button and takes the free room itself */
+.doc-vis-panel-card-place + .doc-vis-panel-fold {
+	margin-left: 0.3rem;
+}
+
+.doc-vis-panel-search {
+	display: flex;
+	align-items: center;
+	gap: 0.3rem;
+	width: 230px;
+	max-width: 36%;
+	margin-left: 0.2rem;
+	padding: 0.1rem 0.3rem;
+	border: 1px solid var(--color-fd-border);
+	border-radius: 3px;
+	color: var(--color-fd-muted-foreground);
+}
+
+.doc-vis-panel-search input {
+	flex: 1 1 auto;
+	min-width: 0;
+	border: 0;
+	background: transparent;
+	color: var(--color-fd-foreground);
+	font: inherit;
+	outline: none;
+}
+
+.doc-vis-panel-search:focus-within {
+	border-color: var(--color-fd-primary);
+}
+
+.doc-vis-panel-search-count {
+	flex: 0 0 auto;
+	font-size: 0.68rem;
+	white-space: nowrap;
+}
+
+/* what a tab adds to the head, after its search (the history of a block of scenes) */
+.doc-vis-panel-head-actions {
+	display: inline-flex;
+	flex: 0 0 auto;
+	align-items: center;
+	gap: 0.1rem;
+}
+
+.doc-vis-panel-body {
+	display: grid;
+	flex: 1 1 auto;
+	grid-template-columns: minmax(250px, 36%) minmax(0, 1fr) minmax(240px, 30%);
+	min-height: 0;
+}
+
+/* the edit card floating beside the thing: the panel is the tree and the middle part alone */
+.doc-vis-panel-body.is-card-floating {
+	grid-template-columns: minmax(250px, 36%) minmax(0, 1fr);
+}
+
+/* where the edit card stands: a label and two choices */
+.doc-vis-panel-card-place {
+	display: inline-flex;
+	flex: 0 0 auto;
+	align-items: center;
+	gap: 0.4rem;
+	margin-left: auto;
+}
+
+.doc-vis-panel-card-place-label {
+	color: var(--color-fd-muted-foreground);
+	white-space: nowrap;
+}
+
+.doc-vis-panel-body > * {
+	min-width: 0;
+	min-height: 0;
+	overflow: auto;
+}
+
+.doc-vis-panel-body > * + * {
+	border-left: 1px solid var(--color-fd-border);
+}
+
+.doc-vis-panel-empty {
+	margin: 0.6rem 0.7rem;
+}
+
+/* ---------- the tree (DiagramPanelTree.jsx): tight rows, as a file explorer lists files ----------
+   every row is one height (TREE_ROW_HEIGHT), drawn at its place: only the rows in view exist */
+.doc-vis-tree {
+	position: relative;
+	padding: 0.25rem 0;
+	overscroll-behavior: contain;
+	outline: none;
+}
+
+.doc-vis-tree:focus-visible {
+	box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-fd-primary) 45%, transparent);
+}
+
+.doc-vis-tree-rows {
+	position: relative;
+}
+
+.doc-vis-tree-item,
+.doc-vis-tree-pager {
+	position: absolute;
+	right: 0;
+	left: 0;
+	box-sizing: border-box;
+	display: flex;
+	align-items: center;
+	gap: 0.3rem;
+	height: 22px;
+	padding-right: 0.5rem;
+	white-space: nowrap;
+}
+
+.doc-vis-tree-item {
+	cursor: pointer;
+	user-select: none;
+}
+
+.doc-vis-tree-item:hover {
+	background: var(--color-fd-accent);
+}
+
+.doc-vis-tree-item.is-selected {
+	background: color-mix(in srgb, var(--color-fd-primary) 13%, transparent);
+}
+
+/* the cursor of the keys: seen while the keys are the tree's */
+.doc-vis-tree:focus-within .doc-vis-tree-item.is-cursor {
+	box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-fd-primary) 40%, transparent);
+}
+
+/* marked another way (the scene on the canvas): a bar at its left, apart from the selection */
+.doc-vis-tree-item.is-marked::before {
+	content: '';
+	position: absolute;
+	top: 3px;
+	bottom: 3px;
+	left: 1px;
+	width: 2px;
+	border-radius: 1px;
+	background: var(--color-fd-primary);
+}
+
+.doc-vis-tree-item.is-dimmed .doc-vis-tree-label {
+	color: var(--color-fd-muted-foreground);
+}
+
+.doc-vis-tree-fold {
+	display: inline-flex;
+	flex: 0 0 auto;
+	align-items: center;
+	justify-content: center;
+	width: 14px;
+	height: 14px;
+	padding: 0;
+	border: 0;
+	border-radius: 2px;
+	background: transparent;
+	color: var(--color-fd-muted-foreground);
+	cursor: pointer;
+}
+
+.doc-vis-tree-icon {
+	flex: 0 0 auto;
+	color: var(--color-fd-muted-foreground);
+}
+
+.doc-vis-tree-item.is-group .doc-vis-tree-icon,
+.doc-vis-tree-item.is-layout .doc-vis-tree-icon,
+.doc-vis-tree-item.is-block .doc-vis-tree-icon,
+.doc-vis-tree-item.is-scene .doc-vis-tree-icon,
+.doc-vis-tree-item.is-mount .doc-vis-tree-icon {
+	color: var(--color-fd-primary);
+}
+
+.doc-vis-tree-item.is-group .doc-vis-tree-label,
+.doc-vis-tree-item.is-free .doc-vis-tree-label,
+.doc-vis-tree-item.is-block .doc-vis-tree-label {
+	font-weight: 600;
+}
+
+/* the words of a thing keep their room: its kind gives way first, then its summary */
+.doc-vis-tree-label {
+	flex: 0 1 auto;
+	min-width: 2.5rem;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+/* a name nobody gave: the word of the thing, dimmed */
+.doc-vis-tree-label.is-default {
+	color: var(--color-fd-muted-foreground);
+}
+
+.doc-vis-tree-segment,
+.doc-vis-tree-kind {
+	flex: 0 30 auto;
+	min-width: 0;
+	overflow: hidden;
+	color: var(--color-fd-muted-foreground);
+	font-size: 0.68rem;
+	text-overflow: ellipsis;
+}
+
+.doc-vis-tree-mark {
+	display: inline-flex;
+	flex: 0 0 auto;
+	align-items: center;
+	gap: 0.15rem;
+	padding: 0 0.3rem;
+	border-radius: 7px;
+	background: color-mix(in srgb, var(--color-fd-muted-foreground) 13%, transparent);
+	color: var(--color-fd-muted-foreground);
+	font-size: 0.62rem;
+	line-height: 14px;
+}
+
+.doc-vis-tree-mark.is-blue { background: color-mix(in srgb, var(--color-fd-primary) 14%, transparent); color: var(--color-fd-primary); }
+.doc-vis-tree-mark.is-amber { background: color-mix(in srgb, #d97706 16%, transparent); color: #b45309; }
+.doc-vis-tree-mark.is-red { background: color-mix(in srgb, #dc2626 14%, transparent); color: #b91c1c; }
+
+.doc-vis-tree-summary {
+	flex: 1 1000 0%;
+	min-width: 0;
+	margin-left: 0.3rem;
+	overflow: hidden;
+	color: var(--color-fd-muted-foreground);
+	font-size: 0.68rem;
+	text-align: right;
+	text-overflow: ellipsis;
+}
+
+/* the first row of a paged level, two lines: the pages, the range, items per page; the filter of the
+   level */
+.doc-vis-tree-pager {
+	flex-direction: column;
+	align-items: stretch;
+	justify-content: center;
+	gap: 3px;
+	height: 46px;
+	margin-right: 0.4rem;
+	color: var(--color-fd-muted-foreground);
+	font-size: 0.68rem;
+	cursor: default;
+}
+
+.doc-vis-tree-pager-line {
+	display: flex;
+	align-items: center;
+	gap: 0.45rem;
+	min-width: 0;
+}
+
+.doc-vis-tree-pages {
+	--doc-button-group-height: 18px;
+	flex: 0 0 auto;
+	align-items: center;
+	box-shadow: none;
+}
+
+.doc-vis-tree-pages > button {
+	width: 18px;
+	padding: 0;
+}
+
+.doc-vis-tree-page-field {
+	box-sizing: border-box;
+	width: 2.6em;
+	height: 16px;
+	padding: 0 0.2rem;
+	border: 1px solid transparent;
+	border-radius: 2px;
+	background: transparent;
+	color: var(--color-fd-foreground);
+	font: inherit;
+	text-align: center;
+	outline: none;
+}
+
+.doc-vis-tree-page-field:hover,
+.doc-vis-tree-page-field:focus {
+	border-color: var(--color-fd-border);
+	background: var(--color-fd-background);
+}
+
+.doc-vis-tree-page-count {
+	padding: 0 0.25rem 0 0.15rem;
+	white-space: nowrap;
+}
+
+.doc-vis-tree-range {
+	flex: 0 50 auto;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.doc-vis-tree-page-size {
+	display: inline-flex;
+	flex: 0 0 auto;
+	min-width: 0;
+	overflow: hidden;
+}
+
+.doc-vis-tree-page-size .doc-vis-value-menu {
+	height: 18px;
+	padding: 0 0.3rem;
+	font-size: 0.66rem;
+}
+
+.doc-vis-tree-filter-count {
+	flex: 0 0 auto;
+	white-space: nowrap;
+}
+
+.doc-vis-tree-filter {
+	display: flex;
+	flex: 1 1 auto;
+	align-items: center;
+	box-sizing: border-box;
+	max-width: 240px;
+	background: var(--color-fd-background);
+	gap: 0.25rem;
+	min-width: 60px;
+	height: 18px;
+	padding: 0 0.3rem;
+	border: 1px solid var(--color-fd-border);
+	border-radius: 3px;
+}
+
+.doc-vis-tree-filter:focus-within {
+	border-color: var(--color-fd-primary);
+}
+
+.doc-vis-tree-filter input {
+	flex: 1 1 auto;
+	min-width: 0;
+	border: 0;
+	background: transparent;
+	color: var(--color-fd-foreground);
+	font: inherit;
+	outline: none;
+}
+
+.doc-vis-tree-filter .doc-button-icon {
+	width: 14px !important;
+	height: 14px !important;
+}
+
+/* ---------- the middle part: a small canvas of relations (DiagramPanelGraph.jsx) ----------
+   zoomed by the wheel and panned by a drag (it never scrolls, and the page never scrolls under it) */
+.doc-vis-panel-body > .doc-vis-panel-graph {
+	position: relative;
+	overflow: hidden;
+	background: color-mix(in srgb, var(--color-fd-muted, #f1f5f9) 35%, var(--color-fd-background));
+	cursor: grab;
+	overscroll-behavior: contain;
+	touch-action: none;
+}
+
+.doc-vis-panel-graph:active {
+	cursor: grabbing;
+}
+
+.doc-vis-panel-graph-view {
+	position: absolute;
+	top: 0;
+	left: 0;
+	transform-origin: 0 0;
+}
+
+.doc-vis-panel-graph-view .doc-card-icon,
+.doc-vis-panel-graph-view [data-node-id] {
+	cursor: pointer;
+}
+
+.doc-vis-panel-graph-reset {
+	position: absolute;
+	top: 6px;
+	right: 6px;
+	width: 20px !important;
+	height: 20px !important;
+	border: 1px solid var(--color-fd-border) !important;
+	background: var(--color-fd-background) !important;
+}
+
+.doc-vis-panel-graph-legend {
+	position: absolute;
+	right: 6px;
+	bottom: 5px;
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: flex-end;
+	gap: 0.15rem 0.55rem;
+	max-width: calc(100% - 12px);
+	padding: 0.1rem 0.35rem;
+	border-radius: 3px;
+	background: color-mix(in srgb, var(--color-fd-background) 85%, transparent);
+	color: var(--color-fd-muted-foreground);
+	font-size: 0.62rem;
+	pointer-events: none;
+}
+
+.doc-vis-panel-graph-legend-item {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.25rem;
+}
+
+.doc-vis-panel-graph-legend-item > i {
+	display: inline-block;
+	width: 14px;
+	border-top: 2px solid currentColor;
+}
+
+.doc-vis-panel-graph-legend-item.is-dashed > i { border-top-style: dashed; }
+.doc-vis-panel-graph-legend-item.is-slate > i { color: #94a3b8; }
+.doc-vis-panel-graph-legend-item.is-blue > i { color: #3b82f6; }
+.doc-vis-panel-graph-legend-item.is-teal > i { color: #0d9488; }
+.doc-vis-panel-graph-legend-item.is-violet > i { color: #8b5cf6; }
+
+/* the tree and the properties scroll by themselves; at their end the page does not take the wheel */
+.doc-vis-panel-card {
+	overscroll-behavior: contain;
+}
+
+/* the edit card docked: the look of the card, without its popup */
+.doc-vis-panel-card.doc-vis-card-panel {
+	padding: 0.35rem 0.7rem 0.5rem;
+	font-size: 0.76rem;
+}
+
+/* the menu of an item of a tree: the panel of a right-click, where the pointer was */
+.doc-vis-panel-menu {
+	position: fixed;
+	z-index: 1600;
+}
+
+body:has(.doc-block-popup .doc-vis-edit) .doc-vis-panel-menu,
+body:has(.doc-block-popup .doc-switch-scene-edit) .doc-vis-panel-menu {
+	z-index: calc(var(--doc-vis-modal-z-index, 100000) + 2);
+}

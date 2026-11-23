@@ -318,9 +318,42 @@ export function switchRectRead(value, field) {
 	return rect;
 }
 
+// a path at or below another
+export function switchPathIsWithin(path, pathAbove) {
+	return path === pathAbove || pathAbove === '/' || path.startsWith(`${pathAbove}/`);
+}
+
+// a mount of a document (card-diagram-flexible-switch.md#sources-of-scenes): the scenes of another
+// source shown under a path of this viewport. from: { asset: { store, name | itemId, versionId? } },
+// a document of scenes held in an asset item (the reference of a block to an asset item)
+export function switchMountRead(mount, index) {
+	mapping(mount, `the mount ${index + 1}`);
+	if (typeof mount.path !== 'string' || !mount.path.trim() || /[@#]/.test(mount.path)) throw new Error(`The mount ${index + 1} needs a path without @ or #: where its scenes are shown.`);
+	const path = switchPathNormalize(mount.path);
+	if (path === '/') throw new Error('A mount stands below the root: give it a path such as /shop.');
+	mapping(mount.from, `from of the mount ${path}`);
+	const asset = mount.from.asset;
+	if (!asset) throw new Error(`The mount ${path} says where its scenes are held: from: { asset: { store, name } } (a document of scenes in an asset item).`);
+	mapping(asset, `from.asset of the mount ${path}`);
+	const store = String(asset.store ?? '').trim();
+	const name = String(asset.name ?? '').trim();
+	const itemId = String(asset.itemId ?? '').trim();
+	if (!store) throw new Error(`The asset of the mount ${path} needs store (the id of a store of the asset layer, e.g. local).`);
+	if (Boolean(name) === Boolean(itemId)) throw new Error(`The asset of the mount ${path} names its item by name or by itemId, one of them.`);
+	const sourcePath = switchPathNormalize(mount.sourcePath ?? '/');
+	return {
+		path,
+		label: mount.label === undefined ? '' : String(mount.label),
+		description: String(mount.description ?? ''),
+		from: { asset: { store, name, itemId, versionId: String(asset.versionId ?? 'head').trim() || 'head' } },
+		sourcePath,
+	};
+}
+
 // the document of a CardDiagramSwitch block: its scenes by path. A scene holds a
 // diagram of the card diagram format, or names another scene and arranges some of
-// its nodes in tabs (one more scene per tab, below its path).
+// its nodes in tabs (one more scene per tab, below its path). Its mounts show the
+// scenes of other sources under paths of their own (mountList, switchMountRead).
 export function switchDocNormalize(input) {
 	const value = typeof input === 'string' ? yamlParse(input) : input;
 	mapping(value, 'the document');
@@ -350,13 +383,21 @@ export function switchDocNormalize(input) {
 		if (scene.tabs && !sceneByPath.has(switchPathNormalize(scene.tabs.of))) throw new Error(`The tabs of ${scene.path} name a scene that does not exist: ${scene.tabs.of}.`);
 		if (scene.tabs && !sceneByPath.get(switchPathNormalize(scene.tabs.of)).diagram) throw new Error(`The tabs of ${scene.path} arrange the nodes of one diagram, and ${scene.tabs.of} has views.`);
 	}
+	if (value.mountList !== undefined && !Array.isArray(value.mountList)) throw new Error('mountList is a list of mounts: { path, from: { asset: { store, name } } }.');
+	const mountList = (value.mountList ?? []).map(switchMountRead);
+	mountList.forEach((mount, index) => {
+		const other = mountList.find((item, indexOther) => indexOther !== index && (switchPathIsWithin(mount.path, item.path) || switchPathIsWithin(item.path, mount.path)));
+		if (other) throw new Error(`The mounts ${mount.path} and ${other.path} overlap: a path is shown from one source only.`);
+		const below = [...sceneByPath.keys()].find((path) => path !== mount.path && switchPathIsWithin(path, mount.path));
+		if (below) throw new Error(`The scene ${below} stands in the mount ${mount.path}, whose paths are its source's.`);
+	});
 	const root = switchPathNormalize(value.root ?? value.sceneList[0].path);
-	if (!sceneByPath.has(root)) throw new Error(`The root ${root} is not a scene.`);
+	if (!sceneByPath.has(root) && !mountList.some((mount) => switchPathIsWithin(root, mount.path))) throw new Error(`The root ${root} is not a scene.`);
 	if (value.depthMax !== undefined && !(Number.isInteger(value.depthMax) && value.depthMax >= 0)) throw new Error('depthMax is how deep scenes inside cards are drawn: 0 or more.');
 	// the feature layers offered while a scene of the document is edited (viewport.featureList of a
 	// diagram, for every scene at once: card-diagram-flexible-switch.md#editing-a-block-of-scenes)
 	if (value.featureList !== undefined && !(Array.isArray(value.featureList) && value.featureList.every((id) => typeof id === 'string'))) throw new Error('featureList is a list of the ids of features (parametric-canvas).');
-	return { title: String(value.title ?? ''), root, height: value.height, depthMax: value.depthMax, transition: value.transition ?? {}, defaults: value.defaults, featureList: value.featureList ?? [], sceneByPath };
+	return { title: String(value.title ?? ''), root, height: value.height, depthMax: value.depthMax, transition: value.transition ?? {}, defaults: value.defaults, featureList: value.featureList ?? [], sceneByPath, mountList };
 }
 
 // the scenes of a document, as the layer asks for them. onBoxSave: what a box the

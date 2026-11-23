@@ -6,11 +6,12 @@ import { CellField } from '../../../../main/comp-doc/cell/CellField.jsx';
 import { CellValue } from '../../../../main/comp-doc/cell/CellValue.jsx';
 import { DiagramRenderContext } from '../card-diagram/DiagramRender.jsx';
 import { cardIconToken } from '../card-diagram/CardIconToken.jsx';
+import { nodeSizeModeOf } from '../card-diagram/DiagramNodeResize.js';
 import { shapeNormalize, shapePointListOf, shapePropertyList, shapeTextSearchMatch, textNodeNormalize, textNodePropertyList } from './ParametricShapeData.js';
 
 // The kinds the parametric canvas brings to every registry listing it (node-registry.js: a feature's
 // kindList; ParametricShapeData.js for their data): a shape, drawn to the size of its node, and a
-// text, as wide as its words. Their colors are the style of the node (DiagramNodeStyle.js), their
+// text, as wide as its words or wrapped at a width (its size mode). Their colors are the style of the node (DiagramNodeStyle.js), their
 // words a cell of the cell edit layer, typed where they stand while the diagram is edited (a click
 // on them; Enter or a click elsewhere keeps them, Escape puts them back), each a step of the history.
 
@@ -53,7 +54,7 @@ export const ShapeCard = observer(function ShapeCard({ node, editor, nodeId }) {
 export const TextNodeCard = observer(function TextNodeCard({ node, editor, nodeId }) {
 	const { content, render } = useWordsOf(node, editor, nodeId, true);
 	return (
-		<div data-node-id={nodeId} className="doc-param-text" data-text-size={content.textSize ?? 'm'} data-weight={content.weight ?? 'normal'} data-align={content.align ?? 'left'} data-tone={content.tone || undefined} onClick={editor ? (event) => { event.stopPropagation(); editor.select(nodeId); } : undefined}>
+		<div data-node-id={nodeId} className="doc-param-text" data-size-mode={nodeSizeModeOf(node)} data-text-size={content.textSize ?? 'm'} data-weight={content.weight ?? 'normal'} data-align={content.align ?? 'left'} data-tone={content.tone || undefined} onClick={editor ? (event) => { event.stopPropagation(); editor.select(nodeId); } : undefined}>
 			{render('doc-param-text-words', 'Text')}
 		</div>
 	);
@@ -85,8 +86,9 @@ export const textNodeKind = {
 	label: 'Text',
 	contract: {
 		dataNormalize: textNodeNormalize, anchorListGet: () => [{ id: 'body', sideList: sideAllList }],
-		// as wide as its words, until its resize handles give it a width: then they wrap
-		sizeDefault: { width: 120, height: 24 }, isWidthFit: true, resizeAxisList: ['width'],
+		// its box (DiagramNodeResize.js: size modes): fits its words (no size, nothing to resize), or
+		// a width they wrap at (its width resized, its height following); the edit card switches
+		sizeDefault: { width: 120, height: 24 }, isWidthFit: true, sizeModeList: ['fit', 'wrap'],
 		styleList: ['fill'], propertyList: textNodePropertyList, searchMatch: shapeTextSearchMatch,
 	},
 	schema: null,

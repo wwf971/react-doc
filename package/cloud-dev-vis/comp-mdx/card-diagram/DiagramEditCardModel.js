@@ -3,6 +3,7 @@ import { cardSchemaGet, cardRowAnchorBuild, fieldValuesOf, fieldValueLabelsOf, n
 import { cardRowDisplayIdListOf, CARD_VIEW_MODE_LABEL, cardViewLabelOf, cardViewListGet, cardViewSourceOf, cardViewSwitcherIsShown, cardFooterIsShown, cardFooterTextOf } from './TableCardData.js';
 import { strokeDashList } from './DiagramEditStore.js';
 import { LINE_STROKE_SWATCH_LIST, nodeStyleKeyListOf, nodeStyleLabelOf, nodeStyleSwatchListOf } from './DiagramNodeStyle.js';
+import { NODE_SIZE_MODE_BY_ID, nodeSizeModeOf } from './DiagramNodeResize.js';
 import { cardTabList, tabPathGet, pathLabelListGet, rowNameGet, selectionPathBuild } from './DiagramEditPath.js';
 import { routeAnchorPointGet, routeDirectionFacingList, routeEndPointGet, routeResolve, routeTypeHasAnchors, routeTypeIsBezier, ROUTE_DIRECTION_LIST } from './DiagramRoute.js';
 
@@ -104,6 +105,24 @@ export function cardModelBuild(editor) {
 			swatchList: nodeStyleSwatchListOf(key), isDefaultOffered: true, defaultLabel: `Default: the ${key === 'fill' ? 'fill' : 'edge'} of its kind`, isNoneOffered: true,
 			set: (value, option) => change(() => store.nodeStyleSet(id, key, value || undefined, option)),
 		})), actionList: [] };
+	};
+	// how the node takes its box, for a kind with several size modes (DiagramNodeResize.js), and the
+	// width it wraps at
+	const sizeSectionOf = (id) => {
+		const nodeSized = store.nodeGet(id);
+		const contract = store.registry?.kindByType[nodeSized?.renderer?.type]?.contract;
+		if (!(contract?.sizeModeList?.length > 1) || nodeSized.display === 'simple') return null;
+		const mode = nodeSizeModeOf(nodeSized);
+		const propertyList = [{
+			id: 'size-mode', label: 'Box', kind: 'enum', value: mode, values: contract.sizeModeList,
+			valueLabels: Object.fromEntries(contract.sizeModeList.map(item => [item, NODE_SIZE_MODE_BY_ID[item].label])),
+			set: value => change(() => store.nodeSizeModeSet(id, value, editor.nodeSizeGet?.(id))),
+		}];
+		if (mode !== 'fit') propertyList.push({
+			id: 'size-width', label: 'Width', kind: 'number', value: nodeSized.size.width, min: contract.sizeMin?.width ?? 12, step: 1,
+			set: value => change(() => store.nodeResize(id, { width: Number(value), isMoved: false, axisList: ['width'] })),
+		});
+		return { id: 'size', label: 'Size', propertyList, note: mode === 'fit' ? 'The box follows the words; Shift + Enter breaks a line.' : '', actionList: [] };
 	};
 	const lineSectionList = lineConnection => {
 		const lineSet = (field, value, option) => change(() => store.connectionSet(lineConnection.id, field, value, option));
@@ -268,7 +287,11 @@ export function cardModelBuild(editor) {
 		if (!lineConnection) return { type: 'detail', sectionList: [] };
 		if (display.view === 'list' && display.isAnchors) return anchorListViewBuild(lineConnection);
 		if (display.anchorId) return { type: 'detail', sectionList: anchorSectionList(lineConnection, display.anchorId) };
-		return { type: 'detail', sectionList: lineSectionList(lineConnection) };
+		// the sections the features of the editor add for a line, before its actions
+		const sectionList = lineSectionList(lineConnection);
+		const featureSectionList = (editor.featureList ?? []).flatMap(session => session.cardSectionListGet?.({ kind: 'line', connectionId: lineConnection.id }, editor) ?? []);
+		if (featureSectionList.length) sectionList.splice(Math.max(0, sectionList.length - 1), 0, ...featureSectionList);
+		return { type: 'detail', sectionList };
 	};
 
 	// ---- a line by itself ----
@@ -417,6 +440,8 @@ export function cardModelBuild(editor) {
 					],
 				});
 			}
+			const size = sizeSectionOf(nodeId);
+			if (size) sectionList.push(size);
 			// its colors (DiagramNodeStyle.js): the keys of node.style its kind draws
 			const style = styleSectionOf(nodeId);
 			if (style) sectionList.push(style);

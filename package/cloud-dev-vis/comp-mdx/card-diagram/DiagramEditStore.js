@@ -1,14 +1,18 @@
-import { makeAutoObservable, observable } from 'mobx';
+import { comparer, computed, makeAutoObservable, observable } from 'mobx';
 import { parseDocument, stringify } from 'yaml';
 import { diagramLegacyConvert, diagramNormalize, cardStandaloneNormalize, endpointIsDangling, handleRoleAccepts, lineTypeList, markerTypeList, attachPolicyList } from './DiagramERData.js';
 import { cardSchemaGet, cardRowAnchorBuild, cardFooterProperty, nodePropertyListGet } from './TableCardSchema.js';
 import { pathResolve, pathEquals, selectionPathBuild, tabPathGet, nodeLineListGet, cardTabList } from './DiagramEditPath.js';
 import { EditHistory } from './DiagramEditHistory.js';
+import { nodeSizeOfMode } from './DiagramNodeResize.js';
 import { diagramArrangeRun } from './DiagramArrange.js';
 import { cardRowDisplayIdListOf, cardRowDisplayWithout, cardViewDefaultGet, cardViewListGet, cardViewListPrune, cardViewRowListGet, cardViewSourceOf } from './TableCardData.js';
 import { routeAnchorCoupleSet, routeAnchorHandleSet, routeAnchorHandlesPull, routeAnchorIdNext, routeAnchorInsertAt, routeAnchorMove, routeAnchorPlaceOf, routeAnchorRemove, routeCompact, routeEndHandleSet, routeNormalize, routeTypeFamilyGet, routeTypeHasAnchors } from './DiagramRoute.js';
 
 export { cardTabList };
+
+// how long a pause in the typing of a value is before the canvas draws what follows from it (rawShown)
+export const SHOWN_LATER_MS = 300;
 
 export const diagramEditModeList = [{ id: 'visual', label: 'Visual', description: 'Edit cards, rows, handles and connections on the canvas', isDefault: true }];
 
@@ -54,6 +58,12 @@ export const strokeDashList = [
 //   routeDraft   { connectionId, route }: the route of a line while one of its
 //                anchors or handles is dragged, drawn in place of the draft's
 //                until the drop writes it as one step (changeApply)
+//   rawShown     the draft the canvas draws: the draft itself, except while a value is typed,
+//                when it follows the draft only after a pause in the typing (SHOWN_LATER_MS) or
+//                when the typing ends (cellEnd, cellCancel, any other change, an undo). The words
+//                typed are shown at once by the field they are typed in; what follows from them
+//                elsewhere (the copies a repeat spawns, a line's label, the nodes a layout places)
+//                is drawn then. Every keystroke still reaches the draft, its history and the page
 //
 // scope: what of the draft may change, for a diagram whose structure is given (a scene made
 // from data and edited where it is drawn: card-diagram-flexible-switch.md#a-scene-edited-in-place).
@@ -86,6 +96,11 @@ export class DiagramEditStore {
 	cellOpenWanted = null;
 	saveTarget = 'asset';
 	message = '';
+	rawShown = '';
+	valueShownCurrent = '';
+	shownTimer = null;
+	// one computed per node and per line, compared by content (nodeGet, connectionGet)
+	itemComputedByKey = new Map();
 
 	// kind: 'diagram', or 'card' for one card outside a canvas. registry: the
 	// node registry of the component (node-registry.js): what the draft may
@@ -94,6 +109,7 @@ export class DiagramEditStore {
 		this.scope = scope ?? null;
 		this.rawInitial = String(raw ?? '');
 		this.rawDraft = this.rawInitial;
+		this.rawShown = this.rawInitial;
 		this.kind = kind;
 		this.resolve = resolve;
 		this.registry = registry;
@@ -107,10 +123,13 @@ export class DiagramEditStore {
 		this.validate(value);
 		this.valueInitial = JSON.stringify(value);
 		this.valueCurrent = this.valueInitial;
+		this.valueShownCurrent = this.valueInitial;
 		// two states are one draft when their values are: the text may differ
 		// (the initial text keeps its comments and layout) and is restored with it
 		this.history = new EditHistory({ isSame: (a, b) => a.valueCurrent === b.valueCurrent });
-		makeAutoObservable(this, { documentDraft: false, resolve: false, registry: false, scope: false, history: false, path: observable.ref, redirectRuleList: false, routeDraft: observable.ref }, { autoBind: true });
+		// what is read off the path is compared by content: a change of the draft that leaves the
+		// selection as it was notifies nobody (every node reads the selection)
+		makeAutoObservable(this, { documentDraft: false, resolve: false, registry: false, scope: false, history: false, path: observable.ref, redirectRuleList: false, routeDraft: observable.ref, shownTimer: false, itemComputedByKey: false, display: computed.struct, selection: computed.struct, arrangerUnavailableIdList: computed.struct }, { autoBind: true });
 	}
 
 	// ---------- the draft ----------
@@ -119,7 +138,12 @@ export class DiagramEditStore {
 	get value() { return JSON.parse(this.valueCurrent); }
 	get nodes() { const value = this.value; return this.kind === 'diagram' ? value.nodes ?? [] : [value.node]; }
 	get connections() { return this.kind === 'diagram' ? this.value.connections ?? [] : []; }
+	// the canvas is behind the draft: a value is being typed (the canvas keeps its places meanwhile)
+	get isShownBehind() { return this.rawShown !== this.rawDraft; }
 	get report() { return { raw: this.rawDraft, lang: 'yaml', saveTarget: this.saveTarget, isDirty: this.isDirty }; }
+	// the arrangers of the registry that cannot act on the draft: compared by content, so a word
+	// typed notifies nobody (the menu that lists them is drawn by the editor as a whole)
+	get arrangerUnavailableIdList() { return (this.registry?.arrangerList ?? []).filter(arranger => arranger.isApplicable && !arranger.isApplicable(this.value)).map(arranger => arranger.id); }
 
 	validate(value) {
 		return this.kind === 'diagram' ? diagramNormalize(value, this.registry, this.resolve) : cardStandaloneNormalize(value, this.registry);
@@ -134,7 +158,8 @@ export class DiagramEditStore {
 	// the change is made on a clone of the document, validated, and recorded
 	// (groupKey: the typing it is part of, see DiagramEditHistory.js). a
 	// refused change leaves the draft and the history as they were
-	changeApply(change, { groupKey = null } = {}) {
+	// isShownLater: a value being typed (rawShown follows after a pause)
+	changeApply(change, { groupKey = null, isShownLater = false } = {}) {
 		const documentNext = this.documentDraft.clone();
 		try {
 			change(documentNext);
@@ -151,6 +176,7 @@ export class DiagramEditStore {
 			this.valueCurrent = JSON.stringify(value);
 			this.rawDraft = this.valueCurrent === this.valueInitial ? this.rawInitial : documentNext.toString();
 			this.history.record(stateBefore, this.stateGet(), groupKey);
+			if (isShownLater) this.shownLaterSchedule(); else this.shownNow();
 			this.message = '';
 			this.pathNormalize();
 			return true;
@@ -176,6 +202,7 @@ export class DiagramEditStore {
 		this.documentDraft = state.documentDraft;
 		this.valueCurrent = state.valueCurrent;
 		this.rawDraft = state.rawDraft;
+		this.shownNow();
 		this.cell = null;
 		this.message = '';
 		this.pathNormalize();
@@ -188,8 +215,24 @@ export class DiagramEditStore {
 
 	// ---------- queries ----------
 
-	nodeGet(nodeId) { return this.nodes.find(node => node.id === nodeId); }
-	connectionGet(connectionId) { return this.connections.find(connection => connection.id === connectionId); }
+	// a node, a line of the draft. Read while drawing, each is a computed of its own compared by
+	// content, so a card is drawn again only when its own node changed, never on every change of the
+	// draft (a letter typed in one card redrew every card of the diagram)
+	nodeGet(nodeId) { return this.itemComputedGet(`node:${nodeId}`, () => this.nodes.find(node => node.id === nodeId)); }
+	connectionGet(connectionId) { return this.itemComputedGet(`connection:${connectionId}`, () => this.connections.find(connection => connection.id === connectionId)); }
+	// a node and a line as the canvas draws them (rawShown): for what shows them elsewhere (a list
+	// of a panel) and may follow the typing a moment later, as the canvas does
+	get valueShown() { return JSON.parse(this.valueShownCurrent); }
+	nodeShownGet(nodeId) { return this.itemComputedGet(`node-shown:${nodeId}`, () => (this.kind === 'diagram' ? this.valueShown.nodes ?? [] : [this.valueShown.node]).find(node => node?.id === nodeId)); }
+	connectionShownGet(connectionId) { return this.itemComputedGet(`connection-shown:${connectionId}`, () => (this.kind === 'diagram' ? this.valueShown.connections ?? [] : []).find(connection => connection.id === connectionId)); }
+	itemComputedGet(key, read) {
+		let box = this.itemComputedByKey.get(key);
+		if (!box) {
+			box = computed(read, { equals: comparer.structural });
+			this.itemComputedByKey.set(key, box);
+		}
+		return box.get();
+	}
 	schemaGet(nodeId) { return cardSchemaGet(this.nodeGet(nodeId), this.registry); }
 	rowsGet(node) { const schema = cardSchemaGet(node, this.registry); return schema ? node.data?.[schema.rowListKey] ?? [] : []; }
 	rowGet(nodeId, rowId) { return this.rowsGet(this.nodeGet(nodeId)).find(row => row.id === rowId); }
@@ -224,6 +267,9 @@ export class DiagramEditStore {
 	nodeLineListGet(nodeId) { return nodeLineListGet(this, nodeId); }
 
 	// the connections attached to a handle, with the role each has there
+	// how many lines a handle takes, read by its node as it is drawn: a word typed changes no count,
+	// so no node is drawn again for it
+	handleConnectionCountGet(nodeId, handleId) { return this.itemComputedGet(`handle-count:${nodeId}:${handleId}`, () => this.handleConnectionListGet(nodeId, handleId).length); }
 	handleConnectionListGet(nodeId, handleId) {
 		const result = [];
 		for (const connection of this.connections) {
@@ -387,13 +433,26 @@ export class DiagramEditStore {
 	// the typing in the cell is one step of the history, closed with the
 	// cell; a cell restored by Escape leaves no step (the group ends where
 	// it started, DiagramEditHistory.js)
-	cellEnd() { this.cell = null; this.history.groupClose(); }
+	cellEnd() { this.cell = null; this.history.groupClose(); this.shownNow(); }
 	cellCancel() {
 		if (!this.cell) return;
 		const { nodeId, rowId, field, valueInitial, isPresent } = this.cell;
 		this.fieldSet(nodeId, rowId, field, valueInitial, !isPresent);
 		this.cell = null;
 		this.history.groupClose();
+		this.shownNow();
+	}
+
+	// the canvas draws the draft now; or a moment after the typing pauses
+	shownNow() {
+		if (this.shownTimer) { clearTimeout(this.shownTimer); this.shownTimer = null; }
+		if (this.rawShown !== this.rawDraft) this.rawShown = this.rawDraft;
+		if (this.valueShownCurrent !== this.valueCurrent) this.valueShownCurrent = this.valueCurrent;
+	}
+
+	shownLaterSchedule() {
+		if (this.shownTimer) clearTimeout(this.shownTimer);
+		this.shownTimer = setTimeout(this.shownNow, SHOWN_LATER_MS);
 	}
 
 	// a value of the card (rowId null) or of one of its rows. a typed value
@@ -404,7 +463,8 @@ export class DiagramEditStore {
 		const schema = cardSchemaGet(node, this.registry);
 		const definition = this.fieldDefinitionGet(node, rowId, field);
 		if (!definition || !this.fieldIsEditable(nodeId, rowId, field)) return false;
-		const groupKey = ['enum', 'bool'].includes(definition.kind) ? null : `field:${nodeId}/${rowId ?? ''}/${field}`;
+		const isTyped = !['enum', 'bool'].includes(definition.kind);
+		const groupKey = isTyped ? `field:${nodeId}/${rowId ?? ''}/${field}` : null;
 		return this.changeApply(documentNext => {
 			const path = [...this.nodePathGet(nodeId), 'data'];
 			if (rowId) {
@@ -415,7 +475,7 @@ export class DiagramEditStore {
 			path.push(field);
 			if (isDelete) documentNext.deleteIn(path);
 			else documentNext.setIn(path, value);
-		}, { groupKey });
+		}, { groupKey, isShownLater: isTyped });
 	}
 
 	// a value inside the data of a node, by its path there (['itemList', 2, 'text']): for what a card
@@ -732,7 +792,7 @@ export class DiagramEditStore {
 		if (!schema?.isFieldListEditable) return false;
 		const index = (node.data.fields ?? []).findIndex(field => field.id === fieldId);
 		if (index < 0) return false;
-		return this.changeApply(documentNext => documentNext.setIn([...this.nodePathGet(nodeId), 'data', 'fields', index, 'label'], label), { groupKey: `column:${nodeId}/${fieldId}` });
+		return this.changeApply(documentNext => documentNext.setIn([...this.nodePathGet(nodeId), 'data', 'fields', index, 'label'], label), { groupKey: `column:${nodeId}/${fieldId}`, isShownLater: true });
 	}
 
 	// ---------- handles ----------
@@ -958,6 +1018,25 @@ export class DiagramEditStore {
 		});
 	}
 
+	// the way a node takes its box (DiagramNodeResize.js: its size modes), as one step. boxNow: its
+	// box as drawn, so a width set at the switch is the width it had (nothing moves)
+	nodeSizeModeSet(nodeId, mode, boxNow) {
+		const node = this.nodeGet(nodeId);
+		if (!node) return false;
+		const contract = this.registry?.kindByType[node.renderer?.type]?.contract;
+		if (!contract?.sizeModeList?.includes(mode)) {
+			this.message = `A ${node.renderer?.type ?? 'node'} node does not take its box that way.`;
+			return false;
+		}
+		const sizeOf = axis => (typeof node.size?.[axis] === 'number' ? node.size[axis] : contract.sizeDefault?.[axis] ?? 100);
+		const size = nodeSizeOfMode(mode, boxNow ?? { width: sizeOf('width'), height: sizeOf('height') });
+		return this.changeApply((documentNext) => {
+			const path = this.nodePathGet(nodeId);
+			if (size) documentNext.setIn([...path, 'size'], documentNext.createNode(size));
+			else documentNext.deleteIn([...path, 'size']);
+		});
+	}
+
 	// ---------- connections ----------
 
 	connectionCreate(source, target) {
@@ -1004,6 +1083,8 @@ export class DiagramEditStore {
 		const index = this.connections.findIndex(connection => connection.id === connectionId);
 		if (index < 0) return false;
 		const groupKey = ['label', 'strokeWidth'].includes(field) ? `connection:${connectionId}/${field}` : option.groupKey ?? null;
+		// a label typed: the line draws it after a pause in the typing (rawShown)
+		const isShownLater = field === 'label';
 		return this.changeApply(documentNext => {
 			const path = ['connections', index];
 			switch (field) {
@@ -1040,7 +1121,7 @@ export class DiagramEditStore {
 				case 'isAnimated': documentNext.setIn([...path, 'isAnimated'], Boolean(value)); break;
 				default: throw new Error(`Unknown connection field "${field}".`);
 			}
-		}, { groupKey });
+		}, { groupKey, isShownLater });
 	}
 
 	connectionRemove(connectionId) {
