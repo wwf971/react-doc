@@ -1,0 +1,10 @@
+# Zoom meetings: a reservation (a meeting at a time) and an instance (a number and a passcode), kept
+# as a card in a document, or held by a card of a card diagram (card-comp of cloud-dev-vis).
+# doc/meeting-zoom.md is what an author reads.
+compList:
+  - tagName: MeetingZoomReservation
+    entry: ./meeting-zoom-comp.js
+    export: meetingZoomReservationDefine
+  - tagName: MeetingZoomInstance
+    entry: ./meeting-zoom-comp.js
+    export: meetingZoomInstanceDefine

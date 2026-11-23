@@ -1,0 +1,16 @@
+# The doc page of the package "oa", created by `react-doc init package`:
+# it lets the package be read and launched (react-doc dev <its folder>), or
+# listed in a workspace, beside being imported. Served alone it is edited like
+# any doc page; listed in a workspace or mounted it is read-only. Its components and
+# templates are read from comp-mdx/ and service-template-*/ at its top.
+# design: main/doc_page_impl_package.md#a-package-as-a-doc-page
+docEntry:
+  title: oa
+  # titleShort: ...   the title in a few words, when it is long: the tab of the browser shows it
+  homeDoc: ~oa/doc/README.md
+  # homeItem: Guide / Install   what "/" opens served alone: an item by its path in the side panel
+source:
+  file: ./source.yaml
+sidePanelById:
+  main:
+    file: ./side-panel.yaml

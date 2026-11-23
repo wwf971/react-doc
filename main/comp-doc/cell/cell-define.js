@@ -54,7 +54,9 @@
 //                  tokenSet({ body?, param? }) writes the token again (param a key at a
 //                  time, null removing one), tokenSet(null) takes it out of the text: the
 //                  owner's text, or the draft being typed. what the token names (a value
-//                  kept elsewhere) is the kind's own write
+//                  kept elsewhere) is the kind's own write. close() closes the card from
+//                  inside, when the kind decides its work is done (a value saved): the
+//                  token stays, a click on it opens the card again
 //     cardPlaceList   where the card is offered: ['value', 'surface'] (the default).
 //                  ['surface'] keeps a click on the drawn token doing what it does
 //   })

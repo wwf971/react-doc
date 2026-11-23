@@ -192,6 +192,10 @@ export {
   LogIn,
   UserCheck,
   Timer,
+  Video,
+  Clock,
+  CalendarClock,
+  Puzzle,
   FileKey,
   Gauge,
 } from 'lucide-react';

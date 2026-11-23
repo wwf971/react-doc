@@ -218,11 +218,15 @@ const RegisteredCompInner = observer(function RegisteredComp(props) {
   // and the marker line of its block (a component without a block of its
   // own, inside another component, hears nothing unless that one forwards)
   const sourceLine = configRuntime.sourceLine;
+  // a component drawn by another one through a RegisteredComp of its own (a
+  // mode of a frontend object) is handed the line of the outer block
+  // (eventSourceLine): it hears the events of that block, not of every block
+  const eventLine = sourceLine ?? configRuntime.eventSourceLine;
   const eventSubscribe = useMemo(
     () => (eventRouter
-      ? (type, listener) => eventRouter.subscribe({ type, sourcePath, sourceLine }, listener)
+      ? (type, listener) => eventRouter.subscribe({ type, sourcePath, sourceLine: eventLine }, listener)
       : undefined),
-    [eventRouter, sourcePath, sourceLine],
+    [eventRouter, sourcePath, eventLine],
   );
   // the view mode of a component that exposes view modes
   // (doc_page_impl_mdx_comp.md#view-modes-and-edit-modes): the one a reader

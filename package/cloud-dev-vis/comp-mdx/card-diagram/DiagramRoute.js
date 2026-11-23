@@ -686,6 +686,11 @@ export function routePolylineLengthGet(pointList) {
 	return pointList.slice(1).reduce((sum, point, index) => sum + Math.hypot(point.x - pointList[index].x, point.y - pointList[index].y), 0);
 }
 
+// how far along a line of that length its label stands: label.distance from its source when it has
+// one (a band of labels: card-diagram-arrange.md#labels), else its part of the length (label.position)
+export const labelLengthOf = (length, label) => (label?.distance !== undefined && label?.distance !== null
+	? Math.min(Math.max(0, Number(label.distance)), length) : length * (label?.position ?? 0.5));
+
 // the point at a part of a line's length, as a label stands on it (label.position)
 export function routePolylinePointAt(pointList, part) {
 	let rest = routePolylineLengthGet(pointList) * part;

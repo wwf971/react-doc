@@ -68,7 +68,12 @@ const templateTextList = [
 //        serviceDashboardList: [{ templateName, label, dashboardId, dashboardLabel, description }],
 //        rankByEntry: { [entry id]: rank } (the config key EditInsertRankByEntry) }
 // -> [{ id, compName, label, description, text, icon, group: 'text' | 'component' | 'service', isCommon,
-//       rank ('' when unranked), isAssetOnly, assetSource?, objectPick?, textForObjectGet? }]
+//       rank ('' when unranked), isAssetOnly, assetSource?, objectPick?, textForObjectGet?,
+//       source?, isNotInNode?, slashNameList? }]
+//   source: a component's start in the comment-block form ({ lang, raw, props }), for a place that
+//   holds a block's data without writing its text (a card of a card diagram holding a component:
+//   package/cloud-dev-vis/doc/card-diagram-impl.md#a-component-in-a-card); isNotInNode: it cannot be
+//   held so; slashNameList: the words typed for it after "/" (meta.slashName, meta.slashAliasList)
 //
 // A component declaring meta.insertObjectPick ({ typeList, isCreateOffered })
 // names an object of the object registry in its block: its entry carries the
@@ -118,6 +123,9 @@ export function editTemplateListBuild({ configDoc, compById, docPath, docFormat,
       isCommon: meta.isInsertCommon,
       isAssetOnly: meta.isAssetOnly,
       ...(meta.isAssetOnly ? { assetSource: source } : {}),
+      ...(source.text === undefined ? { source } : {}),
+      isNotInNode: meta.isNotInNode,
+      slashNameList: meta.slashName ? [meta.slashName, ...meta.slashAliasList] : [],
       ...(meta.insertObjectPick ? {
         objectPick: meta.insertObjectPick,
         textForObjectGet: (objectRef) => {

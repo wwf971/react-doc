@@ -3,6 +3,7 @@ import { diagramGeometryEstimateBuild, nodeIsSimple } from './DiagramArrangeOutl
 import { anchorPointOnOutline, cardSimpleHandlePointOf, cardSimpleShapeOf } from './CardSimpleData.js';
 import { CARD_FOOTER_HEIGHT, cardFooterIsShown } from './TableCardData.js';
 import { diagramLabelsPlace, diagramLaneCountByGapGet, diagramLineSceneGet, diagramLinesRoute, LANE_SPACING_MIN } from './DiagramArrangeRouter.js';
+import { labelBandWidthOf } from './DiagramLabelPlace.js';
 
 // The arrangers of a diagram read downward (card-diagram-arrange.md#the-layer-arrangers): what a
 // system is made of, top to bottom in the order a request passes it. They know no kind of card.
@@ -60,11 +61,13 @@ export function routeTurn(route) {
 // the lines of a diagram routed by the lane router: as they stand (across), or turned (down)
 function linesRoute(diagram, geometry, options, isDown) {
 	const scene = diagramLineSceneGet(diagram, isDown ? geometryTurn(geometry) : geometry, options);
-	const { routeById, reportList } = diagramLinesRoute({ ...scene, measureType: 'step', laneMargin: options.laneMargin });
+	// a band of labels as wide as its labels (labelBand: true): the width of each line's label, a little room around it
+	const labelWidthById = options.labelBand === true ? Object.fromEntries((diagram.connections ?? []).filter((connection) => connection.label?.text).map((connection) => [connection.id, labelBandWidthOf([connection.label.text])])) : {};
+	const { routeById, reportList, labelDistanceById } = diagramLinesRoute({ ...scene, measureType: 'step', laneMargin: options.laneMargin, labelBand: options.labelBand, labelWidthById });
 	const routeByIdDrawn = isDown ? Object.fromEntries(Object.entries(routeById).map(([id, route]) => [id, routeTurn(route)])) : routeById;
 	const reportListDrawn = [...scene.reportList, ...reportList].map((report) => (isDown && report.kind === 'skipped' && /top or bottom/.test(report.message) ? { ...report, message: `${report.connectionId}: both of its ends leave a card through its left or right side, which lanes between rows do not route` } : report));
-	const labels = diagramLabelsPlace(diagram, geometry, routeByIdDrawn, options);
-	return { routeById: routeByIdDrawn, labelPositionById: labels.positionById, reportList: [...reportListDrawn, ...labels.reportList] };
+	const labels = diagramLabelsPlace(diagram, geometry, routeByIdDrawn, { ...options, labelDistanceById });
+	return { routeById: routeByIdDrawn, labelPositionById: labels.positionById, labelDistanceById, reportList: [...reportListDrawn, ...labels.reportList] };
 }
 
 // ---------- the layers

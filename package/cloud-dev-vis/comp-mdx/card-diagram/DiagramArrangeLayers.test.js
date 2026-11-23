@@ -1,10 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { diagramArrangeApply } from './DiagramArrange.js';
-import { routeOverlapListGet, routePathPolylineGet, routeResolve } from './DiagramRoute.js';
+import { labelLengthOf, routeOverlapListGet, routePathPolylineGet, routePolylineLengthGet, routePolylinePointAt, routeResolve } from './DiagramRoute.js';
 import { diagramNormalize, endpointKeyOf } from './DiagramERData.js';
 import { cardDiagramNodeRegistry } from './card-diagram-node-registry.js';
 import { diagramGeometryEstimateBuild, nodeIsSimple } from './DiagramArrangeOutline.js';
+import { labelBandWidthOf } from './DiagramLabelPlace.js';
 import { diagramArrangerLanesAcross, diagramArrangerLanesDown, diagramArrangerLayers, routeTurn } from './DiagramArrangeLayers.js';
 import { anchorPointOnOutline, cardSimpleHandlePointOf, cardSimpleMarkRectOf } from './CardSimpleData.js';
 
@@ -167,6 +168,35 @@ test('the lanes arrangers keep the cards and route the lines, down the rows or a
 	const route = { anchorList: [{ id: 'a1', along: 1, x: 3, y: -7, handleIn: 'x+', handleOut: 'y-' }], source: { handle: 'y+' } };
 	assert.deepEqual(routeTurn(routeTurn(route)), route);
 	assert.deepEqual(routeTurn(route).anchorList[0], { id: 'a1', along: 1, x: -7, y: 3, handleIn: 'y+', handleOut: 'x-' });
+});
+
+test('lanes-across with a band of labels: the labels of the lines leaving a column stand one under another beside it, no lane in the band', () => {
+	const cardTall = (id, x, side, offsetList) => ({ id, renderer: { type: 'card-brief' }, position: { x, y: 0 }, size: { width: WIDTH, height: 240 }, data: { title: id, icon: 'database' },
+		handles: offsetList.map((offset, index) => ({ id: `h${index}`, direction: side === 'right' ? 'out' : 'in', anchor: { side, offset } })) });
+	const nodes = [cardTall('left', 0, 'right', [0.2, 0.4, 0.6, 0.8]), cardTall('right', 420, 'left', [0.8, 0.6, 0.4, 0.2])];
+	const connections = [0, 1, 2, 3].map((index) => ({ id: `l${index}`, source: { nodeId: 'left', handleId: `h${index}` }, target: { nodeId: 'right', handleId: `h${index}` }, renderer: { type: 'smoothstep' }, label: { text: `rule ${index}` } }));
+	const { diagram } = diagramArrangeApply({ version: 1, nodes, connections }, diagramArrangerLanesAcross, { registry, laneMargin: 10, labelBand: 90 });
+	// every lane stands past the band (the right of the card, 160, and 90 more)
+	for (const connection of diagram.connections) {
+		const lane = 420 + connection.route.anchorList[0].x;
+		assert.ok(lane >= 160 + 90 - 0.5, `${connection.id}: lane at ${lane}`);
+	}
+	// each label at the middle of the band: as far from where its line leaves, the same x for all
+	assert.deepEqual(diagram.connections.map((connection) => connection.label.distance), [45, 45, 45, 45]);
+	const geometry = diagramGeometryEstimateBuild(diagram, { registry });
+	const xList = diagram.connections.map((connection) => {
+		const [source, target] = [geometry.endOf(connection, 'source'), geometry.endOf(connection, 'target')];
+		const d = routeResolve('smoothstep', connection.route, { sourceX: source.x, sourceY: source.y, sourcePosition: source.side, targetX: target.x, targetY: target.y, targetPosition: target.side }).d;
+		const polyline = routePathPolylineGet(d);
+		return Math.round(routePolylinePointAt(polyline, labelLengthOf(routePolylineLengthGet(polyline), connection.label) / routePolylineLengthGet(polyline)).x);
+	});
+	assert.deepEqual(new Set(xList), new Set([205]));
+	// a band as wide as its labels (labelBand: true): the middle of the widest label and its room
+	const { diagram: auto } = diagramArrangeApply({ version: 1, nodes, connections }, diagramArrangerLanesAcross, { registry, laneMargin: 10, labelBand: true });
+	assert.deepEqual(new Set(auto.connections.map((connection) => connection.label.distance)), new Set([labelBandWidthOf(['rule 0']) / 2]));
+	// arranged again without the band: the labels are placed along their lines as ever, the distance gone
+	const { diagram: plain } = diagramArrangeApply(diagram, diagramArrangerLanesAcross, { registry, laneMargin: 10 });
+	assert.ok(plain.connections.every((connection) => connection.label.distance === undefined && typeof connection.label.position === 'number'));
 });
 
 test('lanes-across with a margin: a line turns that far from its card, and from its end when the end stands past the card (after the words of an icon node)', () => {

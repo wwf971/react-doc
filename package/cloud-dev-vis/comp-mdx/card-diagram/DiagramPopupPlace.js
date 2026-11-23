@@ -1,26 +1,16 @@
 import { useLayoutEffect, useRef, useState } from 'react';
+import { POPUP_MARGIN, popupCornerPlaceOf, windowRectGet } from '../../../../main/comp-doc/popup/popup-place.js';
 
-// Where a popup opened at a point stands (a context menu, the panel of a double-click): **a corner
-// of it on the point**. To the right of and below the point when it fits in its bound, else the
-// other way on that axis (its right edge, its bottom edge on the point), and moved inside only when
-// neither fits. A popup shifted to stay inside, with no corner where it was asked for, reads as
-// opened somewhere else.
+// Where a popup opened at a point stands: a corner of it on the point (popupCornerPlaceOf, shared
+// with the popups of the top layer: @react-doc/main/comp-doc/popup/popup-place.js). This hook is for
+// a popup drawn in the page (a portal into the body); one that would be clipped by the canvas around
+// it is drawn in the top layer instead (AnchoredPopover, placement 'corner').
 //
-//   popupCornerPlaceOf(point, size, bound, margin) -> { x, y }   pure: the top left corner of the popup
 //   usePopupCornerOffset(ref, boundRectGet, key) -> { x, y }     the offset, in pixels of the screen,
 //                     from where the popup is drawn (its top left corner on the point) to where it
 //                     stands. Measured once it is drawn, before it is painted; again only when it grows
 //                     past its bound (a corner chosen is kept while the popup shrinks: no jump)
-export const POPUP_MARGIN = 8;
-
-export function popupCornerPlaceOf(point, size, bound, margin = POPUP_MARGIN) {
-	const axisPlace = (at, extent, min, max) => {
-		if (at + extent <= max - margin) return at;
-		if (at - extent >= min + margin) return at - extent;
-		return Math.max(min + margin, Math.min(max - margin - extent, at));
-	};
-	return { x: axisPlace(point.x, size.width, bound.left, bound.right), y: axisPlace(point.y, size.height, bound.top, bound.bottom) };
-}
+export { POPUP_MARGIN, popupCornerPlaceOf, windowRectGet };
 
 export function usePopupCornerOffset(ref, boundRectGet, key) {
 	const [offset, offsetSet] = useState({ x: 0, y: 0 });
@@ -50,5 +40,3 @@ export function usePopupCornerOffset(ref, boundRectGet, key) {
 	return offset;
 }
 
-// the bound of a popup in the page: the window
-export const windowRectGet = () => ({ left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight });

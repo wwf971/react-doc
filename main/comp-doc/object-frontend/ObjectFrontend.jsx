@@ -107,6 +107,8 @@ export const ObjectFrontendBody = observer(function ObjectFrontendBody({ data = 
         configRuntime={{
           objectFrontend: service,
           sourcePath: config.sourcePath,
+          // the mode hears the events delivered to this block (an undo of changes of its own)
+          eventSourceLine: config.sourceLine,
           instanceId: `objectFrontend:${config.stateKey}:${mode.id}`,
         }}
       />

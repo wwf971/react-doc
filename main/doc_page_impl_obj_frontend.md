@@ -408,6 +408,16 @@ compDefine(CvProfileInfo, {
 
 A text of a mode that the author types in place, a cell of a table, a field of a card, is a **cell** of the [cell editing kit](doc_page_impl_edit_cell.md), not a field of the mode's own making: `useCell` for the cell, `CellField` for a value drawn and edited where it stands (or `CellValue` and `CellEdit` for a mode with a behavior of its own around the text), and `cellTokenDefine` for a token only this type knows. The cell is then typed like every other cell of the page, with `/link`, `/object` and the type's own action, and what it holds is drawn by the layer each token belongs to. The mode keeps the text in its data and writes it through its api (`assetWrite`), offered while `service.isEditable`. The demonstration's reading list (the remark of a book, the text of a note) and the Japanese-style CV of the package cv (every cell of the sheet) are built so.
 
+## What a mode draws with
+
+A mode draws what is its own (a sheet, a map, a diagram) and takes the rest from the shared parts ([Reuse before building](../AGENTS.md#reuse-before-building-the-shared-parts-of-the-page)), so every mode of every type looks and behaves alike where they show the same kind of thing:
+
+- **The items of an object listed** (the papers of a folder, the entries of an item, the instances of a stack) are a table of `FolderView` of react-comp-misc, given a height (`bodyHeight`) so its head stays on top while its rows scroll, its cells drawn by a component of the mode (`compBodyByColId`), its columns resized and moved by the reader; never a `<table>` of the mode's own.
+- **An object walked by paths** (its partitions, folders, items, or places of the mode's own) is the path-based view of cloud-dev-vis, `PathNavBar` over a panel of one height ([A path-based view anywhere](../package/cloud-dev-vis/doc/card-diagram-flexible-switch.md#a-path-based-view-anywhere)).
+- **A second thing a mode shows** (a form, a text edited whole) opens in `PanelPopup`; a small value typed in place is a cell (above).
+
+The mode Papers of the package cv (a folder of papers under a path bar, a table per folder) and the mode Contents of the package map-styles (the parts of a Japanese area selector, their stacks and entries) are built so; read one of them before writing a mode that lists or walks.
+
 ## A word on the names: objects hold items
 
 The container is an **object**: a frontend object, like an MDX component instance, is what a reader and the registry deal with. What it holds is one level below, and is never called an object: an **asset item** of the [asset service layer](doc_page_impl_asset.md), a piece of versioned data with its locks and folder, called an **asset of the object** or a **data item** where the object is the subject. *Object* has enough meanings already (anything a provider of the registry names, the frontend object itself); "the objects of an object" would make every sentence ambiguous ("delete the object": the frontend object, or one of its pieces?). The files say the same: `object.yaml` describes a frontend object, `item.yaml` an asset item.

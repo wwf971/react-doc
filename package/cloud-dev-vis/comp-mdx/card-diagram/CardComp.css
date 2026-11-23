@@ -1,0 +1,97 @@
+/* The card holding a component (CardComp.jsx, card-diagram-impl.md#a-component-in-a-card): the
+   component draws itself, as in a document; the card adds no frame of its own around it, only the
+   room of an empty card and, in the editor, what floats over its top edge */
+.doc-vis-node-content:has(> .doc-card-comp) {
+	overflow: visible;
+}
+
+.doc-card-comp {
+	/* the size of the text of the compact cards (DiagramER.css .doc-card-note): a component sized in
+	   em may take it (font-size: var(--doc-card-font-size, its size in a document)), so it is drawn
+	   at the scale of the cards around it, not at the size of the text of a document */
+	--doc-card-font-size: 0.64rem;
+	position: relative;
+	box-sizing: border-box;
+	width: 100%;
+	min-height: 100%;
+}
+
+/* the component draws its own card: as wide as the node */
+.doc-card-comp > :not(.doc-card-comp-float, .doc-card-comp-bar) {
+	max-width: none;
+}
+
+.doc-card-comp.is-empty,
+.doc-card-comp:has(> .doc-card-comp-empty) {
+	display: flex;
+}
+
+.doc-card-comp-empty {
+	display: flex;
+	flex: 1;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 0.4em 0.5em;
+	box-sizing: border-box;
+	min-height: 4em;
+	padding: 0.6em 0.75em;
+	border: 1px dashed var(--color-fd-border);
+	border-radius: 10px;
+	color: var(--color-fd-muted-foreground);
+	font-size: var(--doc-card-font-size);
+}
+
+/* over the top edge of the card, at the size of the screen whatever the zoom (as the toolbars of the
+   cards: DiagramVisualEdit.css .doc-card-toolbar); the scale is taken from the bottom left, so the
+   bottom stays on the card */
+.doc-card-comp-float,
+.doc-card-comp-bar {
+	position: absolute;
+	bottom: calc(100% + 4px);
+	left: 0;
+	z-index: 6;
+	transform: scale(calc(1 / var(--doc-vis-zoom, 1)));
+	transform-origin: left bottom;
+	font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+.doc-card-comp-float:empty {
+	display: none;
+}
+
+/* the bar of the component's editor stands where the bar of a block stands: its own look */
+.doc-card-comp-float > .doc-edit-panel {
+	position: static;
+	min-width: 18rem;
+}
+
+.doc-card-comp-bar {
+	display: flex;
+	align-items: center;
+	gap: 0.35rem;
+	--doc-button-group-height: 1.5rem;
+}
+
+.doc-card-comp-chooser.is-compact {
+	height: 1.5rem;
+	padding: 0 0.45rem;
+	font-size: 0.75rem;
+	background: var(--color-fd-popover);
+}
+
+/* while it is edited, what the component draws takes the pointer: a drag selects its words */
+.doc-card-comp.is-editing {
+	cursor: auto;
+}
+
+/* a component the page does not have: the empty card in the colors of a warning */
+.doc-card-comp-empty.is-unknown {
+	border-style: solid;
+	border-color: color-mix(in srgb, #d97706 55%, var(--color-fd-border));
+	background: color-mix(in srgb, #d97706 7%, var(--color-fd-background));
+	color: var(--color-fd-foreground);
+}
+
+.doc-card-comp-empty.is-unknown > svg {
+	color: #d97706;
+}

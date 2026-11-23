@@ -23,6 +23,8 @@ import { cardLegendHeightGet, cardLegendNormalize } from './CardLegendData.js';
 import { CardGraph } from './CardGraph.jsx';
 import { cardGraphNormalize, cardGraphSearchMatch, cardGraphSizeGet } from './CardGraphData.js';
 import { parametricCanvasFeature } from '../card-diagram-parametric-canvas/ParametricFeature.jsx';
+import { CardComp } from './CardComp.jsx';
+import { CARD_COMP_TYPE, cardCompNodeCreate, cardCompNormalize } from './CardCompData.js';
 
 // The node kinds of the base series (card-diagram-impl.md#node-registries): a
 // generic table card with authored fields and rows, without any limit on
@@ -261,7 +263,36 @@ export const cardGraphNodeKind = {
 	Card: CardGraph,
 };
 
-export const cardDiagramNodeKindList = [tableNodeKind, operatorNodeKind, cardNoteNodeKind, cardBriefNodeKind, cardLabelNodeKind, cardThreeDotsNodeKind, cardDatabaseNodeKind, cardIconNodeKind, cardCaptionNodeKind, cardMatrixNodeKind, sceneBoxNodeKind, colorBlockNodeKind, cardIndexNodeKind, cardLegendNodeKind, cardGraphNodeKind];
+// a card holding one component of the page, or none yet (CardComp.jsx, CardCompData.js,
+// card-diagram-impl.md#a-component-in-a-card): the component drawn and edited as in a document, its
+// lang, raw and props written in the node. Its data as text is typed in its edit card
+export const cardCompNodeKind = {
+	type: CARD_COMP_TYPE,
+	label: 'Component',
+	contract: {
+		...compactContract({ width: 240, height: 64 }, []),
+		dataNormalize: cardCompNormalize,
+		resizeAxisList: ['width'],
+		// no words of its own (a label, a description): the component says what it is
+		propertyList: [],
+		// found by the name of its component and the words of its data
+		searchMatch: (node, helper) => ([node.data?.comp, node.data?.raw].some(value => helper.test(value)) ? { partList: [], childList: [], isWhole: true } : null),
+		cardSectionListGet: ({ nodeId, node, store, change }) => (node.data?.comp ? [{
+			id: 'comp-data', label: 'Its data',
+			note: `What a block of ${node.data.comp} holds in a document, in ${node.data.lang ?? 'yaml'}. The component edits it in its own modes: the buttons over the card.`,
+			propertyList: [{ id: 'comp-raw', label: node.data.lang ?? 'yaml', kind: 'text', isMultiline: true, value: node.data.raw ?? '', set: value => change(() => store.nodeCompDataSet(nodeId, { raw: value }, { groupKey: `comp-raw:${nodeId}` })) }],
+			actionList: [],
+		}] : []),
+	},
+	schema: null,
+	Card: CardComp,
+	create: {
+		description: 'A card holding one component of the page (a meeting, an image, …), drawn and edited as in a document.', icon: Boxes, keywordList: ['component', 'block', 'mdx', 'embed'],
+		nodeCreate: idNext => cardCompNodeCreate(idNext),
+	},
+};
+
+export const cardDiagramNodeKindList = [tableNodeKind, operatorNodeKind, cardNoteNodeKind, cardBriefNodeKind, cardLabelNodeKind, cardThreeDotsNodeKind, cardDatabaseNodeKind, cardIconNodeKind, cardCaptionNodeKind, cardMatrixNodeKind, sceneBoxNodeKind, colorBlockNodeKind, cardIndexNodeKind, cardLegendNodeKind, cardGraphNodeKind, cardCompNodeKind];
 
 // the features of the diagrams of the base series: the parametric canvas (card-diagram-parametric-canvas.md).
 // a series lists the ones its diagrams have in its own registry

@@ -101,7 +101,7 @@ More in [Node Registries](card-diagram-impl.md#node-registries) and [History](ca
 | Place | Role |
 | --- | --- |
 | `comp-mdx/card-diagram/node-registry.js` | `nodeRegistryBuild`, `nodeRegistrySearch`: the registry mechanism, with the features of a registry |
-| `comp-mdx/card-diagram/card-diagram-node-registry.js`, `CompactCard.jsx`, `CardIcon.jsx`, `CardIconData.js`, `CardIndex.jsx`, `CardLegend.jsx` | the generic kinds (`table`, `operator`, `card-note`, `card-brief`, `card-database`, `card-icon`, `card-caption`, `card-matrix`, `card-index`, `card-legend`, `scene-box`) and the registry of `CardDiagram` |
+| `comp-mdx/card-diagram/card-diagram-node-registry.js`, `CompactCard.jsx`, `CardIcon.jsx`, `CardIconData.js`, `CardIndex.jsx`, `CardLegend.jsx` | the generic kinds (`table`, `operator`, `card-note`, `card-brief`, `card-database`, `card-icon`, `card-caption`, `card-matrix`, `card-index`, `card-legend`, `card-comp`, `scene-box`) and the registry of `CardDiagram` |
 | `comp-mdx/card-diagram-animation/` | the animation: [card-diagram-animation.md](card-diagram-animation.md#implementation) |
 | `comp-mdx/card-diagram-switch/` | scenes by path: [card-diagram-flexible-switch.md](card-diagram-flexible-switch.md#implementation) |
 | `comp-mdx/card-diagram-parametric-canvas/` | the parametric canvas: [card-diagram-parametric-canvas.md](card-diagram-parametric-canvas.md#implementation) |
@@ -111,6 +111,7 @@ More in [Node Registries](card-diagram-impl.md#node-registries) and [History](ca
 | `comp-mdx/card-diagram/DiagramERData.js`, `DiagramERStore.js`, `DiagramEdit*.js`, `DiagramRender.jsx` | normalization, the canvas model, the editor's draft and path, the node and edge components (their names keep the `DiagramER` prefix of the series they started in) |
 | `comp-mdx/card-diagram/DiagramRoute.js`, `DiagramRouteControls.jsx`, `DiagramApiList.js`, `DiagramCanvasRegistry.js` | the route of a line, its controls, and the apis of a diagram: [card-diagram-connection-line.md](card-diagram-connection-line.md#implementation) |
 | `comp-mdx/card-diagram/DiagramArrange.js`, `DiagramArrangeOutline.js`, `DiagramArrangeRows.js`, `DiagramArrangeLayers.js`, `DiagramArrangeRouter.js`, `comp-mdx/power-platform/er-arrange/` | the contract of an arranger, the arrangers of the base series, the lane router they share, and the arrangers of ER diagrams: [card-diagram-arrange.md](card-diagram-arrange.md) |
+| `comp-mdx/card-diagram/CardComp.jsx`, `CardCompData.js`, `CardCompEntry.js` | the kind `card-comp`: a component of the page in a card, its data, the components it may hold, its editing ([A component in a card](card-diagram-impl.md#a-component-in-a-card)) |
 | `comp-mdx/card-diagram/CardSimple.jsx`, `CardSimpleData.js` | the simple display of a node: the mark, its anchors, where a handle stands on its outline: [The display of a node](card-diagram-impl.md#the-display-of-a-node) |
 | `comp-mdx/aws/` | the AWS series: [aws.md](aws.md#implementation) |
 | `comp-mdx/card-diagram/CardIconToken.jsx`, `CardIconTokenData.js` | an icon in a text of a card: a token kind of the cell editing kit, and its text for generators ([Icons in a text](card-diagram-impl.md#icons-in-a-text)) |

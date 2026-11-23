@@ -3,7 +3,7 @@ import { observer } from 'mobx-react-lite';
 import { DiagramNodeContent, connectionPathBuild, handlePointMeasure, useDiagramSearchMark } from './DiagramRender.jsx';
 import { nodeStyleVarsOf } from './DiagramNodeStyle.js';
 import { diagramNormalize, diagramPlacesGet, endpointIsDangling, handleAnchorDrawnOf, nodeSizePlacedOf } from './DiagramERData.js';
-import { routePathPolylineGet } from './DiagramRoute.js';
+import { labelLengthOf, routePathPolylineGet } from './DiagramRoute.js';
 import { DiagramPinLayer } from './DiagramPinLayer.jsx';
 import { useNodeOverflowWatch } from './DiagramNodeOverflow.js';
 
@@ -26,6 +26,13 @@ export function pathPointAt(d, part) {
 	path.setAttribute('d', d);
 	const length = path.getTotalLength();
 	return path.getPointAtLength(length * part);
+}
+
+// where the label of a line stands on its path: its distance from the source, else its part
+export function pathLabelPointAt(d, label) {
+	const path = pathElement();
+	path.setAttribute('d', d);
+	return path.getPointAtLength(labelLengthOf(path.getTotalLength(), label));
 }
 
 export const DiagramStaticNode = observer(function DiagramStaticNode({ id, node, position, config, registry, onGeometry, className = 'doc-diagram-static-node' }) {
@@ -86,7 +93,7 @@ export function DiagramStaticLine({ connection, source, target, markerId }) {
 export const DiagramStaticLabel = observer(function DiagramStaticLabel({ connection, source, target, className = 'doc-diagram-static-label' }) {
 	const searchState = useDiagramSearchMark('').lineStateOf(connection.id);
 	const point = useMemo(() => {
-		return pathPointAt(connectionPathBuild(connection, diagramStaticEndsOf(source, target)), connection.label.position);
+		return pathLabelPointAt(connectionPathBuild(connection, diagramStaticEndsOf(source, target)), connection.label);
 	}, [connection, source, target]);
 	return <div className={`${className}${connection.link ? ' is-link' : ''}`} data-search={searchState ?? undefined} style={{ transform: `translate(${point.x}px, ${point.y}px) translate(-50%, -50%)` }}>{connection.label.text}</div>;
 });

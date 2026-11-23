@@ -17,6 +17,8 @@ import { cardDiagramNodeRegistry } from './card-diagram-node-registry.js';
 export const cardDiagramMetaShared = {
 	isEditAssetAccepted: true,
 	isEditEnterButtonOnly: true,
+	// a canvas of its own: never held by a card of a diagram (card-diagram-impl.md#a-component-in-a-card)
+	isNotInNode: true,
 };
 
 // what a corner of a node drawn to a size does when it is dragged in the editor (DiagramResizeHandles.jsx):

@@ -17,8 +17,9 @@ import { DiagramColorValue } from './DiagramColorValue.jsx';
 // and a remove button before every item). A plain form stands in when the
 // host injects no PropEditor.
 //
-// The card stands beside the whole principal, never beside the row or
-// cell within it, and its top edge is computed from the principal alone:
+// The card stands beside the whole principal (a node; a line: beside its
+// label, where it was clicked), never beside the row or cell within it,
+// and its top edge is computed from the principal alone:
 // the card grows and shrinks downward as its content changes, and never
 // moves while the author works in it (../power-platform/comp-diagram-er.md#diagram-er-edit).
 // A card of values alone (a draft whose structure is given: DiagramEditCardModel.js) has no
@@ -30,13 +31,24 @@ import { DiagramColorValue } from './DiagramColorValue.jsx';
 // feature of the editor offering to dock the card in a place of its own)
 export const DiagramEditCard = observer(function DiagramEditCard({ editor, onKeyDown, card, headActionList }) {
 	const panelRef = useRef(null);
+	// the width of an anchor that holds it (the label of a line: holdKey), in units of the canvas
+	const heldRef = useRef(null);
 	const [position, positionSet] = useState(null);
 	const cardRef = useRef(card);
 	cardRef.current = card;
 	useEffect(() => {
 		let frame;
 		const update = () => {
-			const rect = cardRef.current ? cardRef.current.anchorRectGet() : editor.anchorRectGet();
+			let rect = cardRef.current ? cardRef.current.anchorRectGet() : editor.anchorRectGet();
+			if (rect?.holdKey) {
+				// the words of a label change while its card is open: the card stays where it opened,
+				// beside the width the label had then, centred where the label is now (it follows a pan)
+				const zoom = rect.zoom || 1;
+				const widthCanvas = heldRef.current?.key === rect.holdKey ? heldRef.current.widthCanvas : rect.width / zoom;
+				heldRef.current = { key: rect.holdKey, widthCanvas };
+				const center = (rect.left + rect.right) / 2;
+				rect = { ...rect, left: center - (widthCanvas * zoom) / 2, right: center + (widthCanvas * zoom) / 2, width: widthCanvas * zoom };
+			} else heldRef.current = null;
 			const panel = panelRef.current;
 			if (rect && panel) {
 				const width = panel.offsetWidth;

@@ -19,7 +19,7 @@ export function cardDiagramSwitchDefineOptionsBuild({ label, description, source
 		placementList: ['mdx', 'commentBlock'],
 		isAssetAware: true,
 		expose: {
-			meta: { isEditAssetAccepted: true, isEditEnterButtonOnly: true, label, description, configDefineList: [...switchConfigDefineList, diagramResizeCornerDefine] },
+			meta: { isEditAssetAccepted: true, isEditEnterButtonOnly: true, isNotInNode: true, label, description, configDefineList: [...switchConfigDefineList, diagramResizeCornerDefine] },
 			icon: Layers,
 			sourceDefaultCreate,
 			...(isSceneEditable ? { editModeList: switchEditModeList } : {}),

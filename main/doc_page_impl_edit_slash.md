@@ -2,7 +2,7 @@
 
 # Slash Mode of the Default Editors: Design
 
-While the source of a paragraph or a list is edited ([In-place editing](doc_page_impl_edit.md)), the author can type `/` to ask the page for help instead of typing everything by hand. A menu opens under the `/` and lists **slash actions**. Typing narrows the menu. An action that needs a **parameter** keeps the menu open while the parameter is typed: `/link guide` lists the documents that match "guide", and choosing one writes `[Guide](./guide.md)` in place of what was typed. The slash text is ordinary text of the surface the whole time. Nothing else on the page changes, and the menu floats ([the no-jitter rule](doc_page_impl_edit.md#in-place-editing-and-the-no-jitter-rule)).
+While the source of a paragraph or a list is edited ([In-place editing](doc_page_impl_edit.md)), the author can type `/` to ask the page for help instead of typing everything by hand. A menu opens under the `/` and lists **slash actions**. Typing narrows the menu. An action that needs a **parameter** keeps the menu open while the parameter is typed: `/link guide` lists the documents that match "guide", and choosing one writes `[Guide](./guide.md)` in place of what was typed. The slash text is ordinary text of the surface the whole time. Nothing else on the page changes, and the menu floats ([the no-jitter rule](doc_page_impl_edit.md#in-place-editing-and-the-no-jitter-rule)), in the top layer of the browser (`popover="manual"`), so it stands over a surface it is opened from that stands there itself ([Inline Tooltips and Dropdowns](doc_page_impl_popup.md#inline-tooltips-and-dropdowns)).
 
 ```text
 see /             the menu lists every action             /link   Link    a link to a document …
@@ -173,7 +173,7 @@ The registry mirrors the [component registry](doc_page_impl.md#component-registr
 | --- | --- | --- |
 | a definition | `compDefine(Comp, options)` | `slashActionDefine(options)` |
 | the package's | `comp-doc/registry/registry.js` `compById` | `comp-doc/slash/slash-registry.js` `slashActionById` |
-| the doc pages' | `data.compMountList` (`comp.yaml`) | none yet |
+| the doc pages' | `data.compMountList` (`comp.yaml`) | a component's `meta.slashName` ([below](#components-in-the-slash-menu)) |
 | the host's | `config.compById` | `config.slashActionById` (an id mapped to `null` removes one) |
 | built at start, rebuilt on change | `compByIdBuild` in `DocPageMdx` | `slashActionByIdPageBuild` in `DocPageMdx` |
 | held by | `DocStore.compById` | `DocSlashStore.slashActionById` |
@@ -188,7 +188,23 @@ Ids are `{layer}/{name}`, such as `nav/link`. The [unified api registry](doc_pag
 | `block/code` | `/code`, `/fence` | the code block ([Adding a block](doc_page_impl_mdx_code.md#adding-a-block)) | a fenced code block at the caret; its view an optional parameter (`card`, `plain`, `icon`; the default is the config's for the place) |
 | `block/mdx` | `/mdx`, `/embed`, `/doc` | the MDX block ([Adding a block](doc_page_impl_mdx_embed.md#adding-a-block)) | an MDX block at the caret (`slashEffect.block`); its view an optional parameter (`icon`, `card`) |
 | `text/math` | `/math`, `/latex` | the built-in component math ([Adding a formula](../built-in/comp-mdx/math/comp_math.md#adding-a-formula)) | an empty formula at the caret, its field open below it (`slashEffect.atom`); where it stands an optional parameter (in the line, the default; on a row) |
+| `comp/{tag name}` | the component's `slashName` and `slashAliasList` (`/meeting-zoom-instance`, `/zoom-instance`) | a component of the page ([below](#components-in-the-slash-menu)) | a block of the component with its default source (`slashEffect.block`) |
 | `object/view` | `/object`, `/obj`, `/o` | the object service layer ([Writing a reference](doc_page_impl_obj.md#writing-a-reference)) | a view of an object of the registry, found a type, an object, then what is inside it; in a document the inline form of `ObjectView` |
+
+## Components in the slash menu
+
+A component is in the slash menu when its metadata names it: `meta.slashName`, and other names in `meta.slashAliasList` ([Metadata](doc_page_impl_mdx_comp.md#metadata-meta)). Typing the name puts a block of the component at the caret, the text its default source gives (`expose.sourceDefaultCreate`, as the insert menu does), so a component offered there is offered here with no code of its own.
+
+```javascript
+compDefine(MeetingZoomInstance, { expose: {
+  meta: { label: 'Zoom meeting instance', slashName: 'meeting-zoom-instance', slashAliasList: ['zoom-instance'] },
+  sourceDefaultCreate: () => ({ lang: 'yaml', raw: 'title: Zoom meeting\nmeetingId: \npasscode: ' }),
+} });
+```
+
+The actions are built from the components of the page, those of the packages included (`slashActionByIdCompBuild`, `comp-doc/slash/slash-comp.js`), and rebuilt when they change. They form a layer between the package's actions and the host's: a host's action of the same name wins. A component left out of documents (`isNotInDoc`) or whose data is only an asset item (`isAssetOnly`) is not offered, and one with no default source cancels the slash mode.
+
+The create panel of a card diagram lists the same names: `/meeting-zoom-instance` there makes a card holding the component ([A component in a card](../package/cloud-dev-vis/doc/card-diagram-impl.md#a-component-in-a-card)).
 
 ## Which blocks offer it
 
@@ -291,6 +307,7 @@ In the action mode, a query that matches no action shows no menu, because the au
 | `comp-doc/slash/use-edit-slash-config.js` | `useEditSlashConfig`: the slash of a component's own surface, with its own actions |
 | `comp-doc/slash/EditSlashMenu.jsx`, `EditSlashToggle.jsx`, `EditSlash.css` | the menu and the switch |
 | `comp-doc/link/link-slash.js`, `frontend/src/lib/doc-link-complete.js` | `/link`: the action, its items and the link it writes |
+| `comp-doc/slash/slash-comp.js` | the actions of the components of the page, from their `slashName` |
 | `comp-doc/object/object-slash.js`, `frontend/src/lib/doc-object-complete.js` | `/object`: the action, the walk from a type to what is inside an object |
 | `built-in/comp-mdx/math/math-slash.js` | `/math`: a formula in the line or on a row |
 | `frontend/src/lib/doc-slash.test.js`, `doc-link-complete.test.js`, `doc-object-complete.test.js` | the state machine, the triggers, the store, `/link`, `/object` |

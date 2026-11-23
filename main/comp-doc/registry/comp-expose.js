@@ -140,7 +140,13 @@ const metaDefault = Object.freeze({
   isEditSlashEnabled: false,
   assetSaveMode: undefined,
   configDefineList: [],
+  slashName: undefined,
+  slashAliasList: [],
+  isNotInNode: false,
 });
+
+// a name typed after "/" (doc_page_impl_edit_slash.md): one word of letters, digits, "_" and "-"
+const SLASH_NAME_REGEX = /^[A-Za-z][A-Za-z0-9_-]*$/;
 
 const ASSET_SAVE_MODE_LIST = ['inPlace', 'newVersion'];
 
@@ -285,6 +291,14 @@ function metaNormalize(meta) {
   if (meta.assetSaveMode !== undefined && !ASSET_SAVE_MODE_LIST.includes(meta.assetSaveMode)) {
     throw new Error(`compDefine: expose.meta.assetSaveMode must be one of ${ASSET_SAVE_MODE_LIST.join(', ')}.`);
   }
+  if (meta.slashAliasList !== undefined && !Array.isArray(meta.slashAliasList)) {
+    throw new Error('compDefine: expose.meta.slashAliasList must be an array.');
+  }
+  for (const name of [meta.slashName, ...(meta.slashAliasList ?? [])]) {
+    if (name !== undefined && !SLASH_NAME_REGEX.test(String(name))) {
+      throw new Error(`compDefine: expose.meta.slashName and slashAliasList are words typed after "/": letters, digits, "_" and "-" (got ${JSON.stringify(name)}).`);
+    }
+  }
   const pick = meta.insertObjectPick;
   if (pick !== undefined && (!pick || typeof pick !== 'object' || !Array.isArray(pick.typeList) || pick.typeList.length === 0)) {
     throw new Error('compDefine: expose.meta.insertObjectPick must be { typeList: [type id, ...], isCreateOffered? }.');
@@ -303,6 +317,9 @@ function metaNormalize(meta) {
     assetSaveMode: meta.assetSaveMode,
     configDefineList: meta.configDefineList ?? [],
     insertObjectPick: pick ? { typeList: pick.typeList.map(String), isCreateOffered: pick.isCreateOffered === true } : undefined,
+    slashName: meta.slashName === undefined ? undefined : String(meta.slashName),
+    slashAliasList: (meta.slashAliasList ?? []).map(String),
+    isNotInNode: meta.isNotInNode === true,
   };
 }
 

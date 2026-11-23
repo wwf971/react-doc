@@ -469,6 +469,8 @@ export function cardModelBuild(editor) {
 				], actionList: [] });
 			}
 			for (const session of featureList) sectionList.push(...(session.cardSectionListGet?.({ kind: 'node', nodeId }, editor) ?? []));
+			// what its kind says of a node beside its properties (a card holding a component: its data as text)
+			sectionList.push(...(store.registry?.kindByType[node.renderer?.type]?.contract.cardSectionListGet?.({ nodeId, node, store, editor, change }) ?? []));
 			sectionList.push({ id: 'node-actions', label: '', propertyList: [], actionList: [
 				...(schema ? [rowInsertAction('row-add', `Add ${labelRowLower}`)] : []),
 				...(schema ? [columnInsertAction('column-add', `Add ${labelFieldLower}`)] : []),

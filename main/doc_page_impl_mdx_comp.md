@@ -31,7 +31,8 @@ a component definition (compDefine)
     ├── standard names: normalized at registration, read through accessors
     │   ├── meta                     facts: label, description, isReadOnly, isEditSourceAccepted, isInsertCommon,
     │   │                            isEditEnterButtonOnly, isAssetOnly, isEditAssetAccepted, isNotInDoc,
-    │   │                            isEditSlashEnabled, assetSaveMode, insertObjectPick, configDefineList, any key of its own
+    │   │                            isEditSlashEnabled, slashName, slashAliasList, isNotInNode, assetSaveMode,
+    │   │                            insertObjectPick, configDefineList, any key of its own
     │   ├── icon                     a component drawing its icon at any size
     │   ├── viewModeList             the ways its data is displayed, one default (config.viewMode)
     │   ├── editModeList             the ways its data is edited in place (+ the built-in source mode)
@@ -56,7 +57,7 @@ compDefine(Xxx, {
   expose: {                                                     what it tells the page about itself
     meta:          { label, description, isReadOnly, isEditSourceAccepted, isInsertCommon,
                      isEditEnterButtonOnly, isAssetOnly, isEditAssetAccepted, isNotInDoc, isEditSlashEnabled,
-                     assetSaveMode, configDefineList, ... }
+                     slashName, slashAliasList, isNotInNode, assetSaveMode, configDefineList, ... }
     icon:          a component drawing the icon of Xxx at any size
     viewModeList:  [{ id, label, description, icon, isDefault, isDefaultInPlaceList }]   the ways its data is displayed
     editModeList:  [{ id, label, description, icon, isDefault }]   the ways its data is edited in place
@@ -89,6 +90,8 @@ Facts about the component that are not modes or drawings, as one object, so that
 | `isEditAssetAccepted` | `false` | its own edit modes also edit the data of an asset reference, at the head of an item in a writable store, saving into the item ([Asset-backed component drafts](doc_page_impl_edit.md#asset-backed-component-drafts)). An opt-in, not a restriction: inline data stays displayed, edited and inserted as before. Without it (and without `isAssetOnly`) a block whose data is an asset is edited as source only. The component declares `isAssetAware` too, to receive the reference and the version's metadata. `DiagramER` and `DiagramDataverseEntity` declare it |
 | `isNotInDoc` | `false` | it cannot be a block of a document at all, because it renders elsewhere (a side-panel item); the insert menu does not offer it and a block of it shows an error ([Asset-only and not-in-doc](#asset-only-and-not-in-doc)) |
 | `isEditSlashEnabled` | `false` | a block of it offers the [slash mode](doc_page_impl_edit_slash.md) while it is edited as source: `/` opens the menu of slash actions (`/link …`). The default editors of paragraphs and lists (`Paragraph`, `List`) declare it; a component whose source is prose can too ([Which blocks offer it](doc_page_impl_edit_slash.md#which-blocks-offer-it)) |
+| `slashName`, `slashAliasList` | — , `[]` | the names that put a block of it at the caret in the [slash menu](doc_page_impl_edit_slash.md#components-in-the-slash-menu) (`/meeting-zoom-instance`), with the text of its default source; letters, digits, `-` and `_`, starting with a letter. Without a `slashName` it is not in the slash menu |
+| `isNotInNode` | `false` | a card of a card diagram may not hold it ([A component in a card](../package/cloud-dev-vis/doc/card-diagram-impl.md#a-component-in-a-card)): the diagram components themselves, so no canvas is drawn inside a canvas |
 | `assetSaveMode` | — | `inPlace` or `newVersion`: the save mode an asset item gets when the page creates it for a block of this component (from the insert menu, or by **to asset**). Without it the item has no save mode, which saves in place ([Save modes](doc_page_impl_asset.md#save-modes)). Only the creation reads it; the item's own mode decides every later save |
 | `insertObjectPick` | — | `{ typeList, isCreateOffered }`: its block names an object of the [object registry](doc_page_impl_obj.md) of these types, so the insert menu asks for the object first (a search limited to them, and with `isCreateOffered` the creation of a new one) and calls `sourceDefaultCreate` with `env.objectRef` ([Creating a block naming an object](doc_page_impl_edit.md#creating-a-block-naming-an-object)). `ObjectFrontend` declares it |
 | `configDefineList` | `[]` | the shape of its component-level config: which keys exist, their types, defaults, descriptions. Only the shape; the values come from the config layers and the document levels, and reach the component as `config.compConfig` ([Component-level config](doc_page_impl_config.md#component-level-config)) |

@@ -222,9 +222,9 @@ The rules of such a component:
 
 - **Answer only for a step of its own.** `{ code: 0 }` when it took a step back (put one again), `undefined` when it has none: the page then undoes the document. A component that answers without a step swallows the author's undo.
 - **Its own steps, its own data.** The listener changes the component's data through the component's usual way (its state, its api), never the document: a change of the document is an entry of the document's history. The steps live with the data (the state object, the store of the component), not in the mount, so a block drawn again keeps them.
-- **The place decides.** The page delivers the event to the block the author is at, so a component is asked only when the author last pointed at it or focused something inside it; `data.target` is that element, for a component holding several things.
+- **The place decides.** The page delivers the event to the block the author is at, so a component is asked only when the author last pointed at it or focused something inside it; `data.target` is that element, for a component holding several things. An element that has left the page since (a Save button closing the card it was in) leaves its block as the place, and `data.target` is then the block.
 - **Independent of the page.** The subscription is the only tie: outside a document nothing is delivered, and the component works as before. It never binds the page's keys globally; while one of its own fields has the focus, the browser's undo of the field applies.
-- **Inside another component.** A component rendered by another one (a view of a `SwitchView`) has no block of its own; the outer one is asked, and may forward.
+- **Inside another component.** A component rendered by another one (a view of a `SwitchView`) has no block of its own; the outer one is asked, and may forward. A mode of a frontend object is asked as its block (`eventSourceLine`, [Events delivered to components](doc_page_impl_event.md#events-delivered-to-components)).
 
 `DemoCounter` (`example_doc/.doc-page/comp-mdx/DemoCounter.jsx`) is the demonstration: its count is component state, its past counts are kept beside it, and Ctrl/⌘ + Z takes the clicks back one by one while the author is at it, then goes on to the document.
 

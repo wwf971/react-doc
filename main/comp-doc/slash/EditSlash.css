@@ -3,6 +3,13 @@
    floating controls of the edit layer (DocEdit.css): rows of 1.35rem,
    0.72rem text. one fixed width, so the menu does not change its width
    while the author types; the detail of an item is cut with an ellipsis */
+/* shown in the top layer (popover): where its component puts it, not where
+   the browser centers a popover */
+.doc-edit-slash-menu[popover] {
+  inset: auto;
+  margin: 0;
+}
+
 .doc-edit-slash-menu {
   z-index: 70;
   display: flex;

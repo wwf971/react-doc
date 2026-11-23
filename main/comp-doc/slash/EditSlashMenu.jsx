@@ -29,9 +29,19 @@ import './EditSlash.css';
 //
 // it floats (a portal into document.body, fixed under the caret line) and
 // is a popup of the edit layer, so a pointer on it is not a click outside
-// the block being edited. above the line when there is no room below.
+// the block being edited. above the line when there is no room below. It is
+// shown in the top layer (popover="manual"): a surface it is opened from may
+// stand there itself (the panel of a double-click on a diagram, which leaves
+// the canvas around it: doc_page_impl_popup.md), and a portal with a z-index
+// stays under the top layer.
+// the menu once drawn: shown in the top layer, above what it was opened from
+const popoverShow = (element) => {
+  if (element && element.showPopover && !element.matches(':popover-open')) element.showPopover();
+};
+
 export const EditSlashMenu = observer(function EditSlashMenu({ slashStore, surfaceId, onChoose, onChoiceChoose }) {
   const listRef = useRef(null);
+  const listShow = (element) => { listRef.current = element; popoverShow(element); };
   const [heightMenu, heightMenuSet] = useState(0);
   const slash = slashStore.slash;
   const isOpen = slashStore.slashIsOpenFor(surfaceId);
@@ -74,7 +84,8 @@ export const EditSlashMenu = observer(function EditSlashMenu({ slashStore, surfa
 
   return createPortal(
     <div
-      ref={listRef}
+      ref={listShow}
+      popover="manual"
       className={`doc-popover doc-edit-slash-menu not-prose ${EDIT_POPUP_CLASS}`}
       role="listbox"
       aria-label={action ? `${action.label}: choose` : 'Slash actions'}

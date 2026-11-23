@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useId, useMemo, useState } from 'react';
 import { observer } from 'mobx-react-lite';
 import { DiagramRenderContext, DiagramSearchPathContext } from '../card-diagram/DiagramRender.jsx';
-import { DiagramStaticLabel, DiagramStaticLine, DiagramStaticNode, pathPointAt } from '../card-diagram/DiagramStatic.jsx';
+import { DiagramStaticLabel, DiagramStaticLine, DiagramStaticNode, pathLabelPointAt, pathPointAt } from '../card-diagram/DiagramStatic.jsx';
 import { endpointIsDangling } from '../card-diagram/DiagramERData.js';
 import { switchPresentationBuild } from './SwitchData.js';
 
@@ -16,7 +16,7 @@ import { switchPresentationBuild } from './SwitchData.js';
 // is embedded (its presentation, with depthMax of the block): a scene deeper than depthMax is
 // not drawn, and what holds it draws a note instead (switchPresentationChildIsDrawn).
 export const SwitchContext = createContext(null);
-export { pathPointAt };
+export { pathLabelPointAt, pathPointAt };
 
 export const SwitchStaticScene = observer(function SwitchStaticScene({ store, path, depth = 0, isEmbedded = false, pathEmbedder = null }) {
 	const parent = useContext(SwitchContext);

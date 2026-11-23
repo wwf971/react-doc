@@ -19,8 +19,9 @@ import './Cell.css';
 //   where             'value' | 'surface': handed to the Card
 //   tokenSet(change)  the token written again ({ body?, param? }), or taken out (null)
 //   close(how)        how: 'escape' | 'button' | 'outside' (a pointer going down outside the card
-//                     and outside isInsideGet(target): the token, the surface it is typed in). the
-//                     focus goes back to the typed text after the first two, never after the third
+//                     and outside isInsideGet(target): the token, the surface it is typed in) |
+//                     'done' (the Card closed itself, its work done: a value saved). the focus goes
+//                     back to the typed text after all but 'outside'
 export function CellTokenCard({ anchorRectGet, observeElementGet, placement = 'right', part, cell, where = 'value', tokenSet, close, isInsideGet }) {
   const cardRef = useRef(null);
   const [place, placeSet] = useState(null);
@@ -104,7 +105,9 @@ export function CellTokenCard({ anchorRectGet, observeElementGet, placement = 'r
           <X size={12} aria-hidden="true" />
         </button>
       </div>
-      <Card token={part} cell={cell} tokenSet={tokenSet} close={close} where={where} />
+      {/* the Card may close itself when its work is done (close()): the kind decides, e.g. after a
+          value is saved; the token stays, and a click on it opens the card again */}
+      <Card token={part} cell={cell} tokenSet={tokenSet} close={(how = 'done') => close(how)} where={where} />
     </div>,
     document.body,
   );

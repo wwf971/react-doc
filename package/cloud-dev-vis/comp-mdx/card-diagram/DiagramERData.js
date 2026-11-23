@@ -300,6 +300,8 @@ export function diagramNormalize(input, registry, resolve, height = 620) {
 		if (style.strokeDasharray !== undefined && !/^\d+(?:\.\d+)?(?:[ ,]+\d+(?:\.\d+)?)*$/.test(String(style.strokeDasharray))) throw new Error(`${id}: invalid strokeDasharray.`);
 		const label = { text: '', position: 0.5, ...mapping(connectionDefault.label ?? {}, 'default label'), ...mapping(connection.label ?? {}, `${id}.label`) };
 		if (typeof label.text !== 'string' || number(label.position, `${id}.label.position`, 0) > 1) throw new Error(`${id}: invalid label.`);
+		// distance: px along the line from its source, read instead of position (a band of labels)
+		if (label.distance !== undefined) number(label.distance, `${id}.label.distance`, 0);
 		let route = own(connection, 'route') ? connection.route : connectionDefault.route;
 		if (route != null) {
 			if (renderer.type === 'polyline') list(mapping(route, `${id}.route`).waypoints, `${id}.waypoints`).forEach(item => point(item, `${id}.waypoint`));

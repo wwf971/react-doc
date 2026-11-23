@@ -118,7 +118,13 @@ export function diagramLaneWidthOf(laneCount, laneMargin) {
 	return laneCount > 0 ? 2 * laneMargin + LANE_SPACING_MIN * (laneCount + 1) : 0;
 }
 
-export function diagramLinesRoute({ rectList, lineList, placedList = [], measureType, laneMargin }) {
+// labelBand: beside a column, on the side its lines leave into a gap, a band where the labels of
+// those lines stand one under another, at its middle: no lane enters it, and each such line is
+// answered how far along it from where it leaves its label stands (labelDistanceById), so the labels
+// of a column of rows read as one more column. A number: every band that wide; true: each as wide
+// as the widest label of the lines leaving there (labelWidthById: the width of a line's label, a
+// line without one not in a band). A caller sizes the gap for its bands and its lanes
+export function diagramLinesRoute({ rectList, lineList, placedList = [], measureType, laneMargin, labelBand = 0, labelWidthById = {} }) {
 	const columnList = diagramColumnListGet(rectList);
 	const columnOf = new Map();
 	columnList.forEach((column, index) => column.idList.forEach((id) => columnOf.set(id, index)));
@@ -150,6 +156,36 @@ export function diagramLinesRoute({ rectList, lineList, placedList = [], measure
 			}
 		}
 	}
+	// the bands of the labels: a side of a gap the lines of a column leave into, from the farther of
+	// the column and of their ends
+	const bandByGap = new Map();
+	const labelDistanceById = {};
+	const bandWidthOf = (lineId) => (labelBand === true ? labelWidthById[lineId] ?? 0 : Number(labelBand) || 0);
+	const bandLineList = planList.filter(({ line }) => !isVertical(line.source) && bandWidthOf(line.id) > 0);
+	for (const { line } of bandLineList) {
+		const end = line.source;
+		const isFrom = end.side === 'right';
+		const gap = columnOf.get(line.sourceNodeId) + (isFrom ? 1 : 0);
+		if (gap === 0 || gap === columnList.length) continue;
+		const band = bandByGap.get(gap) ?? { from: columnList[gap - 1].right, to: columnList[gap].left, widthFrom: 0, widthTo: 0 };
+		if (isFrom) { band.from = Math.max(band.from, end.x); band.widthFrom = Math.max(band.widthFrom, bandWidthOf(line.id)); } else { band.to = Math.min(band.to, end.x); band.widthTo = Math.max(band.widthTo, bandWidthOf(line.id)); }
+		bandByGap.set(gap, band);
+	}
+	// a gap too narrow for its bands and its lanes 12 px apart keeps no band: its labels are placed as ever
+	for (const [gap, band] of [...bandByGap]) {
+		const room = band.to - band.from - band.widthFrom - band.widthTo;
+		if (room >= LANE_SPACING_MIN * ((demandByGap.get(gap)?.length ?? 0) + 1)) continue;
+		bandByGap.delete(gap);
+		reportList.push({ kind: 'narrow', message: `a gap of ${Math.round(band.to - band.from)} px has no room for its bands of labels (${Math.round(band.widthFrom + band.widthTo)} px) and its lanes` });
+	}
+	for (const { line } of bandLineList) {
+		const end = line.source;
+		const isFrom = end.side === 'right';
+		const band = bandByGap.get(columnOf.get(line.sourceNodeId) + (isFrom ? 1 : 0));
+		if (!band) continue;
+		const middle = isFrom ? band.from + band.widthFrom / 2 : band.to - band.widthTo / 2;
+		labelDistanceById[line.id] = Math.round(Math.abs(middle - end.x) * 10) / 10;
+	}
 	const slotListByGap = new Map();
 	const outerByGap = new Map();
 	const preferredOf = new Map();
@@ -162,8 +198,9 @@ export function diagramLinesRoute({ rectList, lineList, placedList = [], measure
 		else if (isOuterRight) slotList = list.map((_, index) => columnList[columnList.length - 1].right + LANE_SPACING_OUTER * (index + 1));
 		else {
 			const edge = edgeByGap.get(gap);
-			const from = Math.max(columnList[gap - 1].right, edge?.from ?? -Infinity);
-			const width = Math.min(columnList[gap].left, edge?.to ?? Infinity) - from;
+			const band = bandByGap.get(gap);
+			const from = Math.max(columnList[gap - 1].right, edge?.from ?? -Infinity, band?.widthFrom ? band.from + band.widthFrom : -Infinity);
+			const width = Math.min(columnList[gap].left, edge?.to ?? Infinity, band?.widthTo ? band.to - band.widthTo : Infinity) - from;
 			const spacing = width / (count + 1);
 			// with a margin: count + 2 places evenly from one margin to the other, the first and the last outer
 			const step = laneMargin > 0 ? (width - 2 * laneMargin) / (count + 1) : 0;
@@ -171,6 +208,8 @@ export function diagramLinesRoute({ rectList, lineList, placedList = [], measure
 				slotList = list.map((_, index) => from + laneMargin + step * (index + 1));
 				outerByGap.set(gap, [from + laneMargin, from + width - laneMargin]);
 			} else slotList = list.map((_, index) => from + spacing * (index + 1));
+			// the places beyond the outermost lanes stay out of a band too
+			if (band && !outerByGap.has(gap)) outerByGap.set(gap, [(from + slotList[0]) / 2, (slotList[slotList.length - 1] + from + width) / 2]);
 			if (spacing < LANE_SPACING_MIN) reportList.push({ kind: 'narrow', message: `${count} lines cross a gap of ${Math.round(columnList[gap].left - from)} px: their lanes are ${Math.round(spacing)} px apart` });
 		}
 		slotListByGap.set(gap, { slotList, usedSet: new Set() });
@@ -294,7 +333,7 @@ export function diagramLinesRoute({ rectList, lineList, placedList = [], measure
 		})());
 		commit(line, best.result, [best.laneSource, best.laneTarget]);
 	}
-	return { routeById, reportList };
+	return { routeById, reportList, labelDistanceById };
 }
 
 function lineFinished(line, d) {
@@ -338,7 +377,9 @@ export function diagramLineSceneGet(diagram, geometry, { connectionIdList, regis
 
 // where the labels of a diagram's lines go, once the lines are routed: lines of any type, the
 // labels of lines out of scope staying as they are but counted as lines to keep off
-export function diagramLabelsPlace(diagram, geometry, routeById, { connectionIdList } = {}) {
+// labelDistanceById: labels standing a distance along their line from where it leaves (a band of
+// labels, diagramLinesRoute): not moved, kept clear of by the others
+export function diagramLabelsPlace(diagram, geometry, routeById, { connectionIdList, labelDistanceById = {} } = {}) {
 	const idSet = connectionIdList ? new Set(connectionIdList) : null;
 	const rectList = (diagram.nodes ?? []).flatMap((node) => {
 		const rect = geometry.rectOf(node.id);
@@ -351,7 +392,10 @@ export function diagramLabelsPlace(diagram, geometry, routeById, { connectionIdL
 		const ends = { sourceX: source.x, sourceY: source.y, sourcePosition: source.side, targetX: target.x, targetY: target.y, targetPosition: target.side };
 		const route = connection.id in routeById ? routeById[connection.id] : connection.route;
 		const isPlaced = !idSet || idSet.has(connection.id);
-		return [{ id: connection.id, d: routeResolve(lineTypeOfConnection(diagram, connection), route ?? null, ends).d, text: isPlaced ? connection.label?.text : '', position: connection.label?.position }];
+		// a distance this arrangement gives is kept; one written before is where the label starts from
+		const fixed = connection.id in labelDistanceById ? { distance: labelDistanceById[connection.id] }
+			: connection.label?.distance !== undefined ? { distanceWanted: connection.label.distance } : {};
+		return [{ id: connection.id, d: routeResolve(lineTypeOfConnection(diagram, connection), route ?? null, ends).d, text: isPlaced ? connection.label?.text : '', position: connection.label?.position, ...fixed }];
 	});
 	return labelPositionListPlace({ rectList, lineList });
 }

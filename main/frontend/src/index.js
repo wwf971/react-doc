@@ -50,6 +50,9 @@ export { DocAssetStore } from './store/DocAssetStore.js';
 // state object of a block, held by a component across renders and unmounts
 export { DocCompStateStore } from './store/DocCompStateStore.js';
 export { useCompState, useCompStateStore } from '../../comp-doc/registry/use-comp-state.js';
+// the events the page delivers to a component at its place (doc_page_impl_event.md#events-delivered-to-components):
+// an undo and a redo of changes of its own among them (doc_page_impl_edit_history.md#a-component-with-changes-of-its-own)
+export { useDocEventSubscribe } from '../../comp-doc/registry/use-doc-event.js';
 export { compStateKeyBuild, compStateKeyParse } from './lib/doc-comp-state.js';
 export { useDocStores } from './store/context.js';
 // the asset service layer (doc_page_impl_asset.md): the reference form in documents

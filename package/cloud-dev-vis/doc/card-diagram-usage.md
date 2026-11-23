@@ -69,9 +69,22 @@ Reach for a card that exists before drawing one of your own: each already knows 
 | sections one under another, each at full width | `scene-stack` (switch layer) | scenes or cards; at full height embedded or focused; views of a scene as tabs in an item |
 | a way to another scene | `scene-link` (switch layer), or `link` on any card or line | a pill as wide as its words |
 | some cards of one diagram in tabs | `switchTabsApply` (switch layer, `scene-tabs`) | each tab a scene of its own; lines are rewired, never dropped ([Tabs](card-diagram-usage-flexible-switch.md#tabs)) |
+| a component of the page as it is in a document (a Zoom meeting, a todo list) | `card-comp` | one component or none, its data inline as a block's; created from the create panel by its name (`/meeting-zoom-instance`), edited with its own edit modes from the group over the card ([A component in a card](#a-component-in-a-card)) |
 | something no card draws | `renderer: { component: Name }` | a registered component with the placement `visualizationNode`, listing its anchors ([Custom nodes](../comp-mdx/power-platform/comp-diagram-er.md#operators-custom-nodes-and-line-styles)); a title bar or a menu item takes components the same way (`visualizationTitle`, `labelItemList`) |
 
 A card's background is not a property of its kind: any card that has a surface takes `style: { fill: blue }` beside its data (a tone, `none`, or a color like `#fde68a`; a color block also `stroke`, its edge), set in the edit card under **Style** ([The style of a node](card-diagram-impl.md#the-style-of-a-node)). Prefer a tone: it follows a dark page. A series (a node registry) adds its own kinds; what a diagram may use is the registry of its component, and an unknown kind is an error naming the known ones. The **blocks** of a document are in the table at the top: one diagram, an animation, scenes. A scene of the switch layer gets its title over it when focused from the layer itself ([below](#focused-and-embedded)), not from a card.
+
+## A component in a card
+
+Any component a block of a document holds can stand in a diagram as a card of kind `card-comp`, unchanged: in the editor, open the create panel (a double-click on the canvas) and type its name, or its slash name (`/meeting-zoom-instance`). The card selected shows a group over it: a button for each edit mode of the component, which edits it in place as in a document (its **Save** ends the editing, the diagram's **Save** writes it), and the menu of the component it holds. Its text is also in the edit card, under **Its data**.
+
+```yaml
+- id: meeting-zoom-reservation-1
+  renderer: { type: card-comp }
+  data: { comp: MeetingZoomReservation, lang: yaml, raw: "title: Sprint planning\ntime: 2026-11-25 10:00 +09" }
+```
+
+A card holds one component, or none. Reach for it when what the card says is already a component (a meeting, a task list); for a short fact, a `card-note` is lighter. How it works: [card-diagram-impl.md](card-diagram-impl.md#a-component-in-a-card).
 
 ## Lines out of the bottom of a card: the footer
 

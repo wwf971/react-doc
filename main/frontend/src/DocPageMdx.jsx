@@ -77,6 +77,7 @@ import { serviceApiProviderCreate } from '../../comp-doc/api/api-service.js';
 import { compById as compByIdDefault } from '../../comp-doc/registry/registry.js';
 import { compMountByIdBuild } from '../../comp-doc/registry/comp-mount.js';
 import { slashActionById as slashActionByIdDefault } from '../../comp-doc/slash/slash-registry.js';
+import { slashActionByIdCompBuild } from '../../comp-doc/slash/slash-comp.js';
 import { slashActionByIdBuild } from '../../comp-doc/slash/slash-define.js';
 import { cellTokenById as cellTokenByIdDefault } from '../../comp-doc/cell/cell-registry.js';
 import { cellTokenByIdBuild } from '../../comp-doc/cell/cell-define.js';
@@ -157,7 +158,7 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
     // the registries of the page, built from the package's definitions, the
     // doc pages' and the host's (see registry building at the end of this file)
     const compById = compByIdBuild(data.compMountList, config.compById);
-    const slashActionById = slashActionByIdPageBuild(config.slashActionById);
+    const slashActionById = slashActionByIdPageBuild(config.slashActionById, compById, data.configDoc);
     const cellTokenById = cellTokenByIdPageBuild(config.cellTokenById);
     const atomKindByName = atomKindByNamePageBuild(config.atomKindById);
     const apiById = apiByIdPageBuild(data.configDoc?.apiDeclared, config.apiById);
@@ -465,9 +466,10 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
     stores.docStore.replaceCompById(compByIdBuild(data.compMountList, config.compById));
   }, [data.compMountList, config.compById, stores]);
 
+  // after the components: the components declaring a slash name are actions of it
   useEffect(() => {
-    stores.slashStore.replaceSlashActionById(slashActionByIdPageBuild(config.slashActionById));
-  }, [config.slashActionById, stores]);
+    stores.slashStore.replaceSlashActionById(slashActionByIdPageBuild(config.slashActionById, stores.docStore.compById, data.configDoc));
+  }, [config.slashActionById, data.compMountList, data.configDoc, config.compById, stores]);
 
   useEffect(() => {
     stores.cellStore.replaceCellTokenById(cellTokenByIdPageBuild(config.cellTokenById));
@@ -705,9 +707,10 @@ function compByIdBuild(compMountList, compByIdHost) {
   return { ...compByIdDefault, ...compMountByIdBuild(compMountList), ...(compByIdHost ?? {}) };
 }
 
-// the slash action registry (doc_page_impl_edit_slash.md#the-slash-action-registry)
-function slashActionByIdPageBuild(slashActionByIdHost) {
-  return slashActionByIdBuild(slashActionByIdDefault, slashActionByIdHost);
+// the slash action registry (doc_page_impl_edit_slash.md#the-slash-action-registry): the package's
+// actions, those of the components declaring a slash name (#components-in-the-slash-menu), the host's
+function slashActionByIdPageBuild(slashActionByIdHost, compById, configDoc) {
+  return slashActionByIdBuild(slashActionByIdDefault, slashActionByIdCompBuild({ compById, configDoc }), slashActionByIdHost);
 }
 
 // the token kinds of cells (doc_page_impl_edit_cell.md#token-kinds)

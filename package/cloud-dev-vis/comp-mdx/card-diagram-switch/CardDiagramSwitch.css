@@ -77,7 +77,8 @@
 .doc-switch.is-scene-editable .doc-switch-flow .doc-switch-edge-label { cursor: pointer; }
 .doc-switch.is-scene-editable .doc-switch-flow .react-flow__node .doc-card-row:hover { background: color-mix(in srgb, var(--color-fd-primary) 4%, transparent); }
 /* the panel of the commands of a scene (SwitchCanvas.jsx SwitchCommandPanel): over the canvas, where the pointer was */
-.doc-switch-command { position: absolute; z-index: 30; }
+/* the point a command panel is opened at; the panel stands in the top layer with a corner on it */
+.doc-switch-command { position: absolute; z-index: 30; width: 1px; height: 1px; }
 
 /* a card with a link: a scene opens from it */
 .doc-switch-flow .react-flow__node.is-linked { cursor: pointer; }

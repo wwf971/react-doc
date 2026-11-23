@@ -278,7 +278,7 @@ A reader's camera is remembered per path, and so per view, while the block lives
 
 ## A path-based view anywhere
 
-The path bar and the history behind it are a **side feature of this layer**: anything else that shows one place of a tree of paths at a time uses the same two parts, so a reader walks a folder of papers as they walk scenes, and there is one bar to maintain. The switch layer is built on them itself (`SwitchPathBar`, `SwitchStore.history`); the first other user is the mode Papers of the package cv (`@cv-dev/cv/doc/cv-sheet.md#the-papers`).
+The path bar and the history behind it are a **side feature of this layer**: anything else that shows one place of a tree of paths at a time uses the same two parts, so a reader walks a folder of papers as they walk scenes, and there is one bar to maintain. The switch layer is built on them itself (`SwitchPathBar`, `SwitchStore.history`); the other users are the mode Papers of the package cv (`@cv-dev/cv/doc/cv-sheet.md#the-papers`) and the mode Contents of the package map-styles (`@map-styles/doc/shikuchoson.md#the-mode-contents`).
 
 ```text
 PathNav.js       the tree is a provider: { root, labelGet(path), childListGet(path), isFound?(path) }
@@ -296,7 +296,7 @@ PathNavBar.jsx   the bar: back, forward, up, the segments, the menus beside and 
 - **The store knows no provider.** What a place is comes from the provider when the view is drawn (`pathNavBuild`), so the store may be kept across mounts ([stores kept across mounts](../../../main/doc_page_impl_mdx_comp_state.md#stores-kept-across-mounts)) while the data changes under it. A place that is gone (a paper removed) shows the nearest place above it that is one, else the root.
 - **A root `/`** is a place of its own, the first segment of every path (the top of an object's folders); a root such as `/overview` stays the first segment as the switch layer reads it (`pathNavChain`).
 - **Up** goes to the nearest folder above that is a place, and is a step back can undo, as in a block of scenes.
-- **What it draws under the bar is the host's**: a table of a folder, a sheet of a paper. The bar has no height of its own to change: its path is a strip that never wraps.
+- **What it draws under the bar is the host's**: a table of a folder, a sheet of a paper. The bar has no height of its own to change: its path is a strip that never wraps. A table of what lies at a place is `FolderView` of react-comp-misc (with a `bodyHeight`, its head on top), as the mode Papers of the package cv and the mode Contents of map-styles draw theirs, never a table of the host's own (react-doc `AGENTS.md`, Reuse before building).
 
 ```jsx
 const store = useCompStateStore(config, 'nav', () => new PathNavStore({ path: '/' }));

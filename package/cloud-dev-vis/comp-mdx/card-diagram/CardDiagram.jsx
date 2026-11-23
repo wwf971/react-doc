@@ -162,6 +162,12 @@ const DiagramSearchControl = observer(function DiagramSearchControl({ search }) 
 const DiagramERCanvas = observer(function DiagramERCanvas({ store, viewState, isEditing = false }) {
 	const { editor, edgeGeometry, search, config, registry } = useContext(DiagramRenderContext);
 	const { fitView, setViewport, getViewport, getNode, getInternalNode, screenToFlowPosition, flowToScreenPosition } = useReactFlow();
+	// where a pointer was let go, in units of the canvas. The end of a connection React Flow answers
+	// (state.to) is in pixels of the pane, which are units of the canvas only at zoom 1
+	const pointerFlowOf = event => {
+		const point = event?.changedTouches?.[0] ?? event;
+		return point && point.clientX !== undefined ? screenToFlowPosition({ x: point.clientX, y: point.clientY }) : null;
+	};
 	const isInitialized = useNodesInitialized();
 	// the zoom, as a custom property of the canvas: the controls drawn over a
 	// card (the toolbars of a focused row or field) undo it, so they keep
@@ -251,6 +257,12 @@ const DiagramERCanvas = observer(function DiagramERCanvas({ store, viewState, is
 			},
 			nodeRectGet: id => wrapper.current?.querySelector(`.react-flow__node[data-id="${CSS.escape(id)}"]`)?.getBoundingClientRect() ?? null,
 			edgeRectGet: id => {
+				// a line with a label: the box of its words, so its card stands beside what was clicked.
+				// holdKey: the words change as its card changes them (a reason typed); the card keeps
+				// the width it first had (DiagramEditCard.jsx), so it does not creep while typing
+				const label = wrapper.current?.querySelector(`.react-flow__edge[data-id="${CSS.escape(id)}"] .react-flow__edge-textwrapper`);
+				const labelRect = label?.getBoundingClientRect();
+				if (labelRect?.width) return { left: labelRect.left, right: labelRect.right, top: labelRect.top, bottom: labelRect.bottom, width: labelRect.width, height: labelRect.height, zoom: getViewport().zoom, holdKey: `line:${id}` };
 				const geometry = edgeGeometry?.get(id);
 				if (!geometry) return null;
 				// the box of the two ends: the card stands beside the line and not on it, and
@@ -405,11 +417,11 @@ const DiagramERCanvas = observer(function DiagramERCanvas({ store, viewState, is
 			onDoubleClick={isEditing ? event => { if (event.target.classList?.contains('react-flow__pane')) editor.createOpen(screenToFlowPosition({ x: event.clientX, y: event.clientY })); } : undefined}
 			onConnectStart={isEditing ? (_event, params) => editor.connectStart(params.nodeId, params.handleId) : undefined}
 			onConnect={isEditing ? connection => editor.connect(connection) : undefined}
-			onConnectEnd={isEditing ? (_event, state) => editor.connectEnd(state) : undefined}
+			onConnectEnd={isEditing ? (event, state) => editor.connectEnd(state, pointerFlowOf(event)) : undefined}
 			isValidConnection={isEditing ? connection => editor.connectionIsValid(connection) : undefined}
 			onReconnectStart={isEditing ? (_event, edge, handleType) => editor.reconnectStart(edge, handleType) : undefined}
 			onReconnect={isEditing ? (edge, connection) => editor.reconnect(edge, connection) : undefined}
-			onReconnectEnd={isEditing ? (_event, edge, handleType, state) => editor.reconnectEnd(edge, handleType, state) : undefined}
+			onReconnectEnd={isEditing ? (event, edge, handleType, state) => editor.reconnectEnd(edge, handleType, state, pointerFlowOf(event)) : undefined}
 		>
 			<Background gap={18} size={1} />
 			<Controls showInteractive={false}><DiagramSearchControl search={search} /></Controls>

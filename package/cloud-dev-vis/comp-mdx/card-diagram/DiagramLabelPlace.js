@@ -10,8 +10,11 @@ import { routePathPolylineGet, routePolylineLengthGet, routePolylinePointAt } fr
 // nothing moves. It is a heuristic: it finds a good place, not the best one.
 //
 //   rectList   [{ id, x, y, width, height }]   what a label should not cover
-//   lineList   [{ id, d, text?, position? }]   a line with text has a label to place; every
-//                                              line counts as something a label covers
+//   lineList   [{ id, d, text?, position?, distance? }]   a line with text has a label to place;
+//                                              every line counts as something a label covers.
+//                                              distance: its label stands that far along it from
+//                                              its start, not moved, and the others keep clear of it;
+//                                              distanceWanted: where it starts from instead of position
 //   answers    { positionById, reportList }    a report for a label left over a card
 const COST_CARD = 1000;
 const COST_CARD_NEAR = 20;
@@ -30,6 +33,13 @@ const STEP_PIXEL = 16;
 const PLACE_COUNT_MIN = 9;
 const PLACE_COUNT_MAX = 64;
 const SWEEP_MAX = 4;
+
+// a band of labels (the lane router's labelBand): as wide as the widest of its labels, room on each side
+export const LABEL_BAND_PAD = 16;
+export function labelBandWidthOf(textList) {
+	const list = (textList ?? []).filter(Boolean);
+	return list.length ? Math.ceil(Math.max(...list.map((text) => labelSizeEstimate(text).width)) + LABEL_BAND_PAD) : 0;
+}
 
 // the size of a label as the canvas draws it, before anything is drawn
 export function labelSizeEstimate(text) {
@@ -87,9 +97,11 @@ export function labelPositionListPlace({ rectList = [], lineList = [] }) {
 	const labelList = allList.filter((line) => line.text && line.polyline.length > 1 && line.length > 0).map((line) => {
 		const size = labelSizeEstimate(line.text);
 		const count = Math.max(PLACE_COUNT_MIN, Math.min(PLACE_COUNT_MAX, Math.round(line.length / STEP_PIXEL)));
-		const wanted = line.position ?? 0.5;
-		const partList = Array.from({ length: count }, (_, index) => (index + 0.5) / count);
-		return { line, size, wanted, placeList: [wanted, ...partList].map((part) => {
+		const isFixed = line.distance !== undefined;
+		const wanted = isFixed ? Math.min(1, line.distance / line.length)
+			: line.distanceWanted !== undefined ? Math.min(1, line.distanceWanted / line.length) : line.position ?? 0.5;
+		const partList = isFixed ? [] : Array.from({ length: count }, (_, index) => (index + 0.5) / count);
+		return { line, size, wanted, isFixed, placeList: [wanted, ...partList].map((part) => {
 			const point = routePolylinePointAt(line.polyline, part);
 			return { part, rect: rectOfLabel(point, size, LABEL_MARGIN), rectBare: rectOfLabel(point, size) };
 		}) };
@@ -138,7 +150,7 @@ export function labelPositionListPlace({ rectList = [], lineList = [] }) {
 	}
 	const round = (value) => Math.round(value * 1000) / 1000;
 	return {
-		positionById: Object.fromEntries(labelList.map((label) => [label.line.id, round(placedById.get(label.line.id).part)])),
+		positionById: Object.fromEntries(labelList.filter((label) => !label.isFixed).map((label) => [label.line.id, round(placedById.get(label.line.id).part)])),
 		reportList: labelList.filter((label) => costById.get(label.line.id) >= COST_CARD).map((label) => ({ kind: 'label', connectionId: label.line.id, message: `${label.line.id}: no place found for its label clear of the cards` })),
 	};
 }

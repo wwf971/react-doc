@@ -1,0 +1,9 @@
+# The side panel of the package's doc page.
+sidePanelById:
+  main:
+    tree:
+      - doc: ~oa/doc/README.md
+        text: oa
+        children:
+          - doc: ~oa/doc/meeting-zoom.md
+            text: Zoom meetings

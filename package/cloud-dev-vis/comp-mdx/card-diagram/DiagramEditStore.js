@@ -8,6 +8,7 @@ import { nodeSizeOfMode } from './DiagramNodeResize.js';
 import { diagramArrangeRun } from './DiagramArrange.js';
 import { cardRowDisplayIdListOf, cardRowDisplayWithout, cardViewDefaultGet, cardViewListGet, cardViewListPrune, cardViewRowListGet, cardViewSourceOf } from './TableCardData.js';
 import { routeAnchorCoupleSet, routeAnchorHandleSet, routeAnchorHandlesPull, routeAnchorIdNext, routeAnchorInsertAt, routeAnchorMove, routeAnchorPlaceOf, routeAnchorRemove, routeCompact, routeEndHandleSet, routeNormalize, routeTypeFamilyGet, routeTypeHasAnchors } from './DiagramRoute.js';
+import { CARD_COMP_TYPE, cardCompDataOf, cardCompNodeCreate } from './CardCompData.js';
 
 export { cardTabList };
 
@@ -90,6 +91,10 @@ export class DiagramEditStore {
 	cell = null;
 	interaction = null;
 	create = null;
+	// the component held by a card open in its own edit mode (a card-comp node: CardComp.jsx,
+	// card-diagram-impl.md#a-component-in-a-card): { nodeId, modeId, dataInitial }. Like the cell,
+	// the state of the editor, never a step; what the component reports is
+	compEdit = null;
 	routeDraft = null;
 	cardViewIdByNode = {};
 	// a cell asked to open its menu once it is drawn (an editor opened on it): { nodeId, rowId, field }
@@ -204,12 +209,75 @@ export class DiagramEditStore {
 		this.rawDraft = state.rawDraft;
 		this.shownNow();
 		this.cell = null;
+		// the editor of a component drew a draft of its own: the data put back is drawn anew
+		this.compEdit = null;
 		this.message = '';
 		this.pathNormalize();
 		return true;
 	}
 
 	historyClear() { this.history.clear(); }
+
+	// ---------- a component held by a card (card-comp: card-diagram-impl.md#a-component-in-a-card) ----------
+
+	// the component of a card chosen (an entry of cardCompEntryListBuild), its data as the source of
+	// the component starts it; null: none, an empty card. The data of the former component goes with it
+	nodeCompChoose(nodeId, entry) {
+		const node = this.nodeGet(nodeId);
+		if (!node || node.renderer?.type !== CARD_COMP_TYPE || this.isStructureFixed) return false;
+		if (this.compEdit?.nodeId === nodeId) this.compEdit = null;
+		return this.changeApply(documentNext => documentNext.setIn([...this.nodePathGet(nodeId), 'data'], documentNext.createNode(cardCompDataOf(entry))));
+	}
+
+	// the data of the component of a card, as its editor reports it (editDraftChange, editSubmitRequest:
+	// { raw, lang?, props? }), or as typed in the edit card. Written into the draft at once, so a save of
+	// the diagram carries it; the reports of one session of its editor are one step (its groupKey), and
+	// so is a text typed in the edit card
+	nodeCompDataSet(nodeId, { raw, lang, props } = {}, { groupKey = `comp:${nodeId}` } = {}) {
+		const node = this.nodeGet(nodeId);
+		if (!node || node.renderer?.type !== CARD_COMP_TYPE || !node.data?.comp) return false;
+		const dataPath = [...this.nodePathGet(nodeId), 'data'];
+		return this.changeApply(documentNext => {
+			if (raw !== undefined) documentNext.setIn([...dataPath, 'raw'], String(raw));
+			if (lang !== undefined && lang !== '') documentNext.setIn([...dataPath, 'lang'], String(lang));
+			if (props !== undefined) {
+				if (props && Object.keys(props).length) documentNext.setIn([...dataPath, 'props'], documentNext.createNode(props));
+				else if (documentNext.hasIn([...dataPath, 'props'])) documentNext.deleteIn([...dataPath, 'props']);
+			}
+		}, { groupKey });
+	}
+
+	// the component of a card opened in one of its edit modes, the card selected; what it held is kept,
+	// for a cancel
+	compEditStart(nodeId, modeId) {
+		const node = this.nodeGet(nodeId);
+		if (this.kind !== 'diagram' || this.isStructureFixed || !node?.data?.comp || node.renderer?.type !== CARD_COMP_TYPE) return false;
+		if (this.cell) this.cellEnd();
+		if (this.selection?.nodeId !== nodeId || this.selection?.rowId || this.selection?.connectionId) this.select(nodeId);
+		this.history.groupClose();
+		this.compEdit = { nodeId, modeId: String(modeId ?? ''), dataInitial: JSON.parse(JSON.stringify(node.data)) };
+		return true;
+	}
+
+	// the session ends with what the component reported in the draft (Save, the card left)
+	compEditEnd() {
+		if (!this.compEdit) return;
+		this.compEdit = null;
+		this.history.groupClose();
+	}
+
+	// the session given up: the card holds again what it held, and the session leaves no step (its
+	// group ends where it started, as a cell restored by Escape: DiagramEditHistory.js)
+	compEditCancel() {
+		if (!this.compEdit) return;
+		const { nodeId, dataInitial } = this.compEdit;
+		this.compEdit = null;
+		const node = this.nodeGet(nodeId);
+		if (node && JSON.stringify(node.data) !== JSON.stringify(dataInitial)) {
+			this.changeApply(documentNext => documentNext.setIn([...this.nodePathGet(nodeId), 'data'], documentNext.createNode(dataInitial)), { groupKey: `comp:${nodeId}` });
+		}
+		this.history.groupClose();
+	}
 
 	saveTargetSet(value) { if (['asset', 'inline'].includes(value)) this.saveTarget = value; }
 
@@ -877,6 +945,19 @@ export class DiagramEditStore {
 		return isChanged ? node.id : null;
 	}
 
+	// a card holding a component of the page (card-comp), at a place: the component of an entry of
+	// cardCompEntryListBuild, started as its source starts it (null: an empty card); selected
+	nodeCompAdd(entry, position) {
+		if (this.kind !== 'diagram' || this.isStructureFixed) return null;
+		const node = { ...cardCompNodeCreate(prefix => idNext(prefix, this.nodes), entry), position: { x: Math.round(position.x), y: Math.round(position.y) } };
+		const isChanged = this.changeApply(documentNext => {
+			if (!documentNext.has('nodes')) documentNext.set('nodes', documentNext.createNode([]));
+			documentNext.addIn(['nodes'], documentNext.createNode(node));
+		});
+		if (isChanged) this.select(node.id);
+		return isChanged ? node.id : null;
+	}
+
 	// a node drawn by a registered component (renderer.component), with its
 	// data and an in handle on the left and an out handle on the right of its
 	// body: what the create panel adds for an object found by the search
@@ -1225,7 +1306,12 @@ export class DiagramEditStore {
 				else if (documentNext.hasIn(path)) documentNext.deleteIn(path);
 			}
 			for (const [connectionId, position] of Object.entries(changes.labelPositionById)) {
-				documentNext.setIn(['connections', this.connections.findIndex(connection => connection.id === connectionId), 'label', 'position'], position);
+				const labelPath = ['connections', this.connections.findIndex(connection => connection.id === connectionId), 'label'];
+				documentNext.setIn([...labelPath, 'position'], position);
+				if (documentNext.hasIn([...labelPath, 'distance'])) documentNext.deleteIn([...labelPath, 'distance']);
+			}
+			for (const [connectionId, distance] of Object.entries(changes.labelDistanceById)) {
+				documentNext.setIn(['connections', this.connections.findIndex(connection => connection.id === connectionId), 'label', 'distance'], distance);
 			}
 		});
 		return isChanged ? changes.reportList : null;

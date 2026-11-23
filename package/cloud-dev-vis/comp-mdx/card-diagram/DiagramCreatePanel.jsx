@@ -9,6 +9,8 @@ import { slashActionDefine } from '../../../../main/comp-doc/slash/slash-define.
 import { slashEffect } from '../../../../main/frontend/src/lib/doc-slash.js';
 import { useDocStores } from '../../../../main/frontend/src/store/context.js';
 import { nodeRegistrySearch } from './node-registry.js';
+import { cardCompEntryListBuild } from './CardCompEntry.js';
+import { CARD_COMP_TYPE, cardCompEntryMatch } from './CardCompData.js';
 
 // The panel of a double-click on empty canvas: what can be added there
 // (the create entries of the node registry of the component, node-registry.js),
@@ -91,7 +93,8 @@ const ACTION_LIST_NONE = [];
 
 export const DiagramCreatePanel = observer(function DiagramCreatePanel({ position, editor, objectService, sessionKey, sourceList = SOURCE_LIST_NONE, actionList = ACTION_LIST_NONE, actionIdInitial, actionParam, heading = 'Actions', placeholder: placeholderGiven, ariaLabel = 'Add to the diagram', isActionOnly = false, textTake }) {
 	const [query, querySet] = useState('');
-	const slashStore = useDocStores()?.slashStore;
+	const stores = useDocStores();
+	const slashStore = stores?.slashStore;
 	// the states entered, the last the one the panel is in; opened in the state of an action when asked to
 	// opened at an action: in its state, or, an action asking nothing, done at once and closed
 	const isStartedAtOnce = useRef(false);
@@ -118,7 +121,16 @@ export const DiagramCreatePanel = observer(function DiagramCreatePanel({ positio
 	const kindAllList = editor.store && !editor.store.isStructureFixed && !isActionOnly ? nodeRegistrySearch(editor.store.registry, '').map(({ entry }) => entry) : [];
 	const kindEntryList = editor.store && !editor.store.isStructureFixed && !isActionOnly ? nodeRegistrySearch(editor.store.registry, queryWords).map(({ entry }) => entry) : [];
 	const sourceEntryListOf = isBefore => source.groupList.filter(group => Boolean(group.source.isBeforeKinds) === isBefore).flatMap(group => group.entryList);
-	const entryList = kindEntryList;
+	// the components of the page a card may hold (a registry with the card-comp kind:
+	// card-diagram-impl.md#a-component-in-a-card), each one an entry adding a card holding it; listed
+	// once something is typed, as the objects are, and named by their word in the slash mode
+	const isCompOffered = Boolean(editor.store && !editor.store.isStructureFixed && !isActionOnly && editor.store.registry?.kindByType[CARD_COMP_TYPE]);
+	const compEntryAllList = useMemo(() => (isCompOffered ? cardCompEntryListBuild({ compById: stores?.compById, configDoc: stores?.sourceStore?.configDoc }) : []).map(compEntry => ({
+		id: `comp:${compEntry.compName}`, label: compEntry.label, description: compEntry.description, icon: compEntry.icon, compEntry, slashName: compEntry.slashName,
+		source: { choose: (entry, position, editorGiven) => editorGiven.change(() => editorGiven.store.nodeCompAdd(entry.compEntry, position)) },
+	})), [isCompOffered, stores?.compById, stores?.sourceStore?.configDoc]);
+	const compEntryList = queryWords.trim() ? compEntryAllList.filter(entry => cardCompEntryMatch(entry.compEntry, queryWords)) : [];
+	const entryList = [...kindEntryList, ...compEntryList];
 	const option = editor.store && !editor.store.isStructureFixed && !isActionOnly ? objectSearchOptionGet(editor.store) : { isEnabled: false, typeList: [] };
 	const session = objectService?.searchSessionGet && option.isEnabled ? objectService.searchSessionGet(sessionKey, { typeList: option.typeList, fetchMax: 20 }) : undefined;
 	const hitList = session && queryWords.trim() ? session.hitList : [];
@@ -141,15 +153,15 @@ export const DiagramCreatePanel = observer(function DiagramCreatePanel({ positio
 	const slashActionList = useMemo(() => {
 		const nameSet = new Set();
 		const list = [];
-		const entryAllList = [...actionList.filter(action => !action.isDisabled).map(action => ({ ...action, id: `action:${action.id}`, action })), ...kindAllList];
+		const entryAllList = [...actionList.filter(action => !action.isDisabled).map(action => ({ ...action, id: `action:${action.id}`, action })), ...kindAllList, ...compEntryAllList];
 		for (const entry of entryAllList) {
-			const name = String(entry.action ? entry.action.id : entry.id).replace(/^tool:/, '').replace(/[^A-Za-z0-9_-]+/g, '-').replace(/^[^A-Za-z]+/, '');
+			const name = String(entry.slashName ?? (entry.action ? entry.action.id : entry.id)).replace(/^tool:/, '').replace(/[^A-Za-z0-9_-]+/g, '-').replace(/^[^A-Za-z]+/, '');
 			if (!name || nameSet.has(name)) continue;
 			nameSet.add(name);
 			list.push(slashActionDefine({ name, label: entry.label, description: entry.description ?? '', icon: entry.icon, run: () => { setTimeout(() => chooseRef.current(entry)); return slashEffect.replace(''); } }));
 		}
 		return list;
-	}, [actionList, kindAllList.map(entry => entry.id).join(' ')]); // eslint-disable-line react-hooks/exhaustive-deps
+	}, [actionList, kindAllList.map(entry => entry.id).join(' '), compEntryAllList]); // eslint-disable-line react-hooks/exhaustive-deps
 	const slash = useEditSlashConfig({ actionList: slashActionList, context: {} });
 	const highlightList = (session?.result?.tokenList ?? []).map(token => token.valueLower).filter(Boolean);
 	const wordList = queryWords.toLowerCase().split(/\s+/).filter(Boolean);

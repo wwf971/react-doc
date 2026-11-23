@@ -8,12 +8,12 @@ import { useCanvasWheelGuard } from '../card-diagram/CanvasWheelGuard.js';
 import { CanvasStill, useCanvasStill } from '../card-diagram/CanvasStill.jsx';
 import { DiagramSearchBar, useDiagramSearchHost } from '../card-diagram/DiagramSearchView.jsx';
 import { DiagramCreatePanel } from '../card-diagram/DiagramCreatePanel.jsx';
-import { usePopupCornerOffset } from '../card-diagram/DiagramPopupPlace.js';
+import { AnchoredPopover } from '../../../../main/comp-doc/popup/AnchoredPopover.jsx';
 import { DiagramPinLayer } from '../card-diagram/DiagramPinLayer.jsx';
 import '../card-diagram/DiagramVisualEdit.css';
 import { diagramCanvasLineListGet, diagramCanvasRegister } from '../card-diagram/DiagramCanvasRegistry.js';
 import '../card-diagram/DiagramER.css';
-import { SwitchContext, SwitchStaticScene, pathPointAt } from './SwitchStatic.jsx';
+import { SwitchContext, SwitchStaticScene, pathLabelPointAt } from './SwitchStatic.jsx';
 import { SWITCH_ZOOM_MAX, SWITCH_ZOOM_MIN, switchEdgeHoverStyleBuild, switchPresentationBuild } from './SwitchData.js';
 
 // The one React Flow canvas of a switching viewport: the nodes of the scene shown, or
@@ -74,7 +74,7 @@ const SwitchEdge = observer(function SwitchEdge(props) {
 	const hoverProps = { onPointerEnter: () => isPointerOnSet(true), onPointerLeave: () => isPointerOnSet(false), onFocus: () => isPointerOnSet(true), onBlur: () => isPointerOnSet(false) };
 	const isPathNeeded = hasLabel || isHovered;
 	const d = useMemo(() => (isPathNeeded ? connectionPathBuild(connection, props) : ''), [isPathNeeded, connection, props.sourceX, props.sourceY, props.targetX, props.targetY, props.sourcePosition, props.targetPosition]);
-	const point = useMemo(() => (hasLabel && d ? pathPointAt(d, connection.label.position) : null), [hasLabel, d, connection.label.position]);
+	const point = useMemo(() => (hasLabel && d ? pathLabelPointAt(d, connection.label) : null), [hasLabel, d, connection.label.position, connection.label.distance]); // eslint-disable-line react-hooks/exhaustive-deps
 	const hoverStyle = isHovered ? switchEdgeHoverStyleBuild(connection.style) : null;
 	const labelHoverClass = isHovered ? ' is-line-hovered' : '';
 	// React Flow marks a line as not panning the canvas, for dragging its ends; here it takes the
@@ -214,7 +214,6 @@ const SwitchFlow = observer(function SwitchFlow({ store, children }) {
 const SwitchCommandPanel = observer(function SwitchCommandPanel({ store }) {
 	const { command } = store;
 	const rootRef = useRef(null);
-	const offset = usePopupCornerOffset(rootRef, element => element.parentElement?.getBoundingClientRect() ?? null, command ? `${command.point.x}:${command.point.y}:${command.target.kind}` : '');
 	// what a command is given as editor: no diagram being edited, the scene it is done in (go: to another;
 	// edit: that scene, or this one, edited in place once it is shown)
 	const editor = useMemo(() => ({ store: null, createClose: () => store.commandClose(), createChoose: () => store.commandClose(),
@@ -228,10 +227,15 @@ const SwitchCommandPanel = observer(function SwitchCommandPanel({ store }) {
 			},
 		} }), [store]);
 	if (!command) return null;
+	// the point is a pixel of the viewport; the panel stands in the top layer with a corner on it, so
+	// near an edge of the viewport it reaches beyond it (AnchoredPopover, placement 'corner')
+	const key = `${command.path}:${command.target.kind}:${command.point.x}:${command.point.y}`;
 	return (
-		<div ref={rootRef} className="doc-switch-command nodrag nopan" style={{ left: command.point.x, top: command.point.y, transform: `translate(${offset.x}px, ${offset.y}px)` }}>
-			<DiagramCreatePanel key={`${command.path}:${command.target.kind}:${command.point.x}:${command.point.y}`} position={command.target.position} editor={editor} actionList={command.list} actionIdInitial={command.actionId || undefined}
-				heading={command.heading ?? ''} placeholder={command.placeholder ?? 'What to do'} ariaLabel={command.heading || 'What can be done here'} />
+		<div ref={rootRef} className="doc-switch-command nodrag nopan" style={{ left: command.point.x, top: command.point.y }}>
+			<AnchoredPopover key={key} anchorRef={rootRef} placement="corner" isShownFirst className="doc-vis-create-popover">
+				<DiagramCreatePanel key={key} position={command.target.position} editor={editor} actionList={command.list} actionIdInitial={command.actionId || undefined}
+					heading={command.heading ?? ''} placeholder={command.placeholder ?? 'What to do'} ariaLabel={command.heading || 'What can be done here'} />
+			</AnchoredPopover>
 		</div>
 	);
 });

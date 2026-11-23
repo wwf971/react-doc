@@ -276,8 +276,9 @@ export const DiagramVisualEdit = observer(function DiagramVisualEdit({ data, con
 		undo: ({ isFromControl = false } = {}) => { change(() => { if (store.undo() && isFromControl) focusRoot(); }); },
 		redo: ({ isFromControl = false } = {}) => { change(() => { if (store.redo() && isFromControl) focusRoot(); }); },
 		// where the edit card stands: beside the principal of the path as a
-		// whole (the node on the canvas, the standalone card, the middle of a
-		// line), never beside the row or the cell within it
+		// whole (the node on the canvas, the standalone card, the label of a
+		// line, or the box of its ends when it has none), never beside the row
+		// or the cell within it
 		anchorRectGet: () => {
 			const display = store.display;
 			if (!display) return null;
@@ -344,18 +345,20 @@ export const DiagramVisualEdit = observer(function DiagramVisualEdit({ data, con
 				store.interactionSet({ ...interaction, isDone: true });
 			}
 		},
-		connectEnd: state => {
+		// pointer: where it was let go, in units of the canvas (state.to is in pixels of the pane)
+		connectEnd: (state, pointer) => {
 			const interaction = store.interaction;
 			if (!interaction || interaction.type === 'reconnect') return;
+			const at = pointer ?? state?.to;
 			// let go where nothing takes it (no handle under the pointer): the host may take it, a search of
 			// what to join it to at that place (config.connectEmpty, card-diagram-impl.md#a-line-let-go-where-nothing-takes-it)
 			const isLetGo = state?.to && !state.toHandle && !(interaction.type === 'detach' && interaction.isDone);
 			if (isLetGo && config.connectEmpty && !isLocked) {
 				const from = { nodeId: interaction.fromNodeId, handleId: interaction.fromHandleId };
-				const isTaken = config.connectEmpty({ from, position: state.to, ...(interaction.type === 'detach' ? { connectionId: interaction.connectionId, role: interaction.role } : {}) }, editor);
+				const isTaken = config.connectEmpty({ from, position: at, ...(interaction.type === 'detach' ? { connectionId: interaction.connectionId, role: interaction.role } : {}) }, editor);
 				if (isTaken) { store.interactionSet(null); return; }
 			}
-			if (interaction.type === 'detach' && !interaction.isDone && state?.to) endFreeSet(interaction.connectionId, interaction.role, state.to);
+			if (interaction.type === 'detach' && !interaction.isDone && state?.to) endFreeSet(interaction.connectionId, interaction.role, at);
 			store.interactionSet(null);
 		},
 		// an end of a line dragged by its anchor: React Flow names the handle
@@ -376,10 +379,10 @@ export const DiagramVisualEdit = observer(function DiagramVisualEdit({ data, con
 			if (role) change(() => store.connectionEndpointSet(interaction.connectionId, role, drop));
 			store.interactionSet({ ...interaction, isDone: true });
 		},
-		reconnectEnd: (edge, handleType, state) => {
+		reconnectEnd: (edge, handleType, state, pointer) => {
 			const interaction = store.interaction;
 			if (interaction?.type !== 'reconnect') return;
-			if (!interaction.isDone && state?.to) endFreeSet(interaction.connectionId, interaction.role, state.to);
+			if (!interaction.isDone && state?.to) endFreeSet(interaction.connectionId, interaction.role, pointer ?? state.to);
 			store.interactionSet(null);
 		},
 		nodeDragStart: node => { store.interactionSet({ type: 'nodeDrag', nodeId: node.id }); },

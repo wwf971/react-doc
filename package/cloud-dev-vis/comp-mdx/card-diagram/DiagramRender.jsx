@@ -1,13 +1,13 @@
 import { createContext, useCallback, useContext, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { observer } from 'mobx-react-lite';
-import { BaseEdge, Handle, Position, ViewportPortal, getBezierPath, getSmoothStepPath, getStraightPath, useUpdateNodeInternals, useViewport } from '@xyflow/react';
+import { BaseEdge, Handle, Position, ViewportPortal, getBezierPath, getSmoothStepPath, getStraightPath, useUpdateNodeInternals } from '@xyflow/react';
 import { RegisteredComp } from '../../../../main/comp-doc/registry/RegisteredComp.jsx';
 import { DiagramCreatePanel } from './DiagramCreatePanel.jsx';
 import { cardSchemaGet } from './TableCardSchema.js';
 import { endpointIsDangling, handleAnchorDrawnOf } from './DiagramERData.js';
-import { routeIsEmpty, routeResolve, routeTypeHasAnchors } from './DiagramRoute.js';
+import { labelLengthOf, routeIsEmpty, routeResolve, routeTypeHasAnchors } from './DiagramRoute.js';
 import { DiagramRouteControls } from './DiagramRouteControls.jsx';
-import { usePopupCornerOffset } from './DiagramPopupPlace.js';
+import { AnchoredPopover } from '../../../../main/comp-doc/popup/AnchoredPopover.jsx';
 import { CardSimple } from './CardSimple.jsx';
 import { anchorPointOnOutline } from './CardSimpleData.js';
 import { CARD_FOOTER_ANCHOR } from './TableCardSchema.js';
@@ -184,23 +184,27 @@ export const DiagramPointNode = observer(function DiagramPointNode({ data }) {
 	</div>;
 });
 
-// the temporary node of the create panel, at the canvas position that was
-// double-clicked; drawn at screen scale whatever the zoom, with a corner of it on that position:
-// turned about it to stay inside the canvas (DiagramPopupPlace.js)
+// the temporary node of the create panel, at the canvas position that was double-clicked (or
+// where a line was let go): the node is that point, and the panel stands in the top layer with a
+// corner of it on the point (AnchoredPopover, placement 'corner'), at the scale of the screen
+// whatever the zoom, following the point while the canvas moves. **It is not clipped by the
+// canvas**: near an edge of the viewport it reaches beyond it, turned about the point only at
+// the edge of the window. The node keeps a size of a pixel: React Flow hides a node it has not
+// measured, and the panel would inherit that
 export const DiagramCreateNode = observer(function DiagramCreateNode({ data }) {
 	const { editor, config } = useContext(DiagramRenderContext);
-	const { zoom } = useViewport();
 	const rootRef = useRef(null);
-	const offset = usePopupCornerOffset(rootRef, element => element.closest('.react-flow')?.getBoundingClientRect() ?? null, `${data.position.x}:${data.position.y}`);
 	if (!editor) return null;
 	// the panel of a thing (a right-click on a node or a line: create.target) lists what can be
 	// done with it, the actions of the host and of the features, and nothing to add
 	const target = editor.store.create?.target;
 	const isOfThing = Boolean(target) && target.kind !== 'canvas';
-	return <div ref={rootRef} className="doc-vis-create nodrag nopan nowheel" style={{ transform: `scale(${1 / zoom}) translate(${offset.x}px, ${offset.y}px)`, transformOrigin: 'top left' }}>
+	return <div ref={rootRef} className="doc-vis-create nodrag nopan nowheel" style={{ width: 1, height: 1 }}>
+		<AnchoredPopover key={`${data.position.x}:${data.position.y}`} anchorRef={rootRef} placement="corner" isTracked isShownFirst className="doc-vis-create-popover">
 		<DiagramCreatePanel position={data.position} editor={editor} objectService={config?.object} sessionKey={`diagram-create:${config?.instanceId ?? 'diagram'}`} sourceList={isOfThing ? undefined : config?.createSourceList} actionList={editor.createActionListGet?.(target) ?? config?.createActionList} actionIdInitial={editor.store.create?.actionId} actionParam={editor.store.create?.param}
 			textTake={isOfThing ? undefined : editor.createTextGet?.(target)}
 			isActionOnly={isOfThing} {...(isOfThing ? { heading: target.label ?? 'Actions', placeholder: 'What to do with it', ariaLabel: 'Actions' } : {})} />
+		</AnchoredPopover>
 	</div>;
 });
 
@@ -243,12 +247,12 @@ export const DiagramEdge = observer(function DiagramEdge(props) {
 	useLayoutEffect(() => {
 		if (!pathRef.current) return;
 		const length = pathRef.current.getTotalLength();
-		const point = pathRef.current.getPointAtLength(length * connection.label.position);
+		const point = pathRef.current.getPointAtLength(labelLengthOf(length, connection.label));
 		labelPointSet({ x: point.x, y: point.y });
 		// the edit card stands at the middle of the two ends, not of the path: a
 		// change of the route does not move it (the card never moves under the author)
 		edgeGeometry?.set(props.id, { sourceX: props.sourceX, sourceY: props.sourceY, targetX: props.targetX, targetY: props.targetY, sourcePosition: props.sourcePosition, targetPosition: props.targetPosition, midX: (props.sourceX + props.targetX) / 2, midY: (props.sourceY + props.targetY) / 2, d: pathValue });
-	}, [pathValue, connection.label.position, props.id, edgeGeometry]);
+	}, [pathValue, connection.label.position, connection.label.distance, props.id, edgeGeometry]);
 	const ends = ['source', 'target'].filter(role => endpointIsDangling(connection[role])).map(role => (
 		<circle key={role} className="doc-vis-edge-end" cx={role === 'source' ? props.sourceX : props.targetX} cy={role === 'source' ? props.sourceY : props.targetY} r={4} />
 	));

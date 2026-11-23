@@ -1095,6 +1095,17 @@ body:has(.doc-block-popup .doc-vis-edit) .prop-editor-color-popover {
 /* its line height is its own: inherited, it was the height of a line of the document around the
    canvas (28px), which made every row of the panel on the canvas taller than the same panel opened
    elsewhere (portaled to the body, 1.5) */
+/* the panel of a double-click, of a right-click, of a line let go, in the top layer (AnchoredPopover,
+   placement 'corner': not clipped by the canvas). The popover is only where the panel stands: none of
+   the box a browser gives a popover, and the shadow of the panel not cut */
+.doc-anchored-popover.doc-vis-create-popover {
+	padding: 0;
+	border: 0;
+	background: transparent;
+	overflow: visible;
+	max-height: none;
+}
+
 .doc-vis-create-panel {
 	box-sizing: border-box;
 	width: 300px;

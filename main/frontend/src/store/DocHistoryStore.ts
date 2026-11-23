@@ -49,6 +49,10 @@ export class DocHistoryStore {
   eventRouter: { publish: (request: any) => Promise<any> } | undefined;
   // the element of the page the author was last at (a pointer down, a focus)
   targetElement: Element | undefined = undefined;
+  // the block (else the edit body) that element was in: the place of the author
+  // once the element itself has left the page (a button that closed what it was
+  // part of, as the Save of a card does)
+  targetPlaceElement: Element | undefined = undefined;
   // the step being written, for the spinner of its button (a failure is said by
   // whoever asked: the notice of the page, DocHistoryButtons and the keys alike)
   stepState: { path: string; direction: HistoryDirection } | undefined = undefined;
@@ -68,6 +72,7 @@ export class DocHistoryStore {
       docStore: false,
       eventRouter: false,
       targetElement: false,
+      targetPlaceElement: false,
       // kept as given: a step clears the state it set, by identity
       stepState: observable.ref,
       stepQueue: false,
@@ -81,7 +86,11 @@ export class DocHistoryStore {
   init() {
     if (typeof document === 'undefined' || this.listenerDispose) return;
     const targetSet = (event: Event) => {
-      if (event.target instanceof Element) this.targetElement = event.target;
+      if (!(event.target instanceof Element)) return;
+      this.targetElement = event.target;
+      this.targetPlaceElement = event.target.closest('.doc-edit-block[data-block-index]')
+        ?? event.target.closest('.doc-edit-body[data-edit-path]')
+        ?? undefined;
     };
     document.addEventListener('pointerdown', targetSet, true);
     document.addEventListener('focusin', targetSet, true);
@@ -114,11 +123,12 @@ export class DocHistoryStore {
   }
 
   // where the author is now: the element with the focus, else the one last
-  // pointed at, else the document of the page
+  // pointed at (its block when it has left the page), else the document of the page
   placeCurrentGet(): HistoryPlace {
     const active = typeof document !== 'undefined' ? document.activeElement : undefined;
     const place = (active && active !== document.body ? this.placeOfElement(active) : undefined)
-      ?? this.placeOfElement(this.targetElement);
+      ?? this.placeOfElement(this.targetElement)
+      ?? this.placeOfElement(this.targetPlaceElement);
     return place ?? { path: this.docStore.docCurrentPath };
   }
 
