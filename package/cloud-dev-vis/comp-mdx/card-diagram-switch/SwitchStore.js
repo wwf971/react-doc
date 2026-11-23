@@ -3,7 +3,7 @@ import { makeAutoObservable, observable, runInAction } from 'mobx';
 import { applyNodeChanges } from '@xyflow/react';
 import { yamlParse } from '../../../../main/frontend/src/lib/yaml.js';
 import { DiagramERStore } from '../card-diagram/DiagramERStore.js';
-import { diagramNormalize, diagramPlacesGet, diagramPositionsGet } from '../card-diagram/DiagramERData.js';
+import { diagramNormalize, diagramPlacesGet, diagramPositionsGet, nodeSizePlacedOf } from '../card-diagram/DiagramERData.js';
 import { diagramSceneSearch } from '../card-diagram/DiagramSearch.js';
 import { DiagramSearchStore } from '../card-diagram/DiagramSearchStore.js';
 import {
@@ -417,10 +417,12 @@ export class SwitchStore {
 		// a background around other nodes is as large as they make it
 		if (node.around) return this.entryPlacesGet(entry).sizeById.get(node.id) ?? { width: 1, height: 1 };
 		const measured = entry.canvas.measurements[node.id];
-		return {
+		const size = {
 			width: node.size.width === 'auto' ? measured?.width ?? node.sizeDefault.width : node.size.width,
 			height: node.size.height === 'auto' ? measured?.height ?? node.sizeDefault.height : node.size.height,
 		};
+		// a node a placer of the diagram sizes (a feature of the registry: diagramPlacesGet)
+		return entry.canvas.graph?.layout.placerList?.length ? nodeSizePlacedOf(size, this.entryPlacesGet(entry).sizeById.get(node.id)) : size;
 	}
 
 	entryPlacesGet(entry) {

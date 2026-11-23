@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { parse as yamlParse } from 'yaml';
 import { commentPropsParse } from '../src/lib/remark-comment-comp.js';
+import { sourceEntryTextRead } from './doc-source-access.ts';
 import { docTargetResolve, sourceIndexBuild } from '../src/lib/doc-target-resolve.js';
 
 // Build-time collection of the files components name (an Image src, the
@@ -148,14 +149,15 @@ export function docAttachmentsCollect(
   };
 
   for (const doc of docEntryList) {
-    const extension = path.extname(doc.absPath).toLowerCase();
+    // a managed document is named by its path, not by the file holding it (doc-source-access.ts)
+    const extension = path.extname((doc as any).managed ? (doc as any).name : doc.absPath).toLowerCase();
     if (extension !== '.md' && extension !== '.mdx') {
       // a binary file of the manifest (an image of a referenced folder) is
       // reached through its url, so its bytes are collected
       if (attachmentExtIsBinary(extension.slice(1))) attachmentAdd(doc.absPath, doc.internalPath);
       continue;
     }
-    const text = textExpand(fs.readFileSync(doc.absPath, 'utf-8'));
+    const text = textExpand(sourceEntryTextRead(doc as any));
     const context = { configDoc, doc, text };
 
     for (const finder of finderList) {

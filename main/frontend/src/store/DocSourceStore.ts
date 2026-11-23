@@ -12,6 +12,7 @@ import {
   sourcePathIsRooted,
   sourcePathNameGet,
   sourcePathNormalize,
+  sourcePathRootGet,
 } from '../lib/doc-source-path.js';
 import { multiLangSearchDataGet } from '../../../../built-in/comp-mdx/multi-lang/MultiLangSearchData.js';
 
@@ -47,6 +48,9 @@ export type FileEntry = {
   // (doc_page_impl_source.md#documents-registered-by-an-object): who registered it
   // ({ providerId, ref: the object, key: the document in the object's own terms })
   owner?: { providerId: string; ref: string; key: string };
+  // a managed document of a virtual root (doc_page_impl_doc_managed.md): the page keeps it, in
+  // the mode (text | block) and the form (plain | pack) its root says; read and written as a file is
+  managed?: { docId: string; rootAlias: string; mode: 'text' | 'block'; storage: 'plain' | 'pack'; timeUpdated: string };
 };
 
 // what a document provider registers: its entries, and the object roots they lie in with the
@@ -63,6 +67,8 @@ export type DirEntry = {
   relPath: string;
   internalPath: string;
   collect: SourceCollectMode;
+  // a folder of a virtual root: a folder of no disk, kept by the page (doc_page_impl_doc_managed.md)
+  isManaged?: boolean;
 };
 
 export type SourceData = {
@@ -876,7 +882,9 @@ export class DocSourceStore {
     return this.sourceApiCall('/refresh', { method: 'POST' });
   }
 
-  private async sourceApiCall(route: string, init: RequestInit): Promise<SourceResult> {
+  // a route of the source api, answered { code, data?, message }: the layers built on the source
+  // (managed documents, relocation) call it
+  async sourceApiCall(route: string, init: RequestInit): Promise<SourceResult> {
     let payload: any;
     try {
       const response = await fetch(`${this.sourceEndpoint}${route}`, { ...init, cache: 'no-store' });
@@ -889,6 +897,22 @@ export class DocSourceStore {
     }
     if (payload.code !== 0) return { code: payload.code, message: payload.message };
     return { code: 0, data: payload.data, message: '' };
+  }
+
+  // the roots of the doc pages that are virtual roots of managed documents
+  // (doc_page_impl_doc_managed.md): their full source paths (~page:root)
+  get rootManagedPathSet(): Set<string> {
+    const set = new Set<string>();
+    for (const docPage of this.docPageList as any[]) {
+      for (const root of docPage.rootList ?? []) if (root.kind === 'managed') set.add(`~${docPage.alias}:${root.alias}`);
+    }
+    return set;
+  }
+
+  // the path (a file or a folder, full form) lies in a virtual root
+  pathIsManaged(pathFull: string): boolean {
+    const rootPath = sourcePathRootGet(pathFull);
+    return Boolean(rootPath) && this.rootManagedPathSet.has(rootPath);
   }
 
   // the source path a file of the folder would have

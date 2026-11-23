@@ -360,7 +360,8 @@ export class DiagramEditStore {
 
 	interactionSet(interaction) { this.interaction = interaction; }
 	// option.actionId: the panel opens in the state of that action of the host (DiagramCreatePanel.jsx)
-	createOpen(position, { actionId } = {}) { this.create = { position, actionId }; this.cell = null; }
+	// target: what the panel is of, when it is of a thing ({ kind: node | line | canvas, ... }: a right-click)
+	createOpen(position, { actionId, target } = {}) { this.create = { position, actionId, ...(target ? { target } : {}) }; this.cell = null; }
 	createClose() { this.create = null; }
 
 	// ---------- cells ----------
@@ -414,6 +415,34 @@ export class DiagramEditStore {
 			path.push(field);
 			if (isDelete) documentNext.deleteIn(path);
 			else documentNext.setIn(path, value);
+		}, { groupKey });
+	}
+
+	// a value inside the data of a node, by its path there (['itemList', 2, 'text']): for what a card
+	// draws that is no field of a schema (the labels of a color block). value undefined takes it away
+	// (an item of a list: the list closes up); a path one past the end of a list adds to it. Validated
+	// by the kind like every change, as one step (groupKey: a text being typed)
+	nodeDataSet(nodeId, keyPath, value, { groupKey = null } = {}) {
+		if (this.isStructureFixed) return false;
+		return this.changeApply((documentNext) => {
+			const path = [...this.nodePathGet(nodeId), 'data', ...keyPath];
+			if (value === undefined) { if (documentNext.hasIn(path)) documentNext.deleteIn(path); }
+			else documentNext.setIn(path, value !== null && typeof value === 'object' ? documentNext.createNode(value) : value);
+		}, { groupKey });
+	}
+
+	// a key of the style of a node (DiagramNodeStyle.js: fill, stroke): a color, or undefined for the
+	// look of its kind; an empty style goes. A key its kind does not draw is refused by the
+	// validation, naming the node. groupKey: a color being picked (a drag of the picker is one step)
+	nodeStyleSet(nodeId, key, value, { groupKey = null } = {}) {
+		if (this.isStructureFixed || !this.nodeGet(nodeId)) return false;
+		return this.changeApply((documentNext) => {
+			const path = [...this.nodePathGet(nodeId), 'style'];
+			if (value === undefined || value === null || value === '') {
+				if (documentNext.hasIn([...path, key])) documentNext.deleteIn([...path, key]);
+				const style = documentNext.getIn(path);
+				if (style && style.items?.length === 0) documentNext.deleteIn(path);
+			} else documentNext.setIn([...path, key], value);
 		}, { groupKey });
 	}
 
@@ -910,16 +939,22 @@ export class DiagramEditStore {
 		return this.changeApply(documentNext => documentNext.setIn([...this.nodePathGet(nodeId), 'position'], { x: Math.round(position.x), y: Math.round(position.y) }));
 	}
 
-	// a node resized by its corners: its box, as one step. the kinds that are drawn
-	// to a size (the bounding box of a view) ask for this; a size below the minimum
-	// of the kind is refused by the validation of the draft
-	nodeResize(nodeId, { x, y, width, height }) {
+	// a node resized by its resize handles (DiagramResizeHandles.jsx): its new box, as one step.
+	// axisList: what of the size is written (a node as high as its content keeps its height auto);
+	// isMoved: the place is written only when it moved (a left or top edge), so a node placed by the
+	// layout stays so; a node locked in place takes no move. A size below the minimum of the kind is
+	// refused by the validation of the draft
+	nodeResize(nodeId, { x, y, width, height, isMoved = true, axisList = ['width', 'height'] }) {
 		const node = this.nodeGet(nodeId);
 		if (!node) return false;
-		return this.changeApply(documentNext => {
+		if (isMoved && node.isPositionLocked) {
+			this.message = `${nodeId} is locked in place: resize it from its right or bottom edge.`;
+			return false;
+		}
+		return this.changeApply((documentNext) => {
 			const path = this.nodePathGet(nodeId);
-			documentNext.setIn([...path, 'position'], { x: Math.round(x), y: Math.round(y) });
-			documentNext.setIn([...path, 'size'], { width: Math.round(width), height: Math.round(height) });
+			if (isMoved) documentNext.setIn([...path, 'position'], documentNext.createNode({ x: Math.round(x), y: Math.round(y) }));
+			for (const axis of axisList) documentNext.setIn([...path, 'size', axis], Math.round(axis === 'width' ? width : height));
 		});
 	}
 
@@ -964,10 +999,11 @@ export class DiagramEditStore {
 	// strokeDash (a preset name), markerStart, markerEnd, isAnimated. the
 	// typed and dragged values (the label, the color picker, the width) are
 	// grouped in the history; a picked one is a step of its own
-	connectionSet(connectionId, field, value) {
+	// option.groupKey: the drag of a color picker (a color picked from a swatch is a step of its own)
+	connectionSet(connectionId, field, value, option = {}) {
 		const index = this.connections.findIndex(connection => connection.id === connectionId);
 		if (index < 0) return false;
-		const groupKey = ['label', 'stroke', 'strokeWidth'].includes(field) ? `connection:${connectionId}/${field}` : null;
+		const groupKey = ['label', 'strokeWidth'].includes(field) ? `connection:${connectionId}/${field}` : option.groupKey ?? null;
 		return this.changeApply(documentNext => {
 			const path = ['connections', index];
 			switch (field) {

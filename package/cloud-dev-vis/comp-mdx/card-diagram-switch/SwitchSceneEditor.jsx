@@ -63,6 +63,9 @@ export const SwitchSceneEditor = observer(function SwitchSceneEditor({ store, co
 		onEditRest: () => store.sceneEditRest(),
 		viewInitial: session?.camera ?? undefined, onViewChange: (view) => store.sceneEditCameraSet(view),
 		createSourceList: edit?.createSourceList, createActionList: edit?.createActionList, sourcePath: key, blockIndex: 0, instanceId: key, height: store.box?.height ?? 600,
+		// the feature layers the scene offers while it is edited (edit.featureList: a scene only partly
+		// made from data may offer the parametric canvas; one made again from data at each change does not)
+		featureList: edit?.featureList ?? [],
 	}), [config, edit, editScope, session, sceneEdit?.status, sceneEdit?.message, sceneEdit?.select, key, store]);
 	const onEvent = useCallback(async (name, payload) => {
 		if (name === 'editDraftChange') store.sceneEditDirtySet(payload?.isDirty);

@@ -362,15 +362,19 @@ test('the typing in a cell is one step, a cell restored with Escape leaves none,
 	assert.equal(store.fieldSet('table', 'email', 'key', 'PK'), true);
 	assert.equal(store.fieldSet('table', 'email', 'key', 'FK'), true);
 	assert.equal(store.history.length, 2);
-	// a typed field of the edit card groups until the path moves elsewhere
+	// a typed field of the edit card groups until the path moves elsewhere; a color dragged in a
+	// picker groups under the key of its picking, a color picked from a swatch is a step of its own
 	assert.equal(store.connectionSet('link', 'label', 'p'), true);
 	assert.equal(store.connectionSet('link', 'label', 'pl'), true);
-	assert.equal(store.connectionSet('link', 'stroke', '#000000'), true);
-	assert.equal(store.connectionSet('link', 'stroke', '#111111'), true);
+	assert.equal(store.connectionSet('link', 'stroke', '#000000', { groupKey: 'color:pick-1' }), true);
+	assert.equal(store.connectionSet('link', 'stroke', '#111111', { groupKey: 'color:pick-1' }), true);
 	assert.equal(store.history.length, 4);
 	store.selectConnection('link');
-	assert.equal(store.connectionSet('link', 'stroke', '#222222'), true);
-	assert.equal(store.history.length, 5);
+	assert.equal(store.connectionSet('link', 'stroke', '#2563eb'), true);
+	assert.equal(store.connectionSet('link', 'stroke', '#dc2626'), true);
+	assert.equal(store.history.length, 6);
+	assert.equal(store.undo(), true);
+	assert.equal(store.connectionGet('link').style.stroke, '#2563eb');
 	assert.equal(store.undo(), true);
 	assert.equal(store.connectionGet('link').style.stroke, '#111111');
 	assert.equal(store.undo(), true);

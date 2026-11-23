@@ -6,9 +6,10 @@
 // and resource cards). A node type without a schema is not a card.
 //
 //   property   { id, label, kind: 'text' | 'enum' | 'bool' | 'number', values?, valueLabels?, valuesKey?,
-//                valueLabelsKey?, valueTones?, isMultiline?, isSearchable?, isReadOnly?, placeholder? }
+//                valueLabelsKey?, valueTones?, isMultiline?, isSearchable?, isReadOnly?, placeholder?, valueDefault? }
 //              placeholder: what a text left empty says in its field of the edit card (the value
-//              that holds while none is typed)
+//              that holds while none is typed); valueDefault: the value a choice not written reads as,
+//              so its menu names what holds rather than none
 //              valuesKey: the key of a row holding the values that row can take, where they
 //              differ from row to row; valueLabelsKey: the key of a row holding words of its
 //              own for some values; valueTones: { value: tone }, the color a value is written

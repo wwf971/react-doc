@@ -8,6 +8,7 @@ import { useCanvasWheelGuard } from '../card-diagram/CanvasWheelGuard.js';
 import { CanvasStill, useCanvasStill } from '../card-diagram/CanvasStill.jsx';
 import { DiagramSearchBar, useDiagramSearchHost } from '../card-diagram/DiagramSearchView.jsx';
 import { DiagramCreatePanel } from '../card-diagram/DiagramCreatePanel.jsx';
+import { usePopupCornerOffset } from '../card-diagram/DiagramPopupPlace.js';
 import { DiagramPinLayer } from '../card-diagram/DiagramPinLayer.jsx';
 import '../card-diagram/DiagramVisualEdit.css';
 import { diagramCanvasLineListGet, diagramCanvasRegister } from '../card-diagram/DiagramCanvasRegistry.js';
@@ -201,12 +202,12 @@ const SwitchFlow = observer(function SwitchFlow({ store, children }) {
 
 // the panel of the commands open: the panel a double-click opens on a canvas being edited
 // (DiagramCreatePanel), with no diagram being edited: the commands are its actions, some asking
-// for what they need state by state. It stands where the pointer was, kept inside the canvas
-const COMMAND_PANEL_WIDTH = 300;
-// as tall as the panel can be (its list scrolls past 14rem): it stands that far above the bottom at most
-const COMMAND_PANEL_HEIGHT = 320;
+// for what they need state by state. A corner of it stands where the pointer was, the one that
+// keeps it inside the canvas (DiagramPopupPlace.js)
 const SwitchCommandPanel = observer(function SwitchCommandPanel({ store }) {
-	const { command, box } = store;
+	const { command } = store;
+	const rootRef = useRef(null);
+	const offset = usePopupCornerOffset(rootRef, element => element.parentElement?.getBoundingClientRect() ?? null, command ? `${command.point.x}:${command.point.y}:${command.target.kind}` : '');
 	// what a command is given as editor: no diagram being edited, the scene it is done in (go: to another;
 	// edit: that scene, or this one, edited in place once it is shown)
 	const editor = useMemo(() => ({ store: null, createClose: () => store.commandClose(), createChoose: () => store.commandClose(),
@@ -220,10 +221,8 @@ const SwitchCommandPanel = observer(function SwitchCommandPanel({ store }) {
 			},
 		} }), [store]);
 	if (!command) return null;
-	const left = Math.max(8, Math.min(command.point.x, (box?.width ?? 0) - COMMAND_PANEL_WIDTH - 8));
-	const top = Math.max(8, Math.min(command.point.y, (box?.height ?? 0) - COMMAND_PANEL_HEIGHT));
 	return (
-		<div className="doc-switch-command nodrag nopan" style={{ left, top }}>
+		<div ref={rootRef} className="doc-switch-command nodrag nopan" style={{ left: command.point.x, top: command.point.y, transform: `translate(${offset.x}px, ${offset.y}px)` }}>
 			<DiagramCreatePanel key={`${command.path}:${command.target.kind}:${command.point.x}:${command.point.y}`} position={command.target.position} editor={editor} actionList={command.list} actionIdInitial={command.actionId || undefined}
 				heading={command.heading ?? ''} placeholder={command.placeholder ?? 'What to do'} ariaLabel={command.heading || 'What can be done here'} />
 		</div>

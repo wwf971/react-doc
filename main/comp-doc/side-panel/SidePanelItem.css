@@ -348,6 +348,17 @@ body[data-side-panel-dragging] #nd-sidebar-mobile {
   height: 12px;
 }
 
+/* a document or a folder of a virtual root (doc_page_impl_doc_managed.md): the glyphs of
+   managed documents in their tint, at the same place and size as the plain ones */
+.doc-side-panel-item .doc-managed-glyph {
+  color: var(--doc-managed-color);
+}
+
+.doc-side-panel-item-generated:has(.doc-managed-glyph),
+.doc-side-panel-item-source-folder:has(.doc-managed-glyph) {
+  opacity: 0.9;
+}
+
 .doc-side-panel-item-edit-button[data-status='error'] {
   color: var(--color-fd-destructive, #dc2626);
 }

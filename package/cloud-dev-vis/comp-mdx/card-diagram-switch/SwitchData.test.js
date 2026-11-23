@@ -21,10 +21,12 @@ import { switchDependenciesCollect } from './SwitchSource.js';
 import { SwitchStaticScene } from './SwitchStatic.jsx';
 
 test('base color blocks validate bottom labels and stay behind ordinary cards', () => {
-	const data = { tone: 'blue', itemList: [{ id: 'db', icon: 'database', text: 'Source' }, { id: 'note', text: 'PW' }] };
+	const data = { tone: 'blue', itemList: [{ id: 'db', text: '{{icon:database}} Source' }, { id: 'note', text: 'PW' }] };
 	assert.equal(colorBlockNormalize(data), data);
 	assert.throws(() => colorBlockNormalize({ itemList: [{ id: 'same', text: 'One' }, { id: 'same', text: 'Two' }] }), /unique/);
-	assert.throws(() => colorBlockNormalize({ itemList: [{ id: 'bad', icon: 'unknown' }] }), /icon/);
+	// an icon kept apart (the form before the cell edit layer) is refused with the text to write
+	assert.throws(() => colorBlockNormalize({ itemList: [{ id: 'old', icon: 'database', text: 'Source' }] }), /text: '\{\{icon:database\}\} Source'/);
+	assert.throws(() => colorBlockNormalize({ itemList: [{ id: 'empty', text: ' ' }] }), /needs a text/);
 	const block = { id: 'area', renderer: { type: 'color-block' }, position: { x: -20, y: -20 }, size: { width: 400, height: 300 }, data };
 	const card = { id: 'card', renderer: { type: 'card-note' }, data: { title: 'Foreground' } };
 	const registry = switchRegistryBuild(cardDiagramNodeRegistry);
@@ -34,6 +36,9 @@ test('base color blocks validate bottom labels and stay behind ordinary cards', 
 	assert.ok(nodes.find(node => node.id === 'area').zIndex < nodes.find(node => node.id === 'card').zIndex);
 	const html = renderToStaticMarkup(createElement(ColorBlock, { node: block }));
 	assert.match(html, /Source/);
+	// the icon token drawn as the icon, not as its text
+	assert.doesNotMatch(html, /\{\{icon/);
+	assert.match(html, /<svg[^>]*doc-card-icon-token/);
 	assert.match(html, /PW/);
 	assert.equal((html.match(/class="doc-color-block-label"/g) ?? []).length, 2);
 });

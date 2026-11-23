@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ChevronRight, FileIcon, FolderIcon, FolderOpenIcon, Minus, Pilcrow } from '../../frontend/UICommon.js';
+import { ChevronRight, FileBox, FileIcon, FolderCog, FolderIcon, FolderOpenIcon, Minus, Pilcrow } from '../../frontend/UICommon.js';
 import { sourceTreeSearch } from '../../frontend/src/lib/doc-source-complete.js';
 import './DocSource.css';
 
@@ -9,10 +9,12 @@ import './DocSource.css';
 // (the move picker) or a document with its blocks (the place picker of a
 // paste). It only shows and selects: what a selected node means is the caller's.
 //
-//   nodeList              [{ id, label, detail?, badge?, badgeKind?, kind?, isDisabled?, title?, insertMark?, childList? }]
+//   nodeList              [{ id, label, detail?, badge?, badgeKind?, kind?, isManaged?, isDisabled?, title?, insertMark?, childList? }]
 //                         kind picks the icon: dir | folder (a folder),
 //                         separator, block (a block of a document),
-//                         anything else a file. badge is a tag before the
+//                         anything else a file; isManaged: a folder or a
+//                         document of a virtual root (doc_page_impl_doc_managed.md),
+//                         drawn with the glyphs of managed documents. badge is a tag before the
 //                         label (the kind of a block: [Paragraph]), badgeKind
 //                         'component' colors it like a component's.
 //                         insertMark 'before' | 'after' draws a line on the
@@ -164,7 +166,7 @@ export function SourceTreeSelect({
             ) : (
               <span className="doc-source-tree-toggle" aria-hidden="true" />
             )}
-            <NodeIcon kind={node.kind} isExpanded={isExpanded} />
+            <NodeIcon kind={node.kind} isExpanded={isExpanded} isManaged={node.isManaged === true} />
             {node.badge ? <span className="doc-badge doc-source-tree-badge" data-kind={node.badgeKind || undefined}>{node.badge}</span> : null}
             <span className="doc-source-tree-label">
               <LabelMatched label={String(node.label ?? '')} matchList={node.labelMatchList} />
@@ -191,8 +193,14 @@ function LabelMatched({ label, matchList }) {
   return partList;
 }
 
-function NodeIcon({ kind, isExpanded }) {
+function NodeIcon({ kind, isExpanded, isManaged }) {
   const props = { 'aria-hidden': true, size: 12, strokeWidth: 1.8, className: 'doc-source-tree-icon' };
+  // a virtual root and what is in it: the page keeps it, in no folder of its own
+  if (isManaged) {
+    const propsManaged = { ...props, className: 'doc-source-tree-icon doc-managed-glyph' };
+    if (kind === 'dir' || kind === 'folder') return <FolderCog {...propsManaged} />;
+    return <FileBox {...propsManaged} />;
+  }
   if (kind === 'dir' || kind === 'folder') return isExpanded ? <FolderOpenIcon {...props} /> : <FolderIcon {...props} />;
   if (kind === 'separator') return <Minus {...props} />;
   if (kind === 'block') return <Pilcrow {...props} />;

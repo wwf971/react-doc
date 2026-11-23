@@ -19,6 +19,14 @@ export const cardDiagramMetaShared = {
 	isEditEnterButtonOnly: true,
 };
 
+// what a corner of a node drawn to a size does when it is dragged in the editor (DiagramResizeHandles.jsx):
+// keep the ratio of its box (Shift: reshape it freely), or the other way round. A key of every
+// diagram component, a reader's choice in the settings
+export const diagramResizeCornerDefine = {
+	key: 'DiagramResizeCorner', type: 'enum', valueList: ['ratio', 'free'], valueDefault: 'ratio', isUserSettable: true,
+	description: 'Dragging a corner of a node to resize it: ratio keeps the ratio of its box and Shift reshapes it freely; free reshapes it freely and Shift keeps the ratio. An edge always changes one dimension.',
+};
+
 // the mode list itself stays in DiagramEditStore.js, which tests load
 // without the page's icon set
 export const cardDiagramEditModeList = diagramEditModeList.map((mode) => ({ ...mode, icon: MousePointer2 }));
@@ -32,7 +40,8 @@ export function cardDiagramDefineOptionsBuild({ label, description, icon = Waypo
 		placementList: ['mdx', 'commentBlock'],
 		isAssetAware: true,
 		expose: {
-			meta: { ...cardDiagramMetaShared, label, description },
+			// the config keys of the features of its registry (node-registry.js: feature.configDefineList)
+			meta: { ...cardDiagramMetaShared, label, description, configDefineList: [diagramResizeCornerDefine, ...(registry?.featureList ?? []).flatMap(feature => feature.configDefineList ?? [])] },
 			icon,
 			editModeList: cardDiagramEditModeList,
 			sourceDefaultCreate,

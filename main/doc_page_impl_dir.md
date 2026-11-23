@@ -32,6 +32,7 @@ my-doc/                          the doc page folder: give this to a workspace f
     ├── playground/              templates (#local-content-kept-out-of-git)
     ├── type.yaml                the types it declares (optional: none otherwise; entry: type, a { file } or a list)
     ├── object-frontend.yaml     other folders for its frontend objects (optional)
+    ├── doc-managed.yaml         other folders for its virtual roots (optional: doc-managed/ below otherwise)
     │                            (and packageList of the entry: the packages it needs, by name)
     ├── service-backend.yaml     the config of the service backend, when the page is the one a backend is started for
     ├── dev/                     notes for whoever works on the doc page, never shown by it (#development-notes)
@@ -46,6 +47,8 @@ my-doc/                          the doc page folder: give this to a workspace f
     │   └── {id}--{name}/        object.yaml, and item/: the asset items of the object and their
     │                            item lists, in partitions git may keep out (ASCII only), each
     │                            held by a storage point (doc_page_impl_asset_storage.md)
+    ├── doc-managed/             its virtual roots of managed documents (#managed-documents)
+    │   └── {rootId}--{alias}/   root.yaml, and its documents flat beside it, named {docId}--{name}
     ├── comp-mdx/                its components: comp.yaml manifests and the modules they name
     │   ├── comp.yaml            the components at the top of the folder
     │   └── table/stock-table/   a group in a group: any folders, each may hold a comp.yaml
@@ -67,7 +70,7 @@ The source scan never enters `.doc-page/`, so a rule collecting the doc page fol
 
 A doc page laid out before the managed folders moved into `.doc-page/` (`comp-mdx/`, `asset/`, `service-*/` beside the documents) is not read the old way: the folder of the former name is reported once in the console with where it goes now, and either moved there or named in the config file of its kind.
 
-The three managed kinds follow one rule, **a convention with a config file over it**: the folder of the known name is used when nothing is said, the config file in `.doc-page/` names other or more folders, and the entry can name another config file (`asset: { file }`, `comp: { file }`, `service: { file }`) or say the doc page has none (`asset: false`, `comp: false`, `service: false`). More files of `.doc-page/` follow the same rule without a managed folder: the keyboard maps and the declared apis ([below](#keyboard-maps-and-declared-apis)), the exceptions of the frontend objects ([below](#frontend-objects)), the types ([below](#types)), and the storage points (`asset-storage.yaml`, `assetStorage: { file }` or `false`: [Declaring storage points](doc_page_impl_asset_storage.md#declaring-storage-points)).
+The three managed kinds follow one rule, **a convention with a config file over it**: the folder of the known name is used when nothing is said, the config file in `.doc-page/` names other or more folders, and the entry can name another config file (`asset: { file }`, `comp: { file }`, `service: { file }`) or say the doc page has none (`asset: false`, `comp: false`, `service: false`). More files of `.doc-page/` follow the same rule without a managed folder: the keyboard maps and the declared apis ([below](#keyboard-maps-and-declared-apis)), the exceptions of the frontend objects ([below](#frontend-objects)), the types ([below](#types)), and the storage points (`asset-storage.yaml`, `assetStorage: { file }` or `false`: [Declaring storage points](doc_page_impl_asset_storage.md#declaring-storage-points)). The virtual roots of managed documents follow it too: `doc-managed/` by convention, `doc-managed.yaml` naming other folders, `docManaged: { file }` or `false` ([below](#managed-documents)).
 
 ### Managed folders made when first used
 
@@ -85,6 +88,9 @@ the folder                           made by
 .doc-page/service-backup/            the local-backup infra service, at the first backup
 .doc-page/object-frontend/            the first frontend object created in the doc page (the Frontend
                                        objects tab, the insert menu): its folder, object.yaml, item/
+.doc-page/doc-managed/               the first virtual root made (the Managed documents tab, the api
+                                       source/managedRootCreate): its folder and root.yaml; a root
+                                       itself is its root.yaml, its documents come later
 ```
 
 The rule for anything that writes into a managed folder, now or later (a component or a template brought in from the page, say): **make the folder when writing the first item, never assume it exists, never make it ahead.** The rule for anything that reads one: **a missing folder is empty**, never an error. Since components and templates are put in by hand as often as by the page, the development server watches the metadata folder of every doc page, so a component folder that appears while it runs is mounted at once.
@@ -200,6 +206,21 @@ The folder **is** the object: nothing else names it, so copying it into the `.do
 **`.doc-page/object-frontend.yaml`** is there for the exceptions: other folders for the object folders (`folderList`, relative to the file; the first is where a new object goes), and objects without a folder of their own (`objectList [{ id, entry }]`), whose items lie in an asset folder of the doc page, gathered in a group folder `{id}--{name}`. The file is read when it exists; `objectFrontend: { file }` of the entry names another file, `objectFrontend: false` says the doc page has no frontend objects. It is written by a person and never collected as a document; a change of it, or of an `object.yaml`, is read again by the page without a reload, as `asset.yaml` is.
 
 The package and the workspace keep a keyboard map each, as one file named explicitly (`hotkey: { file }` of `config.yaml` and of the workspace file; for a workspace, by habit `hotkey.yaml` beside the workspace file in `.doc-workspace/`, [The workspace folder](#the-workspace-folder)).
+
+### Managed documents
+
+A doc page may keep some of its documents itself, in **virtual roots** ([Managed documents](doc_page_impl_doc_managed.md)). Each root is a folder of `.doc-page/doc-managed/`, and is a root of the doc page's source under its alias, so its documents are `~{alias}/{path}` like files; the folder is flat, the path of each document being in its record:
+
+```text
+.doc-page/doc-managed/
+└── {rootId}--{alias}/                 one root: what makes it one is root.yaml (rootId, alias, name,
+    ├── root.yaml                        mode, storage, dirList); copying the folder moves the root
+    ├── {docId}--{name}.doc.yaml       the plain form: a record, and the text (mode text) or its
+    ├── {docId}--{name}.md               blocks in yaml (mode block)
+    └── {docId}--{name}.rdoc           the pack form: one binary file per document
+```
+
+The folder names are ASCII, built by the store (the alias is one word; a document's name is the ASCII part of its file name). Like the folders of the asset store, a root's folder is never collected as files by a rule around it, nor reloads the page when it changes: its documents are read by the root's own rule (`addManaged`, added by the loader before the rules of the entry). `.doc-page/doc-managed.yaml` names other folders for the roots (`folderList`, relative to the file; the first is where a new root goes); `docManaged: { file }` of the entry names another file, `docManaged: false` says the doc page has none.
 
 ### Types
 
@@ -454,6 +475,7 @@ my-workspace/                    the workspace folder: config.yaml names it (wor
 | `plugin/doc-object-frontend.ts`, `src/lib/doc-object-frontend.js` | `OBJECT_FRONTEND_CONFIG_FILE_NAME` (`object-frontend.yaml`), `OBJECT_FRONTEND_FOLDER_NAME` (`object-frontend`), `OBJECT_FRONTEND_META_NAME` (`object.yaml`), `OBJECT_FRONTEND_ITEM_FOLDER_NAME` (`item`): the frontend objects of a doc page, and what its object folders hold |
 | `plugin/doc-type-config.ts` | `TYPE_CONFIG_FILE_NAME` (`type.yaml`): the types of a doc page, an object, a package |
 | `plugin/doc-asset-storage.ts` | `ASSET_STORAGE_CONFIG_FILE_NAME` (`asset-storage.yaml`): the storage points of a workspace and of a doc page; `ASSET_STORAGE_PARTITION_FILE_NAME` (`partition.yaml`): the storage point of a partition |
+| `plugin/doc-managed-store.ts` | `DOC_MANAGED_FOLDER_NAME` (`doc-managed`), `DOC_MANAGED_CONFIG_FILE_NAME` (`doc-managed.yaml`), `DOC_MANAGED_ROOT_FILE_NAME` (`root.yaml`), `docManagedFolderListGet`: the virtual roots of a doc page and what their folders hold |
 | `plugin/doc-asset-store.ts`, `plugin/doc-comp-config.ts`, `plugin/doc-service-server.ts` | the convention folders of the three managed kinds: `ASSET_FOLDER_DEFAULT_LIST`, `COMP_FOLDER_DEFAULT_LIST`, `SERVICE_FOLDER_DEFAULT_LIST`, all in `.doc-page/` |
 | `plugin/doc-source.ts` | `folderManagedIsLazyGet` (config `folderManaged`), `folderManagedListGet` (the managed folders of the loaded doc pages), `folderManagedEnsure` (made with `isLazy: false`) |
 | `frontend/cli/` | `react-doc`: the scaffold of each folder kind, serving a folder, the published package ([The command line](doc_page_impl_cli.md)) |

@@ -29,7 +29,7 @@
 	justify-content: center;
 	border: 1px solid color-mix(in srgb, var(--color-fd-foreground) 16%, var(--color-fd-border));
 	border-radius: 20%;
-	background: var(--doc-card-simple-tile, #fff);
+	background: var(--doc-node-fill, var(--doc-card-simple-tile, #fff));
 	box-shadow: 0 1px 2px rgb(15 23 42 / 6%);
 	color: var(--doc-card-accent);
 	transition: border-color 0.12s, box-shadow 0.12s;
@@ -48,7 +48,6 @@
 .doc-card-simple-cylinder-top { fill: color-mix(in srgb, var(--doc-card-accent) 10%, var(--doc-card-simple-tile, #fff)); stroke: color-mix(in srgb, var(--doc-card-accent) 55%, var(--color-fd-border)); stroke-width: 1.5; }
 .doc-card-simple.is-link { cursor: pointer; }
 /* selected in the editor: outlined around the mark and its words, as a card is */
-.doc-card-simple.is-selected { border-radius: 8px; outline: 2px solid #2563eb; outline-offset: 4px; }
 .doc-card-simple.is-link:hover .doc-card-simple-mark { border-color: var(--doc-card-accent); }
 .doc-diagram-static-node:has(> .doc-vis-node-content > .doc-card-simple.is-link) { cursor: pointer; }
 /* the anchor of a handle at the bottom: under the words, as wide as the mark */

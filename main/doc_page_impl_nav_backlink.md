@@ -1,8 +1,8 @@
-<!-- Design of backlinks: the link index of the workspace, the backlinks panel, and following a backlink to the reference itself. Parent document: doc_page_impl_nav.md -->
+<!-- Design of backlinks: the link index of the workspace, the backlinks panel, following a backlink to the reference itself, and relocation (a file moved with every reference to it). Parent document: doc_page_impl_nav.md -->
 
 # Backlinks: Design
 
-A link says where a document points; a **backlink** says who points at it. This document specifies how the page knows every reference every document writes (the **link index**), how it lists the references that reach the current document (the **backlinks panel** in the right column, beside the page headings and the part index), and how following one goes not to a document but to the very reference, marked and, when a component holds it out of sight, revealed. For navigation in general, refer to [Navigation design](doc_page_impl_nav.md); for how the page tells a component something, [Events delivered to components](doc_page_impl_event.md#events-delivered-to-components).
+A link says where a document points; a **backlink** says who points at it. This document specifies how the page knows every reference every document writes (the **link index**), how it lists the references that reach the current document (the **backlinks panel** in the right column, beside the page headings and the part index), how following one goes not to a document but to the very reference, marked and, when a component holds it out of sight, revealed, and how a file is moved or renamed with every reference to it kept (**relocation**). For navigation in general, refer to [Navigation design](doc_page_impl_nav.md); for how the page tells a component something, [Events delivered to components](doc_page_impl_event.md#events-delivered-to-components).
 
 ```text
 development server / build                        page
@@ -17,6 +17,10 @@ development server / build                        page
                               a reference ─► navigate with a  side-panel item: who links
                               focus ─► placeReveal to the     to the document
                               block ─► the link ringed
+
+  a file moved or renamed ─► relocation (doc-relocate.ts): the same index, resolved before and
+                             after the move ─► the references spelled anew, the side panels
+                             rebound ─► the move dialog shows the plan, then it is written
 ```
 
 ## The link index
@@ -52,7 +56,7 @@ The references are kept **as written, never resolved** on the server. Resolution
 
 **What is and is not in it.** Every reference the dependency scan finds: links, inline code naming a document, wiki links, images, inline source links, the targets a component's data names through its extractor (an `Index` item, the Markdown of a `BlockQA` answer or a `Block`, a `dataRef`), in `.md` and `.mdx` alike. A reference written in the data of a component has the component's block as its place and the component's name as its construct, since the data has lines of its own; its context is still read when the data is Markdown. Not in it: references inside asset items (a block whose data lives in the [asset service layer](doc_page_impl_asset.md) is a reference block, and the asset usage index is where items are tracked), side-panel inline items, and anything a component builds at run time. A document that cannot be parsed has an empty entry and a warning on the server.
 
-**Referrers.** The documents that reference a file, with a count each (`referrerListGet`), are a query on the same index. The removal dialog of a side-panel item ([Changing the structure](doc_page_impl_side_panel.md#changing-the-structure)) reads them from the page's own copy, at once, in place of the former request to the development server; a renaming of files from the page ([TODO](doc_page_impl_TODO.md#source-file-rename)) would read the same index on the server to find what to rewrite.
+**Referrers.** The documents that reference a file, with a count each (`referrerListGet`), are a query on the same index. The removal dialog of a side-panel item ([Changing the structure](doc_page_impl_side_panel.md#changing-the-structure)) reads them from the page's own copy, at once, in place of the former request to the development server; a move or a rename reads the same index on the server to find what to rewrite ([Relocation](#relocation)).
 
 ## The backlinks of a document
 
@@ -138,6 +142,59 @@ placeReveal  { kind: 'link', target, sourceLine, blockLine, subject: { sourcePat
 
 The page waits for the answers, then looks for the reference while the component re-renders. A component that ignores the event loses nothing but the reveal: the reference is still found when it is laid out, and when it stays hidden the page falls back to the heading. What a component should do with the event, and how it subscribes, is in [MDX components](doc_page_impl_mdx_comp.md#a-place-the-page-asks-to-see); `BlockQA` (unfolding the item whose question or answer holds the target) and `SwitchView` (selecting the view whose data holds it) are the demonstrations.
 
+## Relocation
+
+A reference names a file by a spelling (a relative path, a source path, a name), and a move changes what spellings reach it. **Relocation** is the one mechanism by which the page moves a file without breaking what refers to it: whatever the move is (a rename in its folder, another folder or root, a document made managed by a move into a virtual root or made a file again, a move inside a virtual root, [Managed documents](doc_page_impl_doc_managed.md)), it is planned and written the same way, by the development server, from the link index it already keeps. It belongs to this layer because what it rewrites is what the index knows, resolved the way the page resolves a link.
+
+```text
+plan (POST {source}/file/move/plan { moveList: [{ from, to }] }, nothing written)
+  -> the moves checked: a file of the source; a target free, in a folder a rule collects
+     (the extension kept), or in a virtual root (a document only); not read-only
+  -> the source as two indexes of the resolver of the page: as it is, as it will be
+  -> for every reference of the link index that resolved to a moved file, or is written in a
+     moved document:
+       resolved again from where its document will be, against the source as it will be
+       still the same file             -> left as it is ("b.md" still names one file)
+       another file, or none           -> spelled anew, in its own style, checked to reach the file
+       several files before (a name    -> left as it is, said in the plan
+         two documents have)
+  -> every document rewritten scanned again: its references must be the same, the rewritten
+     ones with their new spelling, else the document is left as it is and said so
+  -> the side panels and entries naming a moved document (doc:, homeDoc:) rewritten in place
+apply (POST {source}/file/move { moveList, planKey })
+  -> the plan made again; a key that differs (the source changed) answers -2 with the new plan
+  -> written: the documents that stay, the moves (with the moved documents' own rewrites),
+     the yaml files; a failure on the way puts back what was done
+  -> the edit history of a moved document follows it; the source reported once, as data
+```
+
+**A spelling keeps its style.** The new target is the first, in the order of the style it replaces, that reaches exactly the file from the place of its document, with its `#place` and `?query` kept:
+
+| written as | spelled anew as, the first that reaches the file |
+| --- | --- |
+| a full source path `~page:root/a.md` | the full source path |
+| a local source path `~root/a.md` | the local source path when the file stays in the doc page, else the full one |
+| a relative path `./a.md`, `../x/a.md` | the relative path when both are in one root, else the local, else the full source path |
+| a suffix `x/a.md` | the same number of segments of the new path, else the relative path, the local, the full one |
+| a name `a.md` | the new name, else the relative path, the local, the full one |
+| an inline source link (`kind: source`) | the full source path |
+
+A relative path written in a moved document is spelled anew also when it would still reach its file but no longer reads right (`../a.md` at the top of a root reaches `a.md`, since `..` never leaves a root): it becomes the path an author would write from the new place.
+
+**Where a reference is rewritten.** The index places a reference by its line (written in the document's own Markdown) or by its block (written in a component's data). The path is replaced where a reference can stand: after `(`, `<`, a backtick, `[`, a quote, `=`, `|`, or the `key:` / `- ` of yaml, and before `)`, `>`, a backtick, `]`, a quote, `#`, `?`, `|`, `,` or a space; on the line of the reference first, else in the root-level block holding it (`editTextModelBuild` gives its lines). A path written right after `(` that holds a space gets its brackets (`[x](<my notes/a.md>)`). Nothing is replaced in prose, and the scan of the rewritten text is the check that nothing else changed.
+
+**What is not rewritten**, and is said in the plan instead: a reference to several files, one not found where the index places it, a binding of a side panel written in a flow mapping (`{ doc: a.md }`). Neither are an asset version's dependencies on a moved file, a playground's document, nor references built at run time ([TODO](doc_page_impl_TODO.md#source-file-rename)).
+
+**In the page.** `DocRelocateStore` holds the dialog and `SourceRelocateDialog` draws it (`comp-doc/source/`): the folder (a `SourcePathPicker` of the folders, virtual roots marked) and the name, then what the move changes, read again a moment after the target changes: the document with its new path (and *managed* when it lands in a virtual root, with a line saying what becomes of it), the references spelled anew (unfolded: each document, line, old and new spelling), the bindings rewritten, what is left as it is. **Move** writes the plan shown; the page then follows the moved document when it was the one shown. It opens from the side panel (**Rename document…**, **Move document…** of an item showing a document), from the Managed documents tab, and by the api `source/moveDialogOpen`; `source/move` and `source/movePlan` do the same without it.
+
+```text
+plugin/doc-relocate.ts               relocatePlanBuild, relocateApply, lineTokenReplace: the plan, the spellings,
+                                     the rewriting, the moves of each kind and their undo
+plugin/doc-source.ts                 relocateRun: the context (entries, roots, link index, the yaml files of the
+                                     configuration) and the hooks (marks, configuration reload, history)
+plugin/doc-relocate.test.js          the plans and the writes on a doc page with a virtual root
+```
+
 ## Files
 
 ```text
@@ -154,6 +211,8 @@ frontend/src/store/DocStore.ts            tocContentMode, docCurrentFocus, navig
 frontend/src/lib/doc-destination-navigation.js   focusElementFind, focusBlockGet, navigationFocusSet
 frontend/src/lib/use-doc-destination-navigation.js  the focus applied: placeReveal, the lookup, the mark
 frontend/src/lib/remark-doc-link.js       the line of a link (isSourceLineEnabled)
+frontend/plugin/doc-relocate.ts           relocation: a file moved with its references (#relocation)
+frontend/src/store/DocRelocateStore.ts    the move dialog's state; comp-doc/source/SourceRelocateDialog.jsx draws it
 comp-doc/link/DocLink.jsx                 data-doc-link-target, data-doc-link-line
 comp-doc/toc/DocPageToc.jsx               the three-way control of the right column
 comp-doc/toc/BacklinkPanel.jsx, .css      the panel

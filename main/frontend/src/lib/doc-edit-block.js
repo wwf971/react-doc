@@ -2,7 +2,7 @@ import { createProcessor } from '@mdx-js/mdx';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import { commentMarkerParse } from './remark-comment-comp.js';
-import { splitFrontmatter } from './mdx-compile.js';
+import { splitFrontmatter } from './doc-frontmatter.js';
 import { listAnnotate, listDescribe, listModelBuild } from './doc-edit-list.js';
 import { anchorCompNameIs } from '../../../../built-in/comp-mdx/anchor/AnchorData.js';
 import { multiLangCompNameIs } from '../../../../built-in/comp-mdx/multi-lang/MultiLangData.js';

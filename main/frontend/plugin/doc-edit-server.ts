@@ -22,6 +22,7 @@ import { sidePanelTextOperationBuild } from './doc-side-panel-text.ts';
 import { yamlValueGet, yamlValueSetOperationBuild, yamlValueTextBuild } from './doc-yaml-edit.ts';
 import { workspaceEditBuild } from './doc-workspace-edit.ts';
 import { sourcePathLocalGet } from '../src/lib/doc-source-path.js';
+import { sourceEntryFileListGet, sourceEntryTextRead, sourceEntryTextWrite, type SourceEntryManaged } from './doc-source-access.ts';
 
 // Edit api of the development server. It exists only while `vite` serves the
 // page: a built page has no server behind it and shows no edit controls.
@@ -100,6 +101,8 @@ export type DocEditFileEntry = {
   absPath: string;
   ext: string;
   internalPath: string;
+  // a managed document (doc_page_impl_doc_managed.md): read and written through its store
+  managed?: SourceEntryManaged;
 };
 
 // the side-panel label route; absent when the page has no side-panel file
@@ -222,7 +225,7 @@ async function routeHandle(
       jsonSend(res, 404, { code: -3, data: null, message: `not an editable document of the source: ${internalPath}` });
       return;
     }
-    const text = fs.readFileSync(entry.absPath, 'utf-8');
+    const text = sourceEntryTextRead(entry);
     jsonSend(res, 200, { code: 0, data: { ...sourceDataBuild(entry, text), history: options.history?.summaryGet(internalPath) }, message: '' });
     return;
   }
@@ -258,7 +261,7 @@ async function routeHandle(
       jsonSend(res, 400, { code: -1, data: null, message: 'files are deleted with one deleteLines operation only (a block deletion)' });
       return;
     }
-    const textCurrent = fs.readFileSync(entry.absPath, 'utf-8');
+    const textCurrent = sourceEntryTextRead(entry);
     const hashCurrent = textHashGet(textCurrent);
     if (hashCurrent !== body.hashBase) {
       jsonSend(res, 409, {
@@ -279,7 +282,7 @@ async function routeHandle(
     }
     let fileMoveList: HistoryFileMove[] = [];
     if (filePathDeleteList.length === 0) {
-      fs.writeFileSync(entry.absPath, textNext, 'utf-8');
+      sourceEntryTextWrite(entry, textNext);
     } else {
       try {
         const fileList = sourceFileDeleteListResolve(filePathDeleteList, fileEntryListGet(), [entry.absPath]);
@@ -409,8 +412,8 @@ function docAccessGet(options: DocEditMiddlewareOptions, internalPath: string): 
   if (entry) {
     return {
       absPath: entry.absPath,
-      read: () => fs.readFileSync(entry.absPath, 'utf-8'),
-      write: (text: string) => fs.writeFileSync(entry.absPath, text, 'utf-8'),
+      read: () => sourceEntryTextRead(entry),
+      write: (text: string) => sourceEntryTextWrite(entry, text),
     };
   }
   return options.docProvidedFind?.(internalPath);
@@ -788,7 +791,8 @@ function sidePanelNodeRouteHandle(res: ServerResponse, body: any, options: DocEd
   const textAfter = result.data.text;
 
   // the file of the source, before the yaml
-  let fileCreated: { path: string; absPath: string } | undefined;
+  // the files of the document created (a managed document is several)
+  let fileCreated: { path: string; absPathList: string[] } | undefined;
   let movedList: SourceFileMoved[] = [];
   let pathDeletedList: string[] = [];
   if (fileCreate !== undefined && sourceFile) {
@@ -802,11 +806,11 @@ function sidePanelNodeRouteHandle(res: ServerResponse, body: any, options: DocEd
       jsonSend(res, created.code === -2 ? 409 : 400, { code: created.code, data: null, message: created.message });
       return;
     }
-    fileCreated = { path: created.data.path, absPath: created.data.entry.absPath };
-    sourceFile.pathListMark([fileCreated.absPath]);
+    fileCreated = { path: created.data.path, absPathList: sourceEntryFileListGet(created.data.entry) };
+    sourceFile.pathListMark(fileCreated.absPathList);
     // the node names the file it was created for
     if (sourcePathLocalGet(fileCreated.path) !== sourcePathLocalGet(docText)) {
-      fs.rmSync(fileCreated.absPath, { force: true });
+      for (const absPath of fileCreated.absPathList) fs.rmSync(absPath, { force: true });
       jsonSend(res, 400, { code: -1, data: null, message: `the node names ${docText}, the file was created as ${fileCreated.path}; nothing was kept` });
       return;
     }
@@ -816,7 +820,7 @@ function sidePanelNodeRouteHandle(res: ServerResponse, body: any, options: DocEd
       const fileList = sourceFileDeleteListResolve(filePathDeleteList, options.fileEntryListGet());
       sourceFile.pathListMark(fileList.map((item) => item.absPath));
       movedList = sourceFileBackupMove(fileList);
-      pathDeletedList = fileList.map((item) => item.internalPath);
+      pathDeletedList = [...new Set(fileList.map((item) => item.internalPath))];
       sourceFile.pathListMark(movedList.map((item) => item.backup));
     } catch (error: any) {
       if (!(error instanceof SourceFileDeleteRequestError)) throw error;
@@ -825,7 +829,7 @@ function sidePanelNodeRouteHandle(res: ServerResponse, body: any, options: DocEd
     }
   }
   const sourceFileRestore = () => {
-    if (fileCreated) fs.rmSync(fileCreated.absPath, { force: true });
+    if (fileCreated) for (const absPath of fileCreated.absPathList) fs.rmSync(absPath, { force: true });
     sourceFileBackupRestore(movedList);
   };
 
@@ -890,11 +894,11 @@ export function sourceFileDeleteApply(
   const fileList = sourceFileDeleteListResolve(filePathDeleteList, fileEntryList, [entry.absPath]);
   const movedList = sourceFileBackupMove(fileList);
   try {
-    fs.writeFileSync(entry.absPath, textNext, 'utf-8');
+    sourceEntryTextWrite(entry, textNext);
   } catch (error) {
     sourceFileBackupRestore(movedList);
     try {
-      if (fs.readFileSync(entry.absPath, 'utf-8') !== textCurrent) fs.writeFileSync(entry.absPath, textCurrent, 'utf-8');
+      if (sourceEntryTextRead(entry) !== textCurrent) sourceEntryTextWrite(entry, textCurrent);
     } catch {
       // the document could not be read or written back
     }

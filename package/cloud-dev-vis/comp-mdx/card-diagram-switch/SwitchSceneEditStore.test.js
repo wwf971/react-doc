@@ -51,3 +51,35 @@ test('a block of scenes is edited one diagram at a time, written back in place',
 test('a block it cannot edit says why', () => {
 	assert.match(new SwitchSceneEditStore('version: 2').message, /version: 1/);
 });
+
+test('a block of scenes offers the feature layers it names to every scene edited, and places their groups', async () => {
+	const { diagramNormalize, diagramPlacesGet } = await import('../card-diagram/DiagramERData.js');
+	const { cardDiagramNodeRegistry } = await import('../card-diagram/card-diagram-node-registry.js');
+	const { switchRegistryBuild } = await import('./SwitchNodeKinds.jsx');
+	const { switchDocNormalize } = await import('./SwitchData.js');
+	const withFeature = `version: 1
+featureList: [parametric-canvas]
+sceneList:
+  - path: /a
+    diagram:
+      nodes:
+        - { id: n, renderer: { type: card-note }, size: { width: 100, height: 40 }, data: { title: N } }
+        - { id: m, renderer: { type: shape }, size: { width: 60, height: 40 }, data: { shape: ellipse } }
+      parametric:
+        groupList:
+          - id: g
+            root: { x: 10, y: 20 }
+            memberList:
+              - { id: a, node: n }
+              - { id: b, node: m, parent: a, constraint: { type: beside, side: right, gap: 30 } }
+`;
+	const store = new SwitchSceneEditStore(withFeature);
+	assert.deepEqual(store.featureList, ['parametric-canvas']);
+	assert.deepEqual(new SwitchSceneEditStore(source).featureList, []);
+	assert.throws(() => switchDocNormalize(withFeature.replace('[parametric-canvas]', 'parametric-canvas')), /featureList is a list/);
+	// the scene is read with the registry of the switch layer, which keeps the features of its own
+	const registry = switchRegistryBuild(cardDiagramNodeRegistry);
+	const graph = diagramNormalize(yamlParse(store.textOf(store.target)), registry);
+	const places = diagramPlacesGet(graph.nodes, graph.layout, {});
+	assert.deepEqual(places.positions.get('m'), { x: 140, y: 20 });
+});

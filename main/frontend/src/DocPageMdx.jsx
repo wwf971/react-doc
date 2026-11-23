@@ -21,6 +21,8 @@ import { DocEditStructStore, structEventTypeList } from './store/DocEditStructSt
 import { DocHistoryStore, historyEventTypeList } from './store/DocHistoryStore.js';
 import { DocPanelLayoutStore } from './store/DocPanelLayoutStore.js';
 import { DocWorkspaceStore } from './store/DocWorkspaceStore.js';
+import { DocRelocateStore } from './store/DocRelocateStore.js';
+import { DocManagedStore } from './store/DocManagedStore.js';
 import { DocSlashStore } from './store/DocSlashStore.js';
 import { DocCellStore } from './store/DocCellStore.js';
 import { DocApiStore } from './store/DocApiStore.js';
@@ -55,6 +57,7 @@ import { DocEmbedPopup } from '../../comp-doc/popup/DocEmbedPopup.jsx';
 import { SourceFilePrompt } from '../../comp-doc/source/SourceFilePrompt.jsx';
 import { SidePanelMovePicker } from '../../comp-doc/side-panel/SidePanelMovePicker.jsx';
 import { SidePanelItemDialog } from '../../comp-doc/side-panel/SidePanelItemDialog.jsx';
+import { SourceRelocateDialog } from '../../comp-doc/source/SourceRelocateDialog.jsx';
 import { SidePanelDragOverlay } from '../../comp-doc/side-panel/SidePanelDragOverlay.jsx';
 import { SidePanelItemContextMenu } from '../../comp-doc/side-panel/SidePanelItemContextMenu.jsx';
 import { DocPastePopup } from '../../comp-doc/paste/DocPastePopup.jsx';
@@ -188,6 +191,10 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
     // the backlinks of the current document, from the link index that came
     // with the source data (doc_page_impl_nav_backlink.md)
     const linkStore = new DocLinkStore({ sourceStore, docStore });
+    // files moved or renamed with their references (doc_page_impl_nav_backlink.md#relocation),
+    // and the virtual roots of managed documents (doc_page_impl_doc_managed.md)
+    const relocateStore = new DocRelocateStore({ sourceStore, docStore });
+    const managedStore = new DocManagedStore({ sourceStore, relocateStore });
     // the config layers (doc_page_impl_config.md#config-layers): the package
     // default (read only), the doc page's declarations (written where the
     // environment offers editing), this browser's storage
@@ -375,6 +382,8 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
       workspaceStore,
       docStore,
       linkStore,
+      relocateStore,
+      managedStore,
       configStore,
       tagStore,
       compStateStore,
@@ -546,6 +555,7 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
               <SourceFilePrompt />
               <SidePanelMovePicker />
               <SidePanelItemDialog />
+              <SourceRelocateDialog />
               <SidePanelDragOverlay />
               <SidePanelItemContextMenu />
               <DocPastePopup />

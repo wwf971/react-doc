@@ -7,10 +7,14 @@ import { cardSchemaGet } from './TableCardSchema.js';
 import { endpointIsDangling, handleAnchorDrawnOf } from './DiagramERData.js';
 import { routeIsEmpty, routeResolve, routeTypeHasAnchors } from './DiagramRoute.js';
 import { DiagramRouteControls } from './DiagramRouteControls.jsx';
+import { usePopupCornerOffset } from './DiagramPopupPlace.js';
 import { CardSimple } from './CardSimple.jsx';
 import { anchorPointOnOutline } from './CardSimpleData.js';
 import { CARD_FOOTER_ANCHOR } from './TableCardSchema.js';
 import { cardFooterIsShown } from './TableCardData.js';
+import { nodeStyleVarsOf } from './DiagramNodeStyle.js';
+import { DiagramResizeHandles } from './DiagramResizeHandles.jsx';
+import { nodeResizeAxisListOf } from './DiagramNodeResize.js';
 
 // what every node and edge of a canvas shares: the component config, the
 // node registry of the component (registry, node-registry.js: the card of
@@ -111,15 +115,26 @@ export const DiagramNode = observer(function DiagramNode({ id, data }) {
 	}, [id, node, measurementSet]);
 	useLayoutEffect(() => { updateNodeInternals(id); }, [geometry, id, updateNodeInternals]);
 	const visualization = useMemo(() => ({ nodeId: id, size: node.size, isEdit: false, anchorRef }), [id, node.size, anchorRef]);
+	// a node a feature derives (a copy a repeat spawns) is drawn like its source and is nobody's to
+	// edit: its card gets no editor, and a click on it reaches the canvas, which focuses its source
+	const editorContent = node.isDerived ? undefined : editor;
 	const selection = editor?.store.selection;
 	const connectionSelected = selection?.nodeId === id && selection.connectionId ? editor.store.connectionGet(selection.connectionId) : undefined;
+	// the node is what is selected (not one of its lines): marked on its box, for every kind. A card
+	// that draws its own selection (a table, an operator, a label) keeps its own (DiagramVisualEdit.css)
+	const isSelectedWhole = Boolean(editor) && selection?.nodeId === id && !selection.connectionId;
 	const isConnectable = Boolean(editor) && !editor.isLocked;
+	// the node selected is resized by the handles on the frame of its selection, in what its box can
+	// change (DiagramNodeResize.js: the same rule for every node); not where the structure is given
+	const contract = registry?.kindByType[node.renderer?.type]?.contract;
+	const resizeAxisList = isSelectedWhole && !editor.isLocked && !editor.store.isStructureFixed ? nodeResizeAxisListOf(node, contract) : [];
 	return (
-		<div ref={root} className={`doc-vis-node${node.isBackground && !editor ? ' is-background' : ''}${node.size.height === 'auto' ? ' is-height-auto' : ''}`} data-search={searchMark.state ?? undefined} style={{ height: node.size.height === 'auto' ? 'auto' : '100%' }}>
-			<div className="doc-vis-node-content not-prose">
-				<DiagramNodeContent id={id} node={node} config={config} registry={registry} editor={editor} anchorRef={anchorRef} visualization={visualization} />
+		<div ref={root} className={`doc-vis-node${node.isBackground && !editor ? ' is-background' : ''}${node.size.height === 'auto' ? ' is-height-auto' : ''}${node.isDerived ? ' is-derived' : ''}`} data-search={searchMark.state ?? undefined} data-selected={isSelectedWhole ? '' : undefined} style={{ height: node.size.height === 'auto' ? 'auto' : '100%' }}>
+			<div className="doc-vis-node-content not-prose" style={nodeStyleVarsOf(node)}>
+				<DiagramNodeContent id={id} node={node} config={config} registry={registry} editor={editorContent} anchorRef={anchorRef} visualization={visualization} />
 			</div>
 			{geometry.missing.length ? <div className="doc-vis-node-error" role="alert">Missing anchors: {geometry.missing.join(', ')}</div> : null}
+			{resizeAxisList.length ? <DiagramResizeHandles nodeId={id} editor={editor} axisList={resizeAxisList} handleList={node.handles} sizeMin={contract?.sizeMin} cornerMode={config.compConfig?.DiagramResizeCorner} /> : null}
 			{node.handles.map(handle => geometry.handles.find(item => item.id === handle.id) ?? { ...handle, left: '50%', top: '50%', isHidden: true }).map(handle => {
 				const isSelected = Boolean(connectionSelected) && ['source', 'target'].some(role => !endpointIsDangling(connectionSelected[role]) && connectionSelected[role].nodeId === id && connectionSelected[role].handleId === handle.id);
 				const count = editor ? editor.store.handleConnectionListGet(id, handle.id).length : 0;
@@ -166,13 +181,22 @@ export const DiagramPointNode = observer(function DiagramPointNode({ data }) {
 });
 
 // the temporary node of the create panel, at the canvas position that was
-// double-clicked; drawn at screen scale whatever the zoom
+// double-clicked; drawn at screen scale whatever the zoom, with a corner of it on that position:
+// turned about it to stay inside the canvas (DiagramPopupPlace.js)
 export const DiagramCreateNode = observer(function DiagramCreateNode({ data }) {
 	const { editor, config } = useContext(DiagramRenderContext);
 	const { zoom } = useViewport();
+	const rootRef = useRef(null);
+	const offset = usePopupCornerOffset(rootRef, element => element.closest('.react-flow')?.getBoundingClientRect() ?? null, `${data.position.x}:${data.position.y}`);
 	if (!editor) return null;
-	return <div className="doc-vis-create nodrag nopan nowheel" style={{ transform: `scale(${1 / zoom})`, transformOrigin: 'top left' }}>
-		<DiagramCreatePanel position={data.position} editor={editor} objectService={config?.object} sessionKey={`diagram-create:${config?.instanceId ?? 'diagram'}`} sourceList={config?.createSourceList} actionList={config?.createActionList} actionIdInitial={editor.store.create?.actionId} />
+	// the panel of a thing (a right-click on a node or a line: create.target) lists what can be
+	// done with it, the actions of the host and of the features, and nothing to add
+	const target = editor.store.create?.target;
+	const isOfThing = Boolean(target) && target.kind !== 'canvas';
+	return <div ref={rootRef} className="doc-vis-create nodrag nopan nowheel" style={{ transform: `scale(${1 / zoom}) translate(${offset.x}px, ${offset.y}px)`, transformOrigin: 'top left' }}>
+		<DiagramCreatePanel position={data.position} editor={editor} objectService={config?.object} sessionKey={`diagram-create:${config?.instanceId ?? 'diagram'}`} sourceList={isOfThing ? undefined : config?.createSourceList} actionList={editor.createActionListGet?.(target) ?? config?.createActionList} actionIdInitial={editor.store.create?.actionId}
+			textTake={isOfThing ? undefined : editor.createTextGet?.(target)}
+			isActionOnly={isOfThing} {...(isOfThing ? { heading: target.label ?? 'Actions', placeholder: 'What to do with it', ariaLabel: 'Actions' } : {})} />
 	</div>;
 });
 

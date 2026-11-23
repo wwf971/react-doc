@@ -116,7 +116,7 @@ CellEdit  { cell, text, ... }     the text typed: tokens written out, in EditSou
 
 **One page, one menu, one switch.** The slash mode of a cell is the page's (`DocSlashStore`): the same menu, keys and effects as in a paragraph, and `EditSlashToggle` turns it off for cells too.
 
-**Nothing moves** when a cell opens ([the no-jitter rule](doc_page_impl_edit.md#in-place-editing-and-the-no-jitter-rule)): the surface stands in the box of the value, in its type; a token drawn inside a line never makes the line taller (a chip of the registry is drawn in the scale of the line in a cell); what exists only while editing floats.
+**Nothing moves** when a cell opens ([the no-jitter rule](doc_page_impl_edit.md#in-place-editing-and-the-no-jitter-rule), rule 9): the surface stands in the box of the value, in its type, at least as wide as the value was read (`CellField` measures it on the click: `field.widthRead`), and never at a width of its own, so a short value (two letters on a label) is not widened by opening it; only typing changes its size; a token drawn inside a line never makes the line taller (a chip of the registry is drawn in the scale of the line in a cell); what exists only while editing floats.
 
 ### A token selected: its card
 

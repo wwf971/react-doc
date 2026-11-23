@@ -3,8 +3,13 @@ import { yamlParse } from '../../../../main/frontend/src/lib/yaml.js';
 import { makeAutoObservable, observable } from 'mobx';
 import { diagramNormalize, diagramPlacesGet, viewportNormalize, endpointIsDangling, pointNodeIdBuild } from './DiagramERData.js';
 
-// the style of a background drawn around other nodes, from the size they make it (diagramPlacesGet)
-const aroundStyleOf = (size) => ({ width: size?.width ?? 1, height: size?.height ?? 1 });
+// the style of a node on the canvas: its size as written, or what places it says (sizePlaced: a
+// background drawn around other nodes, a node a placer sizes: diagramPlacesGet)
+function nodeStyleOf(node, sizePlaced) {
+	if (node.around) return { width: sizePlaced?.width ?? 1, height: sizePlaced?.height ?? 1 };
+	const height = sizePlaced?.height ?? (node.size.height === 'auto' ? undefined : node.size.height);
+	return { width: sizePlaced?.width ?? (node.isWidthFit ? 'max-content' : node.size.width === 'auto' ? node.sizeDefault.width : node.size.width), ...(height === undefined ? {} : { height }) };
+}
 
 const viewStates = new WeakMap();
 
@@ -37,6 +42,11 @@ class DiagramERStore {
 	viewport = viewportNormalize();
 	measurements = Object.create(null);
 	positionsTemporary = Object.create(null);
+	// what the placers of the diagram answered the last time its nodes were placed (Map placer id ->
+	// its answer: diagramPlacesGet), for whoever draws over the canvas; and the place of a node a
+	// placer places while it is dragged (Map id -> { x, y }), which what follows it follows
+	placed = new Map();
+	placeOverride = null;
 	nodeList = [];
 	edgeList = [];
 	loadState = { status: 'idle', message: '' };
@@ -50,7 +60,7 @@ class DiagramERStore {
 		// the graph, the measurements and the temporary positions are plain data:
 		// nothing renders from them, and the nodes handed to React Flow are
 		// built from the graph, so they must not be observable proxies
-		makeAutoObservable(this, { rendererResolve: false, registry: false, graph: observable.ref, viewport: observable.ref, measurements: false, positionsTemporary: false, nodeList: observable.shallow, edgeList: observable.shallow }, { autoBind: true });
+		makeAutoObservable(this, { rendererResolve: false, registry: false, graph: observable.ref, viewport: observable.ref, measurements: false, positionsTemporary: false, placed: observable.ref, placeOverride: false, nodeList: observable.shallow, edgeList: observable.shallow }, { autoBind: true });
 		this.sourceLoad(source);
 	}
 
@@ -61,6 +71,7 @@ class DiagramERStore {
 			this.measurements = Object.create(null);
 			this.positionsTemporary = Object.create(null);
 		}
+		this.placeOverride = null;
 		if (!this.source.trim()) {
 			this.graph = null;
 			this.nodeList = [];
@@ -76,7 +87,8 @@ class DiagramERStore {
 			const data = this.source.trimStart().startsWith('{') ? jsonOrYamlParse(this.source) : yamlParse(this.source);
 			this.graph = diagramNormalize(data, this.registry, this.rendererResolve, this.height);
 			this.viewport = this.graph.viewport;
-			const { positions, sizeById } = diagramPlacesGet(this.graph.nodes, this.graph.layout, this.measurements);
+			const { positions, sizeById, placedById } = diagramPlacesGet(this.graph.nodes, this.graph.layout, this.measurements);
+			this.placed = placedById;
 			const pointNodes = [];
 			const endpointNode = (connection, role) => {
 				const endpoint = connection[role];
@@ -112,12 +124,14 @@ class DiagramERStore {
 					// the canvas node would hide it
 					const { width: _width, height: _height, ...beforeWithoutSize } = before ?? {};
 					const isSizeAuthoredChanged = Boolean(before) && (before.data.node.size.width !== node.size.width || before.data.node.size.height !== node.size.height);
+					// a node a placer places is where the placer says, whatever a drag left
+					const isPlaced = this.nodeIsPlaced(node.id);
 					return {
 						...(isSizeAuthoredChanged ? beforeWithoutSize : before),
-						id: node.id, type: 'visualizationNode', position: before && !isPositionAuthoredChanged ? before.position : positions.get(node.id),
+						id: node.id, type: 'visualizationNode', position: before && !isPositionAuthoredChanged && !isPlaced ? before.position : positions.get(node.id),
 						zIndex: node.isBackground ? -1 : 0,
-						style: node.around ? aroundStyleOf(sizeById.get(node.id)) : { width: node.isWidthFit ? 'max-content' : node.size.width === 'auto' ? node.sizeDefault.width : node.size.width, ...(node.size.height === 'auto' ? {} : { height: node.size.height }) },
-						...(node.around ? { draggable: false } : {}),
+						style: nodeStyleOf(node, sizeById.get(node.id)),
+						...(node.around || node.isDerived ? { draggable: false } : {}),
 						data: { node },
 					};
 				}),
@@ -140,28 +154,59 @@ class DiagramERStore {
 		const changes = changeList.filter(change => change.type !== 'position' || !this.nodeList.find(node => node.id === change.id)?.data.node?.isPositionLocked);
 		if (!changes.length) return;
 		this.nodeList = applyNodeChanges(changes, this.nodeList.slice());
+		let isPlacedMoved = false;
 		for (const change of changes) {
-			if (change.type === 'position' && change.position) this.positionsTemporary[change.id] = { x: change.position.x, y: change.position.y };
+			if (change.type !== 'position' || !change.position) continue;
+			if (this.nodeIsPlaced(change.id)) {
+				// a node a placer places, dragged: what follows it follows it at once. the place is
+				// kept until the draft says where it goes (sourceLoad) or the drag is given up (placeOverrideClear)
+				(this.placeOverride ??= new Map()).set(change.id, { x: change.position.x, y: change.position.y });
+				isPlacedMoved = true;
+			} else this.positionsTemporary[change.id] = { x: change.position.x, y: change.position.y };
 		}
+		if (isPlacedMoved) this.placesApply();
+	}
+
+	nodeIsPlaced(id) {
+		return Boolean(this.graph?.layout.placerList?.some(placer => placer.isPlaced(id)));
+	}
+
+	// a place held while something a placer knows by a key of its own is dragged (the anchor of a
+	// group): what follows it follows it there, as for a node dragged
+	placeOverrideSet(key, position) {
+		(this.placeOverride ??= new Map()).set(key, { x: position.x, y: position.y });
+		this.placesApply();
+	}
+
+	// a dragged place given up: every node a placer places goes back where the placer says
+	placeOverrideClear() {
+		if (!this.placeOverride) return;
+		this.placeOverride = null;
+		this.placesApply();
 	}
 
 	measurementSet(id, size) {
 		const previous = this.measurements[id];
 		if (previous && Math.abs(previous.width - size.width) < 0.5 && Math.abs(previous.height - size.height) < 0.5) return;
 		this.measurements[id] = size;
+		this.placesApply();
+	}
+
+	// where every node is now (the automatic layout, the placers, the backgrounds around others),
+	// put on the canvas: a node whose place and size did not change keeps its identity
+	placesApply() {
 		if (!this.graph) return;
 		try {
 			const nodes = this.graph.nodes.map(node => this.positionsTemporary[node.id] ? { ...node, position: this.positionsTemporary[node.id] } : node);
-			const { positions, sizeById } = diagramPlacesGet(nodes, this.graph.layout, this.measurements);
-			// a node whose place did not change keeps its identity; a background around others
-			// follows their size too
+			const { positions, sizeById, placedById } = diagramPlacesGet(nodes, this.graph.layout, this.measurements, this.placeOverride);
+			this.placed = placedById;
 			this.nodeList = this.nodeList.map(node => {
 				if (node.type !== 'visualizationNode') return node;
 				const position = positions.get(node.id);
-				const size = sizeById.get(node.id);
-				const isSizeSame = !size || (node.style?.width === size.width && node.style?.height === size.height);
+				const style = sizeById.has(node.id) ? nodeStyleOf(node.data.node, sizeById.get(node.id)) : null;
+				const isSizeSame = !style || (node.style?.width === style.width && node.style?.height === style.height);
 				if (position && node.position?.x === position.x && node.position?.y === position.y && isSizeSame) return node;
-				return { ...node, ...(position ? { position } : {}), ...(isSizeSame ? {} : { style: aroundStyleOf(size) }) };
+				return { ...node, ...(position ? { position } : {}), ...(isSizeSame ? {} : { style }) };
 			});
 		} catch (error) {
 			this.loadState = { status: 'error', message: error.message };

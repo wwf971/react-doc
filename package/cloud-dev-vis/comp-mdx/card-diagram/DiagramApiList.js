@@ -111,7 +111,22 @@ export function diagramApiListBuild(registry) {
 		isAvailable: ({ stores }) => stores.editStore.isAvailable || stores.envStore.reasonGet('edit'),
 		run: (context, params) => diagramChange(context, params, registry, (store, endsGet, diagram) => command(store, params, endsGet, diagram)),
 	});
+	// an api reading the diagram: the draft of an open session, or the data of the block
+	const readApi = (options, read) => apiDefine({
+		palette: false,
+		...options,
+		paramList: [...options.paramList, blockParam, docParam],
+		run: async (context, params) => {
+			const diagram = await diagramLocate(context, params, registry);
+			if (diagram.message) return { code: -1, message: diagram.message };
+			return { blockIndex: diagram.index, ...read(diagram.store, params, diagram) };
+		},
+	});
+	// the apis of the features of the registry (node-registry.js: feature.apiListBuild), built on the
+	// same two: what a feature changes goes through the commands of its session, as in the editor
+	const featureApiList = (registry?.featureList ?? []).flatMap(feature => feature.apiListBuild?.({ changeApi, readApi }) ?? []);
 	return [
+		...featureApiList,
 		apiDefine({
 			name: 'connectionRouteGet',
 			label: 'Read the route of a connection line',

@@ -26,6 +26,10 @@ example_doc/.doc-page/asset.yaml.tmp
 main/config*.yaml.bak
 /.doc-workspace/*.yaml.bak
 **/.doc-page/*.yaml.bak
+# a virtual root of managed documents (main/doc_page_impl_doc_managed.md): the backup of its
+# root.yaml, a file being written (its deleted documents are hidden backups, ignored below)
+**/.doc-page/doc-managed/*/*.bak
+**/.doc-page/doc-managed/*/*.tmp
 
 
 # the state the service runtime kernel keeps beside a backend config file

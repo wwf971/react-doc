@@ -313,7 +313,24 @@ Entering edit mode, and entering the edit mode of a block, must not move anythin
 7. **The scroll position stays.** A change of height anywhere above the viewport's anchor moves the page by the browser's scroll anchoring, and a focus call scrolls the focused element into view: both read as a jump of the page when a block enters edit mode. So an editor sizes nothing differently from the view (rule 4), keeps its outer margins on the element that exists in both modes (the outer box of a `BlockPopupSurface`, never the editor's root inside the locked wrapper, where a margin cannot collapse and pushes the block down), and focuses with `preventScroll: true`. A block-like component measures this before reporting its edit mode done: the block's top and the scroll container's `scrollTop` are the same before and after entering ([Block-like components](doc_page_impl_mdx_comp_block.md)).
 8. **Leaving saves, Escape cancels.** An editor does not need its own saving moment; the draft it reports is saved when the session is left (see [Sessions](#sessions-leave-and-cancel)). The block shows its locked surface while the save is pending, and `DocEditStore.blockTextPending` keeps the saved text in the block until the document is recompiled, so the block never flashes back to its old content. The saved text is drawn by `BlockRender`, which compiles it; so that its old rendering is not shown while that compile runs (a formula just deleted would come back for a moment), the compile starts with the write: `operationApply` hands the text of every block it replaces to the page (`blockTextPrepare`, the option of the store), which compiles it into a cache the block reads at once (`lib/block-compile-cache.js`). The write takes longer than the compile of one block, so the editor closes onto the new text. An editor that consumes Escape for its own steps (the visual editor of the diagrams, [Asset-backed component drafts](#asset-backed-component-drafts)) stops its propagation and says so on its Cancel button (`EditActions` `titleCancel`), so Escape is not advertised as canceling the session there.
 
+9. **Opening a value to type it changes no size; typing may.** A value edited where it stands (a cell, a label on a canvas, a caption) opens at the box it had while read: never a minimum width, a padding or a border of its own that it did not have before. Only what the author types may make it grow, and shrink back to where it was. A field opened where nothing was read (a new item) takes the room of an empty value. In the [cell edit layer](doc_page_impl_edit_cell.md#drawing-and-typing) the field keeps the width it was read at (`widthRead`, measured on the click).
+
 The text editors (`TextBlockEdit`) and `ImageEdit` / `StockTableEdit` are the reference implementations. What a custom component must do to obey the rule is summarized for component authors in [MDX components](doc_page_impl_mdx_comp.md#text-blocks-and-edit-mode).
+
+## Floating button groups
+
+The few actions of a thing edited in place (a block, an item of a list, a row of a card, a label of a block on a canvas) stand in a **floating button group**: a row of icon buttons in one frame, beside or above the thing, taking no room in the flow (rule 6). One look for all of them, the shared `.doc-button-group` (`src/css/button.css`), and one component for whatever a component draws of its own: `EditButtonGroup` (`comp-doc/edit/EditButtonGroup.jsx`, exported by the package).
+
+```text
+<EditButtonGroup actionList grip? isLocked? className? ariaLabel? />
+  actionList  [{ id, Icon, title, isDisabled?, reason?, isDanger?, isPressed?, act(event) }]
+              greyed out, a button keeps its reason as its title; isDanger: it takes something away
+  grip        a handle dragged to move the thing among its siblings: { Icon, title, axis: x | y | xy,
+              indexFrom, rectListGet(), onPreview(insertion), onDrop(indexTo), isDisabled?, reason? }
+              xy: siblings that wrap, in the order of reading (editReorderInsertionOf)
+```
+
+The owner places the group (above the thing, or beside it; on a canvas it keeps its size on the screen, `scale(1 / zoom)`) and shows it while the thing is under the pointer or selected, never while its words are typed. A click on the group never reaches what lies under it. The toolbar of a block (`DocEditBlockToolbar`) and of a list item (`DocEditItemToolbar`) are the same look with menus and confirmations of their own; a row of a card (`CardToolbar` of the card diagrams) and a label of a color block are `EditButtonGroup`. **A component reaches for it before drawing a control group of its own**, and draws its own control only for what the group cannot say (a menu, a value typed).
 
 ## Component edit mode
 
@@ -571,9 +588,12 @@ The edit layer edits a document as root-level blocks, by line operations sent to
 
 ```text
 DocEditStore  ── sourceRead(path) / sourceApply(path, hashBase, operations) ──►  edit api
-                                                                                  ├─ a file of the source: read and written on disk
+                                                                                  ├─ an entry of the source: sourceEntryTextRead / Write
+                                                                                  │    a file: on disk; a managed document: its root's store
                                                                                   └─ docProvidedFind(path): read() and write(text) of its layer
 ```
+
+A **managed document** ([Managed documents](doc_page_impl_doc_managed.md)) is an entry of the source like a file, and nothing of the edit layer tells it apart: the server reads and writes its text through the one door of the source layer (`plugin/doc-source-access.ts`), which gives the text built from its blocks (mode block) or from its pack file, and writes the text back in its mode and form. Deleting it with a block, and its history, are as for a file.
 
 - **The server resolves the path.** `/source` and `/source/apply` look for a file entry first, then ask `docProvidedFind` of the middleware; for a document of a frontend object it is `objectFrontendDocFind`, which reads the head of the asset item and writes the new text into the item through the asset store (its save mode, its versions, its locks). The whole item is written for one block: the line operations are applied to its text on the server, as for a file.
 - **The page needs nothing more**: `docIsEditable(path)` is true for a registered Markdown document, and `docEditEnsure(path)` / `docEditActiveGet(path)` give its edit body. A component showing such a document renders `DocEditBody` for it while its own document is edited, in place of the reading body.

@@ -70,6 +70,7 @@ export {
 export { EditActions } from '../../comp-doc/edit/EditActions.jsx';
 export { EditFloatingPanel } from '../../comp-doc/edit/EditFloatingPanel.jsx';
 export { EditSourceSurface } from '../../comp-doc/edit/EditSourceSurface.jsx';
+export { EditButtonGroup, editReorderInsertionOf } from '../../comp-doc/edit/EditButtonGroup.jsx';
 export { EditValueInline } from '../../comp-doc/edit/EditValueInline.jsx';
 export { BlockRender } from '../../../built-in/comp-mdx/text/BlockRender.jsx';
 export { TextBlockEdit } from '../../../built-in/comp-mdx/text/TextBlockEdit.jsx';

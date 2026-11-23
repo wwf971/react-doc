@@ -73,6 +73,17 @@ sidePanelById:
       - doc: ~example/asset-store.md
         text: Asset Service Layer
         tags: [guide]
+      # documents the page keeps itself under virtual roots (.doc-page/doc-managed/,
+      # doc_page_impl_doc_managed.md), moved in and out with their references; the two
+      # roots of this doc page mirrored below it
+      - doc: ~example/doc-managed.md
+        text: Managed Documents
+        tags: [guide]
+        children:
+          - text: Notes
+            sourceRoot: notes
+          - text: Archive
+            sourceRoot: archive
       # stateful services run by the service backend, shown through dashboards
       - doc: ~example/service-instance.md
         text: Service Instances

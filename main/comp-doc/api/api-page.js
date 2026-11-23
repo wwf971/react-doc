@@ -7,7 +7,7 @@ import { apiInfoBuild, apiAvailabilityGet } from '../../frontend/src/lib/doc-api
 // apis and what keys exist), so a caller outside the page can find out
 // what it may call (doc_page_impl_api.md#remote-callers).
 
-const settingsTabList = ['config', 'compConfig', 'assetStore', 'service', 'workspace', 'api'];
+const settingsTabList = ['config', 'compConfig', 'assetStore', 'objectFrontend', 'docManaged', 'service', 'workspace', 'api'];
 
 export const apiByIdPage = {
   'page/contextGet': apiDefine({

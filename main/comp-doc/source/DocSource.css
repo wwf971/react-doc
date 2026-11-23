@@ -191,6 +191,11 @@
   color: var(--color-fd-muted-foreground);
 }
 
+/* a folder or a document of a virtual root (doc_page_impl_doc_managed.md) */
+.doc-source-tree-icon.doc-managed-glyph {
+  color: var(--doc-managed-color);
+}
+
 .doc-source-tree-label {
   flex: 0 1 auto;
   min-width: 0;
@@ -427,4 +432,146 @@
 .doc-source-path-warning[data-shown] {
   visibility: visible;
   cursor: help;
+}
+
+/* ---------- SourceRelocateDialog ----------
+   a move or a rename with its references (doc_page_impl_nav_backlink.md#relocation):
+   a .doc-popover-form with the rows of the location prompt, then what the move
+   changes, in small text. paths wrap at any character, so a long one never
+   widens the dialog */
+.doc-source-relocate {
+  width: min(28rem, calc(100vw - 16px));
+}
+
+.doc-source-relocate .doc-source-picker-label {
+  flex-basis: 3rem;
+}
+
+.doc-source-relocate .doc-source-picker-tree {
+  margin-inline-start: calc(3rem + 6px);
+  max-height: 14rem;
+}
+
+.doc-source-relocate-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.doc-source-relocate-head .doc-source-prompt-title {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+
+.doc-source-relocate-item {
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 400;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-fd-muted-foreground);
+}
+
+.doc-source-relocate-plan {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-height: 1.5rem;
+  margin-top: 2px;
+  padding: 4px 6px;
+  border: 1px solid var(--color-fd-border);
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--color-fd-muted) 45%, transparent);
+  font-size: 0.75rem;
+}
+
+.doc-source-relocate-plan p {
+  margin: 0;
+}
+
+.doc-source-relocate-heading {
+  color: var(--color-fd-muted-foreground);
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+
+.doc-source-relocate-line,
+.doc-source-relocate-list > li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 5px;
+  min-width: 0;
+}
+
+.doc-source-relocate-glyph {
+  flex: 0 0 auto;
+  align-self: center;
+  color: var(--color-fd-muted-foreground);
+}
+
+.doc-source-relocate-glyph.doc-managed-glyph {
+  color: var(--doc-managed-color);
+}
+
+.doc-source-relocate-path {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.doc-source-relocate-arrow {
+  flex: 0 0 auto;
+  align-self: center;
+  color: var(--color-fd-muted-foreground);
+}
+
+.doc-source-relocate-note,
+.doc-source-relocate-muted {
+  color: var(--color-fd-muted-foreground);
+}
+
+.doc-source-relocate-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  align-self: flex-start;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.doc-source-relocate-toggle:disabled {
+  cursor: default;
+  color: var(--color-fd-muted-foreground);
+}
+
+.doc-source-relocate-toggle:disabled .doc-source-tree-chevron {
+  visibility: hidden;
+}
+
+.doc-source-relocate-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 10rem;
+  margin: 0;
+  padding: 0 0 0 15px;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.doc-source-relocate-doc {
+  font-weight: 600;
+}
+
+.doc-source-relocate-problem > p {
+  color: #b45309;
+  font-weight: 600;
 }

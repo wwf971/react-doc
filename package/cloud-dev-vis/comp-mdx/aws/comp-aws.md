@@ -4,7 +4,7 @@ description: DiagramAws, DiagramAwsSwitch, DiagramAwsArchitecture and DiagramAws
 language: en
 ---
 
-`DiagramAws` is a [card diagram](../power-platform/comp-diagram-er.md) whose cards are the resources of AWS: the same `version: 1` graph of **nodes**, **handles** and **connections**, the same canvas, the same Visual and Source modes, the generic cards of the framework beside them (a page, a script, a note). `DiagramAwsSwitch` holds [many scenes in one viewport](../card-diagram-switch/comp-card-diagram-switch.md), written by hand; `DiagramAwsArchitecture` draws the same kind of scenes from a description of a system, from its groups down to the detail of one resource; `DiagramAwsResource` is one card outside a canvas. They are design documents: nothing is read from AWS or deployed. The design of the series is in [aws.md](../../doc/aws.md).
+`DiagramAws` is a [card diagram](../power-platform/comp-diagram-er.md) whose cards are the resources of AWS: the same `version: 1` graph of **nodes**, **handles** and **connections**, the same canvas, the same Visual and Source modes, the generic cards of the framework beside them (a page, a script, a note). `DiagramAwsSwitch` holds [many scenes in one viewport](../../doc/card-diagram-usage-flexible-switch.md), written by hand; `DiagramAwsArchitecture` draws the same kind of scenes from a description of a system, from its groups down to the detail of one resource; `DiagramAwsResource` is one card outside a canvas. They are design documents: nothing is read from AWS or deployed. The design of the series is in [aws.md](../../doc/aws.md).
 
 ## Which card for which resource
 
@@ -259,7 +259,7 @@ viewport:
 
 ## Two levels in one viewport
 
-`DiagramAwsSwitch` takes a `sceneList` ([Card Diagram Scenes](../card-diagram-switch/comp-card-diagram-switch.md)). Here one scene has two views with the same ids: the overview, drawn simple, and the resources as cards. Switch the view after the path: each card moves into its mark and back.
+`DiagramAwsSwitch` takes a `sceneList` ([Card Diagram Scenes](../../doc/card-diagram-usage-flexible-switch.md)). Here one scene has two views with the same ids: the overview, drawn simple, and the resources as cards. Switch the view after the path: each card moves into its mark and back.
 
 <!--renderComp=DiagramAwsSwitch,height=560,title=A system in two views-->
 ```yaml

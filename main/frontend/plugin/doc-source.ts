@@ -52,7 +52,21 @@ import {
   type DocSourceDependencyCollect,
 } from './doc-source-dependency.ts';
 import { DOC_EDIT_ENDPOINT_NAME, docEditMiddlewareCreate } from './doc-edit-server.ts';
-import { DocLinkIndexBuilder, type DocLinkIndex } from './doc-link-index.ts';
+import { DocEditHistory } from './doc-edit-history.ts';
+import { relocateApply, relocatePlanBuild, type RelocateContext } from './doc-relocate.ts';
+import { DocLinkIndexBuilder, documentReferenceListGet, type DocLinkIndex } from './doc-link-index.ts';
+import { sourceEntryBytesRead, sourceEntryFileListGet, sourceEntryTextRead, sourceEntryTextWrite, type SourceEntryManaged } from './doc-source-access.ts';
+import { docManagedDocListRead } from './doc-managed-store.ts';
+import {
+  type DocManagedRouteContext,
+  DOC_MANAGED_ROUTE_LIST,
+  docManagedDirRelPathListGet,
+  docManagedFileCreate,
+  docManagedFolderListOfConfigGet,
+  docManagedInfoBuild,
+  docManagedRootOfRuleRead,
+  docManagedRouteHandle,
+} from './doc-managed-source.ts';
 import { excludeMatcherBuild, type ExcludeMatcher } from './doc-source-exclude.ts';
 import { DOC_ASSET_ENDPOINT_NAME, docAssetMiddlewareCreate } from './doc-asset-server.ts';
 import { DOC_API_ENDPOINT_NAME, docApiBridgeCreate } from './doc-api-server.ts';
@@ -167,6 +181,8 @@ import { textLocalizedGet } from '../src/lib/text-localized.js';
 // configDoc.compRegistry over those of config.yaml.
 
 const MODULE_ID_DEFAULT = 'virtual:doc-source';
+// the text of one managed document in a build: a module of its own, named by its source path
+const DOC_MANAGED_TEXT_MODULE_PREFIX = 'virtual:doc-managed-text/';
 export const DOC_SOURCE_ENDPOINT_NAME = '__doc-source';
 // the page values of config.yaml, over those of the workspace and its first doc page
 const PAGE_VALUE_KEY_LIST = ['siteTitle', 'siteTitleShort', 'homeDoc', 'homeItem'];
@@ -229,6 +245,9 @@ export type FileEntry = {
   collect: SourceCollectMode; // 'referenced': part of the page only when used
   tagList?: any[]; // tags declared by source rules, see doc-tag-source.ts
   configSource?: Record<string, any>; // config declared by source rules, see doc-config-source.ts
+  // a managed document of a virtual root (doc_page_impl_doc_managed.md): absPath is the file
+  // holding its content, and its text is read through doc-source-access.ts
+  managed?: SourceEntryManaged;
 };
 
 // a folder of the source: the folder of an addFolder rule and (recursive,
@@ -241,6 +260,8 @@ export type DirEntry = {
   absPath: string;
   internalPath: string; // ~{docPageAlias}:{rootAlias} or ~{docPageAlias}:{rootAlias}/relPath
   collect: SourceCollectMode;
+  // a folder of a virtual root: it is no folder on disk (absPath is the folder of the root)
+  managed?: { rootDir: string };
 };
 
 // the folder or file of an add rule, as the source api resolves paths
@@ -258,7 +279,8 @@ export type SourceRoot = {
   absPath: string;
   // the folder of the root id, which source paths are relative to
   rootAbsPath: string;
-  kind: 'folder' | 'file';
+  // managed: a virtual root, its documents kept by the page (doc_page_impl_doc_managed.md)
+  kind: 'folder' | 'file' | 'managed';
   collect: SourceCollectMode;
 };
 
@@ -372,7 +394,7 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
         const configDoc = loadConfigDoc(configFile, options);
         const textList: string[] = [];
         for (const entry of scanSource(configDoc, configDir)) {
-          if (!attachmentExtIsBinary(entry.ext)) textList.push(fs.readFileSync(entry.absPath, 'utf-8'));
+          if (!attachmentExtIsBinary(entry.ext)) textList.push(sourceEntryTextRead(entry));
         }
         const assetStore = assetStoreGet(configDoc);
         for (const assetItem of Object.values<any>(assetStore?.snapshotBuild().itemById ?? {})) {
@@ -451,6 +473,7 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
     // here when its own folders do not hold them (doc_page_impl_cli.md#the-launch-layer)
     async resolveId(id, importer, resolveOptions) {
       if (id === moduleId) return moduleIdResolved;
+      if (id.startsWith(DOC_MANAGED_TEXT_MODULE_PREFIX)) return `\0${id}`;
       // a module of a package named by the package's name (doc_page_impl_package.md#imports-between-modules)
       const packageImport = docPackageImportRead(id);
       if (packageImport) {
@@ -472,6 +495,13 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
     },
 
     load(id) {
+      // the text of a managed document, for a build (generateModuleCode)
+      if (id.startsWith(`\0${DOC_MANAGED_TEXT_MODULE_PREFIX}`)) {
+        const internalPath = decodeURIComponent(id.slice(DOC_MANAGED_TEXT_MODULE_PREFIX.length + 1));
+        const entry = scanSource(loadConfigDoc(configFile, options), configDir).find((item) => item.internalPath === internalPath && item.managed);
+        if (!entry) this.error(`[doc-source] no managed document ${internalPath}`);
+        return `export default ${JSON.stringify(sourceEntryTextRead(entry!))};`;
+      }
       if (id !== moduleIdResolved) return;
       const configDoc = loadConfigDoc(configFile, options);
       const assetStore = assetStoreGet(configDoc);
@@ -540,7 +570,9 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
         const configDoc = loadConfigDoc(configFile, options);
         const entries = scanSource(configDoc, configDir);
         const entryChanged = entries.find((entry) => normalizeSlashPath(entry.absPath) === filePath);
-        if (!entryChanged) return;
+        // a managed document is told by the watcher of its root (configureServer), whatever file
+        // of it changed
+        if (!entryChanged || entryChanged.managed) return;
 
         // the cached initial manifest is stale now; a later page load gets
         // the current one. it is not an hmr root: the page is told by event.
@@ -650,9 +682,25 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
         fileEntryListGet,
         sourceRootListGet: () => sourceRootListGet(loadConfigDoc(configFile, options), configDir),
         readOnlyReasonGet,
-        onFileCreated: (filePath) => {
-          pathsChangedByPage.add(filePath);
+        onFileCreated: (filePathList) => {
+          for (const filePath of filePathList) pathsChangedByPage.add(filePath);
           configDataSend(loadConfigDoc(configFile, options));
+        },
+        managed: {
+          docPageListGet: () => loadConfigDoc(configFile, options).docEntry.docPageList,
+          entryGet: (internalPath) => fileEntryListGet().find((item) => item.internalPath === internalPath),
+          readOnlyReasonGet,
+          pathListMark: (absPathList) => {
+            for (const absPath of absPathList) pathsChangedByPage.add(absPath);
+          },
+          configurationReload: () => {
+            fileEntryListCached = undefined;
+            return configurationReload();
+          },
+        },
+        relocate: {
+          plan: (body) => relocateRun(body, false),
+          apply: (body) => relocateRun(body, true),
         },
         // a playground created, reset or deleted (doc_page_impl_test.md): the
         // source reported as data, so its item and its page follow without a reload
@@ -748,6 +796,36 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
         configDataSend(configDocUpdated);
         return '';
       };
+      // the edit history of the server (doc-edit-history.ts), shared with the relocation, whose
+      // moves carry the history of a moved document along
+      const editHistory = new DocEditHistory();
+      // a move or a rename with its references (doc-relocate.ts): planned, or applied
+      const relocateRun = (body: any, isApply: boolean): { code: number; data: any; message: string } => {
+        const configDocNow = loadConfigDoc(configFile, options);
+        const entryList = fileEntryListGet();
+        const collectByCompId = { ...collectByCompIdMount, ...options.sourceDependencyCollectByCompId };
+        const context: RelocateContext = {
+          configDir,
+          entryList,
+          rootList: sourceRootListGet(configDocNow, configDir),
+          linkIndex: linkIndexGet(configDocNow, entryList),
+          referenceListOfText: (text, entry) => documentReferenceListGet(text, entry, configDocNow, collectByCompId),
+          yamlFileList: relocateYamlFileListGet(configDocNow, configDir),
+          readOnlyReasonGet,
+        };
+        if (!isApply) return relocatePlanBuild(body?.moveList, context);
+        return relocateApply(body, context, {
+          pathListMark: (absPathList) => {
+            for (const absPath of absPathList) pathsChangedByPage.add(absPath);
+          },
+          configFileListWritten: configurationFileListWritten,
+          dataReport: () => {
+            fileEntryListCached = undefined;
+            configDataSend(loadConfigDoc(configFile, options));
+          },
+          historyPathMove: (from, to) => editHistory.pathMove(from, to),
+        });
+      };
       const changeIsOwnWrite = (filePath: string): boolean => {
         const contentHashWritten = contentHashWrittenByPath.get(filePath);
         if (contentHashWritten === undefined) return false;
@@ -759,6 +837,7 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
 
       server.middlewares.use(docEditMiddlewareCreate({
         endpoint: docEditEndpoint,
+        history: editHistory,
         fileEntryListGet,
         readOnlyReasonGet,
         // a document of a frontend object is edited through its asset item
@@ -992,6 +1071,27 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
         server.ws.send({ type: 'full-reload' });
       };
 
+      // a file of a virtual root changed (a document written by the page or an editor, a
+      // root made, copied in or changed by hand): its documents are read again and reported as
+      // data, never a reload of the page (doc_page_impl_doc_managed.md#reading-and-writing).
+      // the files of one write come together, and are read once
+      let docManagedChangeTimer: ReturnType<typeof setTimeout> | undefined;
+      const docManagedChangeHandle = (filePath: string) => {
+        if (!sourceExclude!.docManagedFolderList.some((folder) => pathIsInside(filePath, folder))) return;
+        if (/\.(bak|tmp)$/.test(filePath) || sourceFileBackupNameIs(path.basename(filePath))) return;
+        if (pathsChangedByPage.delete(filePath)) return;
+        if (docManagedChangeTimer) clearTimeout(docManagedChangeTimer);
+        docManagedChangeTimer = setTimeout(() => {
+          docManagedChangeTimer = undefined;
+          fileEntryListCached = undefined;
+          const message = configurationReload();
+          if (message) console.warn(message);
+        }, 60);
+      };
+      server.watcher.on('add', docManagedChangeHandle);
+      server.watcher.on('change', docManagedChangeHandle);
+      server.watcher.on('unlink', docManagedChangeHandle);
+
       // file added/removed inside source roots, or config/side panel yaml edited:
       // the manifest itself must be regenerated.
       server.watcher.on('add', invalidateManifest);
@@ -1042,7 +1142,15 @@ type SourceMiddlewareOptions = {
   sourceRootListGet: () => SourceRoot[];
   // why a file may not be written ('' when it may): a read-only doc page
   readOnlyReasonGet: (absPath: string) => string;
-  onFileCreated: (filePath: string) => void;
+  // the files a creation wrote (a managed document is several), told before the watcher sees them
+  onFileCreated: (filePathList: string[]) => void;
+  // the routes of managed documents (doc-managed-source.ts)
+  managed?: DocManagedRouteContext;
+  // moving and renaming files with their references (doc-relocate.ts): POST file/move/plan, file/move
+  relocate?: {
+    plan: (body: any) => { code: number; data: any; message: string };
+    apply: (body: any) => { code: number; data: any; message: string };
+  };
   // POST playground: { id, action: reset | delete }
   playgroundChange?: (body: any) => { code: number; data: any; message: string };
   // POST refresh: '' when the configuration loads, else why not
@@ -1057,7 +1165,7 @@ type SourceMiddlewareOptions = {
 };
 
 export function docSourceMiddlewareCreate(options: SourceMiddlewareOptions) {
-  const { endpoint, fileEntryListGet, sourceRootListGet, onFileCreated, onRefresh, workspace, readOnlyReasonGet, playgroundChange } = options;
+  const { endpoint, fileEntryListGet, sourceRootListGet, onFileCreated, onRefresh, workspace, readOnlyReasonGet, playgroundChange, managed, relocate } = options;
   const textSend = (res: ServerResponse, statusCode: number, text: string) => {
     res.statusCode = statusCode;
     res.setHeader('Content-Type', 'text/plain; charset=utf-8');
@@ -1082,13 +1190,41 @@ export function docSourceMiddlewareCreate(options: SourceMiddlewareOptions) {
     const url = new URL(req.url ?? '/', 'http://localhost');
     const route = url.pathname.startsWith(`${endpoint}/`) ? url.pathname.slice(endpoint.length) : '';
     const isWorkspaceRoute = route === '/os/list' || route === '/workspace/mount' || route === '/workspace/unmount';
+    const isManagedRoute = managed !== undefined && DOC_MANAGED_ROUTE_LIST.includes(route);
+    const isRelocateRoute = relocate !== undefined && (route === '/file/move/plan' || route === '/file/move');
     const isOwnRoute = route === '/file' || route === '/data' || route === '/file/create' || route === '/refresh' || route === '/playground';
-    if (!isOwnRoute && !isWorkspaceRoute) {
+    if (!isOwnRoute && !isWorkspaceRoute && !isManagedRoute && !isRelocateRoute) {
       next();
       return;
     }
     res.setHeader('Cache-Control', 'no-store');
     res.setHeader('X-Content-Type-Options', 'nosniff');
+
+    if (isManagedRoute) {
+      const bodyRead = req.method === 'POST' ? jsonBodyRead(req) : Promise.resolve({});
+      void bodyRead
+        .then((body) => {
+          const result = docManagedRouteHandle(route, req.method ?? 'GET', url, body, managed!);
+          jsonSend(res, statusByCode[result.code] ?? 400, result);
+        })
+        .catch((error) => jsonSend(res, 400, { code: -1, data: null, message: String(error?.message ?? error) }));
+      return;
+    }
+
+    if (isRelocateRoute) {
+      if (req.method !== 'POST') {
+        res.setHeader('Allow', 'POST');
+        jsonSend(res, 405, { code: -1, data: null, message: `${route.slice(1)} answers POST only` });
+        return;
+      }
+      void jsonBodyRead(req)
+        .then((body) => {
+          const result = route === '/file/move/plan' ? relocate!.plan(body) : relocate!.apply(body);
+          jsonSend(res, statusByCode[result.code] ?? 400, result);
+        })
+        .catch((error) => jsonSend(res, 400, { code: -1, data: null, message: String(error?.message ?? error) }));
+      return;
+    }
 
     if (route === '/refresh') {
       if (req.method !== 'POST') {
@@ -1149,7 +1285,7 @@ export function docSourceMiddlewareCreate(options: SourceMiddlewareOptions) {
       void jsonBodyRead(req)
         .then((body) => {
           const result = sourceFileCreate(body, sourceRootListGet(), fileEntryListGet(), readOnlyReasonGet);
-          if (result.code === 0) onFileCreated(result.data.entry.absPath);
+          if (result.code === 0) onFileCreated(sourceEntryFileListGet(result.data.entry));
           jsonSend(res, statusByCode[result.code] ?? 400, {
             code: result.code,
             data: result.code === 0 ? { path: result.data.path, entry: fileMetadataBuild(result.data.entry) } : null,
@@ -1174,20 +1310,20 @@ export function docSourceMiddlewareCreate(options: SourceMiddlewareOptions) {
     if (route === '/data') {
       let bytes: Buffer;
       try {
-        bytes = fs.readFileSync(entry.absPath);
+        bytes = sourceEntryBytesRead(entry);
       } catch {
         jsonSend(res, 404, { code: -3, data: null, message: `the source file is not available: ${internalPath}` });
         return;
       }
       res.statusCode = 200;
-      res.setHeader('Content-Type', attachmentMimeGet(entry.absPath));
+      res.setHeader('Content-Type', attachmentMimeGet(entry.managed ? entry.name : entry.absPath));
       res.setHeader('Content-Length', String(bytes.length));
       res.end(bytes);
       return;
     }
     let text: string;
     try {
-      text = fs.readFileSync(entry.absPath, 'utf-8');
+      text = sourceEntryTextRead(entry);
     } catch {
       jsonSend(res, 404, { code: -3, data: null, message: `the source file is not available: ${internalPath}` });
       return;
@@ -1224,6 +1360,11 @@ export function sourceFileCreate(
   if (docPageAliasList.length > 1) {
     return { code: -1, data: null, message: `${dirPath} names a root of several doc pages (${docPageAliasList.join(', ')}); write ~docPageAlias:${parsed.rootAlias}/...` };
   }
+  // a folder of a virtual root: the document is created by its store (doc_page_impl_doc_managed.md)
+  const rootManaged = sourceRootList.find((item) => (
+    item.kind === 'managed' && item.rootAlias === parsed.rootAlias && item.docPageAlias === docPageAliasList[0]
+  ));
+  if (rootManaged) return sourceFileCreateManaged(rootManaged, parsed.relPath, name, data, body, fileEntryList, readOnlyReasonGet);
   const rootRuleList = sourceRootList.filter((item) => (
     item.kind === 'folder' && item.rootAlias === parsed.rootAlias && item.docPageAlias === docPageAliasList[0]
   ));
@@ -1248,6 +1389,40 @@ export function sourceFileCreate(
   const entryExisting = fileEntryList.find((item) => item.absPath === fileAbs);
   const entry = entryExisting ?? makeEntry(root.docPageAlias, parsed.rootAlias, relPath, fileAbs, root.collect);
   return { code: 0, data: { path: entry.internalPath, entry }, message: '' };
+}
+
+// a document of file/create written into a folder of a virtual root: a managed document of
+// its mode and form; only documents (.md, .mdx) are kept there
+function sourceFileCreateManaged(
+  root: SourceRoot,
+  relDir: string,
+  name: string,
+  data: Buffer,
+  body: any,
+  fileEntryList: FileEntry[],
+  readOnlyReasonGet: (absPath: string) => string,
+): { code: number; data: any; message: string } {
+  const reasonReadOnly = readOnlyReasonGet(root.rootAbsPath);
+  if (reasonReadOnly) return { code: -4, data: null, message: reasonReadOnly };
+  if (!/\.mdx?$/i.test(name)) return { code: -1, data: null, message: `a virtual root keeps documents only (.md, .mdx): ${name}` };
+  const relPath = relDir ? `${relDir}/${name}` : name;
+  const internalPath = sourcePathBuild(root.rootAlias, relPath, root.docPageAlias);
+  const entryExisting = fileEntryList.find((item) => item.internalPath === internalPath);
+  if (entryExisting && body?.isOverwrite !== true) return { code: -2, data: null, message: `the document exists: ${internalPath}` };
+  try {
+    if (entryExisting?.managed) {
+      sourceEntryTextWrite(entryExisting, data.toString('utf-8'));
+      return { code: 0, data: { path: internalPath, entry: entryExisting }, message: '' };
+    }
+    const doc = docManagedFileCreate(root.rootAbsPath, relPath, data.toString('utf-8'));
+    const entry = makeEntry(root.docPageAlias, root.rootAlias, relPath, doc.fileMain, 'recursive');
+    entry.name = name;
+    entry.ext = path.extname(name).slice(1).toLowerCase();
+    entry.managed = { rootDir: root.rootAbsPath, doc };
+    return { code: 0, data: { path: internalPath, entry }, message: '' };
+  } catch (error: any) {
+    return { code: typeof error?.code === 'number' ? error.code : -1, data: null, message: String(error?.message ?? error) };
+  }
 }
 
 function jsonBodyRead(req: IncomingMessage): Promise<any> {
@@ -1722,6 +1897,21 @@ function scanSource(configDoc: any, configDir: string): FileEntry[] {
       tagSourceAddRuleApply(entry, rule, ruleIndex);
       configSourceAddRuleApply(entry, rule, ruleIndex);
       entryAdd(entry);
+    } else if (rule.action === 'addManaged') {
+      // a virtual root (doc_page_impl_doc_managed.md#in-the-source): its documents, by the
+      // paths their records give them
+      const root = sourceRootOfRule(rule, configDir, rootAbsPathByPath);
+      const rootManaged = docManagedRootOfRuleRead(rule, configDir);
+      if (!rootManaged) continue;
+      for (const doc of docManagedDocListRead(rootManaged)) {
+        const entry = makeEntry(root.docPageAlias, root.rootAlias, doc.record.path, doc.fileMain, 'recursive');
+        entry.name = doc.record.path.split('/').at(-1) ?? entry.name;
+        entry.ext = path.extname(entry.name).slice(1).toLowerCase();
+        entry.managed = { rootDir: rootManaged.dirAbs, doc };
+        tagSourceAddRuleApply(entry, rule, ruleIndex);
+        configSourceAddRuleApply(entry, rule, ruleIndex);
+        entryAdd(entry);
+      }
     } else if (rule.action === 'removeByName') {
       const regex = globToRegex(rule.pattern);
       entryRemoveIf((e) => regex.test(e.name));
@@ -1747,7 +1937,7 @@ function scanSource(configDoc: any, configDir: string): FileEntry[] {
   const pathsConfiguration = collectPathsConfiguration(configDoc);
   const configurationPathSet = new Set(pathsConfiguration);
   const sourceExclude = sourceExcludeGet(configDoc, configDir);
-  return [...entryByPath.values()].filter((entry) => (
+  return [...entryByPath.values()].filter((entry) => entry.managed !== undefined || (
     !configurationPathSet.has(entry.absPath)
     && !configurationBackupPathIs(pathsConfiguration, entry.absPath)
     && !sourceExcludePathIs(sourceExclude, entry.absPath)
@@ -1766,6 +1956,9 @@ type SourceExclude = {
   // the folders holding their object folders: whatever appears inside is never a document,
   // nor a reason to reload the page (an object made from the page, a folder copied in)
   objectFrontendFolderList: string[];
+  // the folders holding the virtual roots of the doc pages (doc_page_impl_doc_managed.md):
+  // their files are managed documents, read by the rules of their roots, never as files
+  docManagedFolderList: string[];
 };
 
 function sourceExcludeGet(configDoc: any, configDir: string): SourceExclude {
@@ -1782,6 +1975,7 @@ function sourceExcludeGet(configDoc: any, configDir: string): SourceExclude {
     compConfig: compConfigGet(configDoc),
     objectFrontendPathList: objectFrontendConfig.pathList,
     objectFrontendFolderList: objectFrontendConfig.folderList,
+    docManagedFolderList: docManagedFolderListOfConfigGet(configDoc),
   };
 }
 
@@ -1789,6 +1983,7 @@ function sourceExcludePathIs(exclude: SourceExclude, filePath: string): boolean 
   return (exclude.assetConfig !== undefined && assetPathIs(exclude.assetConfig, filePath))
     || exclude.objectFrontendPathList.some((file) => filePath === file || filePath === `${file}.bak` || filePath === `${file}.tmp`)
     || exclude.objectFrontendFolderList.some((folder) => pathIsInside(filePath, folder))
+    || exclude.docManagedFolderList.some((folder) => pathIsInside(filePath, folder))
     || servicePathIs(exclude.serviceFolderSet, filePath)
     || (compPathIs(exclude.compConfig, filePath) && !compDocumentPathIs(filePath));
 }
@@ -1838,7 +2033,7 @@ function assetUsageDocListScan(entries: FileEntry[], docPathList: string[]): Ass
     if (entry.ext !== 'md' && entry.ext !== 'mdx') continue;
     if (docPathSet.size > 0 && !docPathSet.has(entry.internalPath)) continue;
     if (!fs.existsSync(entry.absPath)) continue;
-    const content = fs.readFileSync(entry.absPath);
+    const content = sourceEntryBytesRead(entry);
     docList.push({
       docPath: entry.internalPath,
       contentHash: textContentHashGet(content),
@@ -2005,11 +2200,11 @@ function ruleWithFullPattern(rule: any): any {
 // loader (a test, a host) may still write "rootId" for its alias.
 function sourceRootOfRule(rule: any, configDir: string, rootAbsPathByPath: Map<string, string>): SourceRoot {
   const absPath = path.resolve(configDir, rule.path);
-  const kind = rule.action === 'addFile' ? 'file' : 'folder';
+  const kind = rule.action === 'addFile' ? 'file' : rule.action === 'addManaged' ? 'managed' : 'folder';
   const rootAlias: string = String(rule.alias ?? rule.rootId ?? path.basename(kind === 'file' ? path.dirname(absPath) : absPath));
   const docPageAlias: string = String(rule.docPageAlias ?? '');
   const rootPath = sourcePathBuild(rootAlias, '', docPageAlias);
-  let collect: SourceCollectMode = 'direct';
+  let collect: SourceCollectMode = kind === 'managed' ? 'recursive' : 'direct';
   if (kind === 'folder') {
     if (!sourceCollectModeList.includes(rule.collect)) {
       throw new Error(
@@ -2035,7 +2230,7 @@ function sourceRootOfRule(rule: any, configDir: string, rootAbsPathByPath: Map<s
 export function sourceRootListGet(configDoc: any, configDir: string): SourceRoot[] {
   const rootAbsPathByPath = new Map<string, string>();
   return (configDoc.source as any[])
-    .filter((rule) => rule.action === 'addFolder' || rule.action === 'addFile')
+    .filter((rule) => rule.action === 'addFolder' || rule.action === 'addFile' || rule.action === 'addManaged')
     .map((rule) => sourceRootOfRule(rule, configDir, rootAbsPathByPath));
 }
 
@@ -2048,7 +2243,18 @@ export function scanSourceDirs(configDoc: any, configDir: string): DirEntry[] {
   const rootAbsPathByPath = new Map<string, string>();
   for (const ruleRead of configDoc.source as any[]) {
     const rule = ruleWithFullPattern(ruleRead);
-    if (rule.action === 'addFolder' || rule.action === 'addFile') {
+    if (rule.action === 'addManaged') {
+      // the folders of a virtual root: those its documents are in, and those it keeps
+      const root = sourceRootOfRule(rule, configDir, rootAbsPathByPath);
+      const rootManaged = docManagedRootOfRuleRead(rule, configDir);
+      if (!rootManaged) continue;
+      for (const relPath of docManagedDirRelPathListGet(rootManaged, docManagedDocListRead(rootManaged))) {
+        const internalPath = sourcePathBuild(root.rootAlias, relPath, root.docPageAlias);
+        dirByPath.set(internalPath, {
+          docPageAlias: root.docPageAlias, rootAlias: root.rootAlias, relPath, absPath: rootManaged.dirAbs, internalPath, collect: 'recursive', managed: { rootDir: rootManaged.dirAbs },
+        });
+      }
+    } else if (rule.action === 'addFolder' || rule.action === 'addFile') {
       const root = sourceRootOfRule(rule, configDir, rootAbsPathByPath);
       if (root.kind === 'file' || !fs.existsSync(root.absPath)) continue;
       const dirAbsList = root.collect === 'direct' ? [root.absPath] : [root.absPath, ...walkDirs(root.absPath, excludeMatcherOfRule(rule))];
@@ -2065,7 +2271,7 @@ export function scanSourceDirs(configDoc: any, configDir: string): DirEntry[] {
     }
   }
   const sourceExclude = sourceExcludeGet(configDoc, configDir);
-  return [...dirByPath.values()].filter((dir) => !sourceExcludePathIs(sourceExclude, dir.absPath));
+  return [...dirByPath.values()].filter((dir) => dir.managed !== undefined || !sourceExcludePathIs(sourceExclude, dir.absPath));
 }
 
 function makeEntry(docPageAlias: string, rootAlias: string, relPath: string, absPath: string, collect: SourceCollectMode): FileEntry {
@@ -2229,7 +2435,7 @@ export function pruneSourceToSidePanel(
 
   while (docQueue.length > 0) {
     const entry = docQueue.shift()!;
-    const text = textExpand(fs.readFileSync(entry.absPath, 'utf-8'));
+    const text = textExpand(sourceEntryTextRead(entry));
     collected(docSourceDependenciesCollect(text, entry, configDoc, collectByCompId), entry.internalPath);
   }
   return entries.filter((entry) => pathsRetained.has(entry.internalPath));
@@ -2297,9 +2503,11 @@ function resolveSourceReference(reference: string, docPageAlias: string | undefi
 // page keep its caches for files that did not change; title, tags and
 // config travel with it so that a text-only event cannot leave them stale.
 export function fileMetadataBuild(entry: FileEntry) {
-  const content = fs.readFileSync(entry.absPath);
+  const content = sourceEntryBytesRead(entry);
   const text = entry.ext === 'md' || entry.ext === 'mdx' ? content.toString('utf-8') : '';
   return {
+    // a managed document: what the page shows of it (its root a virtual one, its mode and form)
+    ...(entry.managed ? { managed: docManagedInfoBuild(entry.managed, entry.rootAlias) } : {}),
     docPageAlias: entry.docPageAlias,
     rootAlias: entry.rootAlias,
     relPath: entry.relPath,
@@ -2316,7 +2524,14 @@ export function fileMetadataBuild(entry: FileEntry) {
 }
 
 export function dirMetadataBuild(dir: DirEntry) {
-  return { docPageAlias: dir.docPageAlias, rootAlias: dir.rootAlias, relPath: dir.relPath, internalPath: dir.internalPath, collect: dir.collect };
+  return {
+    docPageAlias: dir.docPageAlias,
+    rootAlias: dir.rootAlias,
+    relPath: dir.relPath,
+    internalPath: dir.internalPath,
+    collect: dir.collect,
+    ...(dir.managed ? { isManaged: true } : {}),
+  };
 }
 
 function textContentHashGet(content: string | Buffer): string {
@@ -2437,6 +2652,9 @@ export function generateModuleCode(
     // bytes are reached through fileUrlByPath.
     let load: string;
     if (!isBuild) load = `() => sourceTextLoad(${JSON.stringify(e.internalPath)})`;
+    // a managed document has no file to import: its text is a module of its own, built from its
+    // root (resolveId / load of the plugin), split from the rest as a ?raw import is
+    else if (e.managed) load = `() => import(${JSON.stringify(`${DOC_MANAGED_TEXT_MODULE_PREFIX}${encodeURIComponent(e.internalPath)}`)}).then((m) => m.default)`;
     else if (attachmentExtIsBinary(e.ext)) load = `() => Promise.reject(new Error(${JSON.stringify(`${e.internalPath} is not a text file`)}))`;
     else load = `() => import(${JSON.stringify(`${e.absPath}?raw`)}).then((m) => m.default)`;
     lines.push(`  { ...${JSON.stringify(fileMetadataBuild(e))}, load: ${load} },`);
@@ -2557,6 +2775,25 @@ function endpointBuild(base: string | undefined, endpointName: string): string {
   return `${basePath}/${endpointName}`;
 }
 
+// the yaml files a move may have to rewrite (doc-relocate.ts): the side panels and entries the
+// configuration loads, and the workspace file, each with the doc page its local paths belong to
+function relocateYamlFileListGet(configDoc: any, configDir: string): { file: string; docPageAlias: string; dirPage: string; kind: 'sidePanel' | 'entry' | 'workspace' }[] {
+  const docPageList = (configDoc.docEntry?.docPageList ?? []) as any[];
+  const entryFileSet = new Set(docPageList.map((docPage) => docPage.entryFile));
+  const docPageOfFile = (file: string): any => docPageList
+    .filter((one) => pathIsInside(file, one.dirPage))
+    .sort((a, b) => b.dirPage.length - a.dirPage.length)[0] ?? docPageList[0];
+  const fileList: { file: string; docPageAlias: string; dirPage: string; kind: 'sidePanel' | 'entry' | 'workspace' }[] = collectDocYamlFiles(configDoc).map((file) => ({
+    file,
+    docPageAlias: docPageOfFile(file)?.alias ?? '',
+    dirPage: docPageOfFile(file)?.dirPage ?? path.dirname(file),
+    kind: entryFileSet.has(file) ? 'entry' as const : 'sidePanel' as const,
+  }));
+  const workspaceFile = configDoc.workspace?.file ? path.resolve(configDir, configDoc.workspace.file) : '';
+  if (workspaceFile) fileList.push({ file: workspaceFile, docPageAlias: docPageList[0]?.alias ?? '', dirPage: path.dirname(path.dirname(workspaceFile)), kind: 'workspace' });
+  return fileList;
+}
+
 // the configuration files of the page, as loadConfigDoc recorded them: a
 // change of one of them regenerates the manifest and reloads the page
 function collectPathsConfiguration(configDoc: any): string[] {
@@ -2593,6 +2830,10 @@ function collectPathsToWatch(configDoc: any, configDir: string): string[] {
   for (const docPage of Array.isArray(configDoc.docEntry?.docPageList) ? configDoc.docEntry.docPageList : []) {
     const dirMeta = path.dirname(docPage.entryFile);
     if (path.basename(dirMeta) === DOC_PAGE_META_DIR_NAME && fs.existsSync(dirMeta)) result.push(dirMeta);
+  }
+  // the folders of the virtual roots a doc-managed.yaml names elsewhere (doc_page_impl_doc_managed.md)
+  for (const folder of docManagedFolderListOfConfigGet(configDoc)) {
+    if (fs.existsSync(folder)) result.push(folder);
   }
   return result;
 }

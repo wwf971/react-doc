@@ -1,8 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { observer } from 'mobx-react-lite';
-import { Check, LoaderCircle, Plus, Search, X, Zap } from '../../../../main/frontend/UICommon.js';
+import { Check, LoaderCircle, Plus, Search, Type, X, Zap } from '../../../../main/frontend/UICommon.js';
 import { ObjectIcon } from '../../../../main/comp-doc/object/object-icon.jsx';
 import { textHighlight } from '../../../../main/comp-doc/object/ObjectSearchPanel.jsx';
+import { EditSourceSurface } from '../../../../main/comp-doc/edit/EditSourceSurface.jsx';
+import { useEditSlashConfig } from '../../../../main/comp-doc/slash/use-edit-slash-config.js';
+import { slashActionDefine } from '../../../../main/comp-doc/slash/slash-define.js';
+import { slashEffect } from '../../../../main/frontend/src/lib/doc-slash.js';
+import { useDocStores } from '../../../../main/frontend/src/store/context.js';
 import { nodeRegistrySearch } from './node-registry.js';
 
 // The panel of a double-click on empty canvas: what can be added there
@@ -43,6 +48,7 @@ import { nodeRegistrySearch } from './node-registry.js';
 //   { id, label, description?, icon?, keywordList?,
 //     isDisabled?, reason?,         greyed out, the reason said in the place of the description:
 //                                   what cannot be done here is shown, not hidden
+//     kind?: 'danger',              it takes something away: its words and its icon in red
 //     start({ position, editor }) → a state, or nothing }
 // An action that answers a **state** puts the panel into it: the panel then asks for what the
 // action needs, one state at a time (a state machine the host runs: each state says what the
@@ -61,6 +67,16 @@ import { nodeRegistrySearch } from './node-registry.js';
 //   What they throw is said in the panel, which stays as it is.
 // A host opens the panel in the state of an action with editor.createOpen(position, { actionId }).
 //
+// The field is a text of the page (EditSourceSurface, plain) with the **slash mode** of the page
+// (doc_page_impl_edit_slash.md#beyond-the-document-editors): `/` lists what the panel offers by name
+// (the actions, then the kinds: /note, /table, /shape) in the page's slash menu, and the panel's own
+// list steps aside while it does; Enter on one takes it. Without the slash mode (switched off, or
+// outside a page) a `/` typed is ignored by the search. Words typed otherwise search the list.
+//
+// textTake: { label, take(text, position) } (a feature of the editor: editor.createTextGet): words
+// typed are also a thing of their own, a text at that place. The panel then lists them first,
+// highlighted, so Enter makes the text; the arrows reach what the words found.
+//
 // The panel serves a scene of scenes too (card-diagram-switch: the commands of a scene, opened by a
 // double-click on its canvas or a right-click on a card or a line): there is no diagram being edited,
 // so the editor given has no store (no kinds of the registry, no objects), only createClose; the
@@ -68,8 +84,9 @@ import { nodeRegistrySearch } from './node-registry.js';
 const SOURCE_LIST_NONE = [];
 const ACTION_LIST_NONE = [];
 
-export const DiagramCreatePanel = observer(function DiagramCreatePanel({ position, editor, objectService, sessionKey, sourceList = SOURCE_LIST_NONE, actionList = ACTION_LIST_NONE, actionIdInitial, heading = 'Actions', placeholder: placeholderGiven, ariaLabel = 'Add to the diagram' }) {
+export const DiagramCreatePanel = observer(function DiagramCreatePanel({ position, editor, objectService, sessionKey, sourceList = SOURCE_LIST_NONE, actionList = ACTION_LIST_NONE, actionIdInitial, heading = 'Actions', placeholder: placeholderGiven, ariaLabel = 'Add to the diagram', isActionOnly = false, textTake }) {
 	const [query, querySet] = useState('');
+	const slashStore = useDocStores()?.slashStore;
 	// the states entered, the last the one the panel is in; opened in the state of an action when asked to
 	// opened at an action: in its state, or, an action asking nothing, done at once and closed
 	const isStartedAtOnce = useRef(false);
@@ -87,25 +104,50 @@ export const DiagramCreatePanel = observer(function DiagramCreatePanel({ positio
 	const root = useRef(null);
 	const source = useCreateSourceSearch(sourceList, query);
 	// a draft whose structure is given takes no node of the registry: what the host offers alone
-	const kindEntryList = editor.store && !editor.store.isStructureFixed ? nodeRegistrySearch(editor.store.registry, query).map(({ entry }) => entry) : [];
+	// isActionOnly: the panel of a thing (a right-click on a node or a line), which offers what
+	// can be done with it and nothing to add
+	// a `/` at the start names what to take (the slash mode lists it); the search reads the words after it
+	const isSlashQuery = query.startsWith('/');
+	const isSlashMenu = isSlashQuery && Boolean(slashStore?.isOn);
+	const queryWords = (isSlashQuery ? query.slice(1) : query).replace(/\s+/g, ' ');
+	const kindAllList = editor.store && !editor.store.isStructureFixed && !isActionOnly ? nodeRegistrySearch(editor.store.registry, '').map(({ entry }) => entry) : [];
+	const kindEntryList = editor.store && !editor.store.isStructureFixed && !isActionOnly ? nodeRegistrySearch(editor.store.registry, queryWords).map(({ entry }) => entry) : [];
 	const sourceEntryListOf = isBefore => source.groupList.filter(group => Boolean(group.source.isBeforeKinds) === isBefore).flatMap(group => group.entryList);
 	const entryList = kindEntryList;
-	const option = editor.store && !editor.store.isStructureFixed ? objectSearchOptionGet(editor.store) : { isEnabled: false, typeList: [] };
+	const option = editor.store && !editor.store.isStructureFixed && !isActionOnly ? objectSearchOptionGet(editor.store) : { isEnabled: false, typeList: [] };
 	const session = objectService?.searchSessionGet && option.isEnabled ? objectService.searchSessionGet(sessionKey, { typeList: option.typeList, fetchMax: 20 }) : undefined;
-	const hitList = session && query.trim() ? session.hitList : [];
+	const hitList = session && queryWords.trim() ? session.hitList : [];
 	const objectEntryList = hitList.map(hit => ({
 		id: `object:${hit.descriptor.ref}`,
 		hit,
 		nodeComponent: { compName: 'ObjectView', data: { object: hit.descriptor.ref }, idPrefix: 'object' },
 	}));
-	const wordListAction = query.toLowerCase().split(/\s+/).filter(Boolean);
+	const wordListAction = queryWords.toLowerCase().split(/\s+/).filter(Boolean);
 	const actionEntryList = actionList.filter(action => wordListAction.every(word => [action.label, action.description ?? '', ...(action.keywordList ?? [])].join(' ').toLowerCase().includes(word)))
 		.map(action => ({ ...action, id: `action:${action.id}`, action }));
 	const sourceBeforeList = [...actionEntryList, ...sourceEntryListOf(true)];
 	const sourceAfterList = sourceEntryListOf(false);
-	const resultList = [...sourceBeforeList, ...entryList, ...objectEntryList, ...sourceAfterList];
+	// the words typed, as a text of their own (textTake): first, so Enter makes it
+	const textEntryList = textTake && !isSlashQuery && query.trim() ? [{ id: 'text-take', label: query.trim(), isTextTake: true }] : [];
+	const resultList = [...textEntryList, ...sourceBeforeList, ...entryList, ...objectEntryList, ...sourceAfterList];
+	const indexBase = textEntryList.length;
+	// what `/` names in the slash mode: the actions, then the kinds, one word each (an action of a
+	// name taken already is left out); taking one takes the entry of the list
+	const slashActionList = useMemo(() => {
+		const nameSet = new Set();
+		const list = [];
+		const entryAllList = [...actionList.filter(action => !action.isDisabled).map(action => ({ ...action, id: `action:${action.id}`, action })), ...kindAllList];
+		for (const entry of entryAllList) {
+			const name = String(entry.action ? entry.action.id : entry.id).replace(/^tool:/, '').replace(/[^A-Za-z0-9_-]+/g, '-').replace(/^[^A-Za-z]+/, '');
+			if (!name || nameSet.has(name)) continue;
+			nameSet.add(name);
+			list.push(slashActionDefine({ name, label: entry.label, description: entry.description ?? '', icon: entry.icon, run: () => { setTimeout(() => chooseRef.current(entry)); return slashEffect.replace(''); } }));
+		}
+		return list;
+	}, [actionList, kindAllList.map(entry => entry.id).join(' ')]); // eslint-disable-line react-hooks/exhaustive-deps
+	const slash = useEditSlashConfig({ actionList: slashActionList, context: {} });
 	const highlightList = (session?.result?.tokenList ?? []).map(token => token.valueLower).filter(Boolean);
-	const wordList = query.toLowerCase().split(/\s+/).filter(Boolean);
+	const wordList = queryWords.toLowerCase().split(/\s+/).filter(Boolean);
 	const placeholder = placeholderGiven ?? sourceList.find(item => item.placeholder)?.placeholder ?? (session ? 'Add a node, a connection, or an object' : 'Add a node or a connection');
 	// the entries of a source, under its heading, with what it says of them and what can be done
 	const sourceRender = (group, indexStart) => (
@@ -125,10 +167,11 @@ export const DiagramCreatePanel = observer(function DiagramCreatePanel({ positio
 		</div>
 	);
 	const sourceGroupListOf = isBefore => source.groupList.filter(group => Boolean(group.source.isBeforeKinds) === isBefore);
-	const summaryNotListedList = query.trim() ? (session?.result?.providerList ?? []).filter(summary => summary.status !== 'fetched' || summary.isTruncated) : [];
+	const summaryNotListedList = queryWords.trim() ? (session?.result?.providerList ?? []).filter(summary => summary.status !== 'fetched' || summary.isTruncated) : [];
 	useEffect(() => {
+		// a popup of the edit layer (the slash menu of the field) is the panel's own
 		const pointerDownHandle = (event) => {
-			if (root.current && !root.current.contains(event.target)) editor.createClose();
+			if (root.current && !root.current.contains(event.target) && !event.target.closest?.('.doc-edit-popup')) editor.createClose();
 		};
 		document.addEventListener('pointerdown', pointerDownHandle, true);
 		return () => document.removeEventListener('pointerdown', pointerDownHandle, true);
@@ -136,6 +179,7 @@ export const DiagramCreatePanel = observer(function DiagramCreatePanel({ positio
 	// a session of an earlier panel starts empty
 	useEffect(() => { session?.clear(); }, [session]);
 	const choose = (entry) => {
+		if (entry.isTextTake) { textTake.take(entry.label, position); editor.createClose(); return undefined; }
 		if (!entry.action) return editor.createChoose(entry, position);
 		if (entry.action.isDisabled) return undefined;
 		// an action: into its state when it has one, else it did what it does and the panel closes
@@ -153,64 +197,84 @@ export const DiagramCreatePanel = observer(function DiagramCreatePanel({ positio
 		else if (next && typeof next === 'object') stateStackSet([...stateStack, next]);
 		else editor.createClose();
 	};
-	const queryChange = (text) => {
+	const chooseRef = useRef(choose);
+	chooseRef.current = choose;
+	const [textVersion, textVersionSet] = useState(0);
+	const queryChange = (text, isWritten = false) => {
 		querySet(text);
 		indexActiveSet(0);
-		session?.textSet(text);
+		session?.textSet((text.startsWith('/') ? text.slice(1) : text).replace(/\s+/g, ' '));
+		if (isWritten) textVersionSet(version => version + 1);
 	};
+	// the keys of the field, after the slash mode had its turn: the list is walked by the arrows,
+	// Enter takes what is highlighted, Escape empties the field, then closes the panel
 	const keyDownHandle = (event) => {
-		if (event.nativeEvent?.isComposing || stateCurrent) return;
+		if (event.nativeEvent?.isComposing || stateCurrent || event.defaultPrevented) return false;
 		if (event.key === 'Escape') {
 			event.preventDefault();
 			event.stopPropagation();
-			if (query) queryChange(''); else editor.createClose();
-		} else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+			if (query) queryChange('', true); else editor.createClose();
+			return true;
+		}
+		if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
 			event.preventDefault();
 			if (resultList.length) indexActiveSet((indexActive + (event.key === 'ArrowDown' ? 1 : -1) + resultList.length) % resultList.length);
-		} else if (event.key === 'Enter') {
+			return true;
+		}
+		if (event.key === 'Enter') {
 			event.preventDefault();
 			event.stopPropagation();
-			const result = resultList[indexActive] ?? resultList[0];
+			const result = isSlashMenu ? null : resultList[indexActive] ?? resultList[0];
 			if (result) choose(result);
+			return true;
 		}
+		return false;
 	};
 	const optionRender = (entry, index, content) => (
-		<button key={entry.id} type="button" role="option" aria-selected={index === indexActive} aria-disabled={entry.action?.isDisabled || undefined} className={`doc-vis-create-option${entry.action?.isDisabled ? ' is-disabled' : ''}`} title={entry.action?.isDisabled ? entry.action.reason ?? '' : entry.hit?.descriptor.ref ?? entry.description}
+		<button key={entry.id} type="button" role="option" aria-selected={index === indexActive} aria-disabled={entry.action?.isDisabled || undefined} className={`doc-vis-create-option${entry.action?.isDisabled ? ' is-disabled' : ''}${entry.action?.kind === 'danger' ? ' is-danger' : ''}`} title={entry.action?.isDisabled ? entry.action.reason ?? '' : entry.hit?.descriptor.ref ?? entry.description}
 			onPointerDown={event => event.preventDefault()} onMouseEnter={() => indexActiveSet(index)} onClick={() => choose(entry)}>
 			{content}
 		</button>
 	);
 	return (
-		<div ref={root} className="doc-vis-create-panel not-prose" role="dialog" aria-label={ariaLabel} onKeyDown={keyDownHandle} onDoubleClick={event => event.stopPropagation()} onContextMenu={event => { event.preventDefault(); event.stopPropagation(); }}>
+		<div ref={root} className="doc-vis-create-panel not-prose" role="dialog" aria-label={ariaLabel} onDoubleClick={event => event.stopPropagation()} onContextMenu={event => { event.preventDefault(); event.stopPropagation(); }}>
 			{stateCurrent ? <DiagramCreateState key={`${stateStack.length}:${stateCurrent.id}`} stateStack={stateStack} api={{ position, editor }} onLeave={stateLeave} onResult={stateResult} /> : null}
 			{stateCurrent ? null : <div className="doc-vis-create-search">
 				<Search size={12} aria-hidden="true" />
-				<input type="text" value={query} placeholder={placeholder} aria-label="Search what to add" autoFocus spellCheck={false}
-					onChange={event => queryChange(event.target.value)} />
+				<span className="doc-vis-create-field-box">
+					<EditSourceSurface kind="plain" className="doc-vis-create-field" text={query} textVersion={textVersion} slash={slash} isTabInserted={false} ariaLabel="Search what to add"
+						onTextChange={text => queryChange(text.replace(/\n/g, ' '))} onKeyDownFirst={keyDownHandle} onCancelRequest={() => { if (query) queryChange('', true); else editor.createClose(); }} />
+					{query ? null : <span className="doc-vis-create-placeholder" aria-hidden="true">{placeholder}</span>}
+				</span>
 				{session?.status === 'searching' ? <LoaderCircle size={12} className="doc-spin" aria-label="searching the objects" /> : null}
 			</div>}
-			{stateCurrent ? null : <div className="doc-vis-create-list" role="listbox" aria-label="What can be added">
+			{stateCurrent || isSlashMenu ? null : <div className="doc-vis-create-list" role="listbox" aria-label="What can be added">
+				{textEntryList.map(entry => optionRender(entry, 0, <>
+					<Type size={13} aria-hidden="true" />
+					<span className="doc-vis-create-label">{textTake.label}</span>
+					<span className="doc-vis-create-description doc-vis-create-text">“{entry.label}”</span>
+				</>))}
 				{actionEntryList.length > 0 && heading ? <span className="doc-vis-create-group">{heading}</span> : null}
-				{actionEntryList.map((entry, indexAction) => optionRender(entry, indexAction, <>
+				{actionEntryList.map((entry, indexAction) => optionRender(entry, indexBase + indexAction, <>
 					{entry.icon ? <entry.icon size={13} aria-hidden="true" /> : <Zap size={13} aria-hidden="true" />}
 					<span className="doc-vis-create-label">{entry.label}</span>
 					<span className="doc-vis-create-description">{entry.isDisabled ? entry.reason ?? entry.description : entry.description}</span>
 				</>))}
-				{resultList.length === 0 && session?.status !== 'searching' && source.groupList.length === 0 ? <span className="doc-note">nothing matches “{query.trim()}”</span> : null}
-				{sourceGroupListOf(true).reduce((out, group) => ({ list: [...out.list, sourceRender(group, out.index)], index: out.index + group.entryList.length }), { list: [], index: actionEntryList.length }).list}
-				{sourceBeforeList.length > 0 && entryList.length > 0 ? <span className="doc-vis-create-group">Nodes</span> : null}
-				{entryList.map((entry, indexKind) => optionRender(entry, sourceBeforeList.length + indexKind, <>
+				{resultList.length === 0 && session?.status !== 'searching' && source.groupList.length === 0 ? <span className="doc-note">nothing matches “{queryWords.trim()}”</span> : null}
+				{sourceGroupListOf(true).reduce((out, group) => ({ list: [...out.list, sourceRender(group, out.index)], index: out.index + group.entryList.length }), { list: [], index: indexBase + actionEntryList.length }).list}
+				{(sourceBeforeList.length > 0 || textEntryList.length > 0) && entryList.length > 0 ? <span className="doc-vis-create-group">Nodes</span> : null}
+				{entryList.map((entry, indexKind) => optionRender(entry, indexBase + sourceBeforeList.length + indexKind, <>
 					<entry.icon size={13} aria-hidden="true" />
 					<span className="doc-vis-create-label">{entry.label}</span>
 					<span className="doc-vis-create-description">{entry.description}</span>
 				</>))}
 				{objectEntryList.length > 0 ? <span className="doc-vis-create-group">Objects</span> : null}
-				{objectEntryList.map((entry, indexObject) => optionRender(entry, sourceBeforeList.length + entryList.length + indexObject, <>
+				{objectEntryList.map((entry, indexObject) => optionRender(entry, indexBase + sourceBeforeList.length + entryList.length + indexObject, <>
 					<ObjectIcon descriptor={entry.hit.descriptor} objectStore={objectService} size={13} />
 					<span className="doc-vis-create-label">{textHighlight(entry.hit.descriptor.label, highlightList)}</span>
 					<span className="doc-vis-create-description">{objectService.typeLabelGet(entry.hit.descriptor.typeList[0] ?? 'core.object')} · {textHighlight(entry.hit.path, highlightList)}</span>
 				</>))}
-				{sourceGroupListOf(false).reduce((out, group) => ({ list: [...out.list, sourceRender(group, out.index)], index: out.index + group.entryList.length }), { list: [], index: sourceBeforeList.length + entryList.length + objectEntryList.length }).list}
+				{sourceGroupListOf(false).reduce((out, group) => ({ list: [...out.list, sourceRender(group, out.index)], index: out.index + group.entryList.length }), { list: [], index: indexBase + sourceBeforeList.length + entryList.length + objectEntryList.length }).list}
 				{summaryNotListedList.map(summary => (
 					<span key={summary.providerId} className="doc-note doc-vis-create-summary">
 						{summary.label}: {summary.count === null ? 'how many is not known' : `${summary.count} objects`}, not all listed

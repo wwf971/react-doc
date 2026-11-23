@@ -66,9 +66,9 @@ test('a component type draws and creates the kinds of its own registry only', ()
 	const base = yamlParse(cardDiagramSourceDefaultCreate().raw);
 	assert.equal(diagramNormalize(base, cardDiagramNodeRegistry).nodes.length, 3);
 	// the base series does not know the Dataverse kinds, and says what it knows
-	assert.throws(() => diagramNormalize(diagramCreate(), cardDiagramNodeRegistry), /unknown node type "dataverse-table" \(this diagram knows: table, operator, card-note, card-brief, card-label, card-three-dots, card-database, card-icon, card-caption, card-matrix, scene-box, color-block, card-index, card-legend, card-graph\)/);
-	assert.deepEqual(cardDiagramNodeRegistry.createEntryList.map(entry => entry.id), ['table', 'operator', 'card-note', 'card-brief', 'card-label', 'card-database', 'card-icon', 'card-matrix', 'scene-box', 'color-block', 'connection']);
-	assert.deepEqual(registry.createEntryList.map(entry => entry.id), ['table', 'operator', 'card-note', 'card-brief', 'card-label', 'card-database', 'card-icon', 'card-matrix', 'scene-box', 'color-block', 'operator-abandon', 'operator-text', 'operator-mapping', 'dataverse-table', 'dataverse-choice', 'power-automate', 'business-rule', 'connection']);
+	assert.throws(() => diagramNormalize(diagramCreate(), cardDiagramNodeRegistry), /unknown node type "dataverse-table" \(this diagram knows: table, operator, card-note, card-brief, card-label, card-three-dots, card-database, card-icon, card-caption, card-matrix, scene-box, color-block, card-index, card-legend, card-graph, shape, text\)/);
+	assert.deepEqual(cardDiagramNodeRegistry.createEntryList.map(entry => entry.id), ['table', 'operator', 'card-note', 'card-brief', 'card-label', 'card-database', 'card-icon', 'card-matrix', 'scene-box', 'color-block', 'shape', 'text', 'connection']);
+	assert.deepEqual(registry.createEntryList.map(entry => entry.id), ['table', 'operator', 'card-note', 'card-brief', 'card-label', 'card-database', 'card-icon', 'card-matrix', 'scene-box', 'color-block', 'operator-abandon', 'operator-text', 'operator-mapping', 'dataverse-table', 'dataverse-choice', 'power-automate', 'business-rule', 'shape', 'text', 'connection']);
 	// the standalone Dataverse card takes a Dataverse table alone, and its older form
 	assert.throws(() => cardStandaloneNormalize({ version: 1, node: { id: 'x', renderer: { type: 'table' }, data: {} } }, dataverseEntityNodeRegistry), /unknown node type "table"/);
 	assert.equal(cardStandaloneNormalize({ entity: { id: 'customer', name: 'Customer', columns: [] } }, dataverseEntityNodeRegistry).id, 'customer');
@@ -173,14 +173,13 @@ test('a color block says where its labels go, and which of them are titles', () 
 	const diagramOf = (data) => ({ version: 1, nodes: [{ id: 'b', renderer: { type: 'color-block' }, position: { x: 0, y: 0 }, size: { width: 100, height: 100 }, data, handles: [] }], connections: [] });
 	assert.doesNotThrow(() => diagramNormalize(diagramOf({ labelSide: 'top', itemList: [{ id: 't', text: 'T', level: 1 }, { id: 'u', text: 'U' }] }), cardDiagramNodeRegistry));
 	assert.throws(() => diagramNormalize(diagramOf({ labelSide: 'left', itemList: [] }), cardDiagramNodeRegistry), /top or the bottom/);
-	assert.doesNotThrow(() => diagramNormalize(diagramOf({ fill: 'none', itemList: [] }), cardDiagramNodeRegistry));
-	assert.throws(() => diagramNormalize(diagramOf({ fill: 'solid', itemList: [] }), cardDiagramNodeRegistry), /fill: none/);
+	assert.throws(() => diagramNormalize(diagramOf({ fill: 'none', itemList: [] }), cardDiagramNodeRegistry), /style: \{ fill: none \}/);
 	assert.throws(() => diagramNormalize(diagramOf({ itemList: [{ id: 't', text: 'T', level: 3 }] }), cardDiagramNodeRegistry), /level 1 or 2/);
-	const columnList = [{ id: 'a', x: 0, width: 50, icon: 'database', text: 'A' }, { id: 'b', x: 50, width: 50 }];
+	const columnList = [{ id: 'a', x: 0, width: 50, text: '{{icon:database}} A' }, { id: 'b', x: 50, width: 50 }];
 	assert.doesNotThrow(() => diagramNormalize(diagramOf({ itemList: [], columnTop: 10, columnList }), cardDiagramNodeRegistry));
 	assert.throws(() => diagramNormalize(diagramOf({ itemList: [], columnList }), cardDiagramNodeRegistry), /columnTop/);
 	assert.throws(() => diagramNormalize(diagramOf({ itemList: [], columnTop: 10, columnList: [{ id: 'a', x: 0 }] }), cardDiagramNodeRegistry), /x and width/);
-	assert.throws(() => diagramNormalize(diagramOf({ itemList: [], columnTop: 10, columnList: [{ id: 'a', x: 0, width: 1, icon: 'nothing' }] }), cardDiagramNodeRegistry), /supported icon/);
+	assert.throws(() => diagramNormalize(diagramOf({ itemList: [], columnTop: 10, columnList: [{ id: 'a', x: 0, width: 1, icon: 'database' }] }), cardDiagramNodeRegistry), /writes its icon in its text/);
 });
 
 test('rowDisplay: rows chosen, in any order, with breaks; the rows stay in the data', () => {
@@ -290,7 +289,7 @@ test('a background around other nodes is the union of their drawn rects, with it
 	const diagram = { version: 1, nodes: [
 		{ id: 'a', renderer: { type: 'card-note' }, position: { x: 0, y: 100 }, size: { width: 200, height: 'auto' }, data: { title: 'A' }, handles: [] },
 		{ id: 'b', renderer: { type: 'card-note' }, position: { x: 300, y: 100 }, size: { width: 200, height: 80 }, data: { title: 'B' }, handles: [] },
-		{ id: 'frame', renderer: { type: 'color-block' }, around: { nodeIdList: ['a', 'b'], padding: { top: 40, right: 10, bottom: 10, left: 10 } }, data: { fill: 'none', itemList: [] }, handles: [] },
+		{ id: 'frame', renderer: { type: 'color-block' }, around: { nodeIdList: ['a', 'b'], padding: { top: 40, right: 10, bottom: 10, left: 10 } }, style: { fill: 'none' }, data: { itemList: [] }, handles: [] },
 	], connections: [] };
 	const graph = diagramNormalize(diagram, cardDiagramNodeRegistry);
 	const places = diagramPlacesGet(graph.nodes, graph.layout, { a: { width: 200, height: 300 } });

@@ -44,8 +44,40 @@ const dropOf = (connection, from) => connection.source === from.nodeId && (conne
 //                 when the editor opens (the thing clicked to start it); isCell: its value typed
 //   onEditRest(report)   the author stepped out of everything: nothing is focused any more
 //   createSourceList, createActionList, createRequest   of the panel of a double-click
+//   featureList   ids of features of the registry offered here, beside those the viewport of the
+//                 draft names (viewport.featureList)
+//
+// The features of the registry (node-registry.js: feature) join the editor of a diagram through a
+// **session** each (feature.editCreate), which the editor asks before it does what it does by
+// default. Everything is optional, and the editor knows no feature by name:
+//   id, isOn                      the feature's id; whether this viewport offers it (read each render)
+//   nodeDrop(node, position, editor)        a node dropped: true when the session took it
+//   paneClick(position, editor)             a click on the empty canvas: true when taken
+//   keyDown(event, editor)                  a key of the editor: true when taken
+//   focusClear(), isFocused                 a focus of its own (what is not a node or a line)
+//   nodeIsPlaced(nodeId)                    it places that node: the node's own position is not offered
+//   nodeResize(nodeId, rect, editor)        a node resized by its resize handles (DiagramResizeHandles.jsx:
+//                                           rect { x, y, width, height, isMoved, axisList }): true
+//                                           when the session wrote it (a size and a place of its own)
+//   createActionListGet(target, editor)     actions of the create panel, for the empty canvas or for
+//                                           a thing right-clicked: { kind: canvas | node | line,
+//                                           position, nodeId?, connectionId? }
+//   createTextGet(target, editor)           { label, take(text, position) }: what words typed in the
+//                                           create panel of the empty canvas make (a text), offered
+//                                           first (DiagramCreatePanel.jsx: textTake); the first session's
+//   cardSectionListGet(target, editor)      sections added to the edit card of a node
+//   cardGet(editor)                         { model, anchorRectGet, close }: the edit card of its focus
+//   isCardDocked                            it shows the edit card of what is selected in a place of
+//                                           its own (its panel): no card floats beside the principal
+//   cardHeadActionListGet(editor)           buttons of the head of the card floating beside the
+//                                           principal: [{ id, label, Icon, act }] (dock it)
+//   dispose()                               the editor is gone
+//   CanvasLayer, Panel                      components, { session, editor }: over the canvas (inside
+//                                           React Flow), and beside the viewport (ParametricPanel.jsx)
+//   flowClassName                           a class of the canvas (a pointer of its own)
 export const DiagramVisualEdit = observer(function DiagramVisualEdit({ data, config, onEvent, kind, registry, isInPopup = false, renderContent }) {
-	const { compById, sourceStore } = useDocStores();
+	const stores = useDocStores();
+	const { compById, sourceStore } = stores;
 	const [result] = useState(() => {
 		try {
 			const resolve = (name, placement) => {
@@ -60,6 +92,13 @@ export const DiagramVisualEdit = observer(function DiagramVisualEdit({ data, con
 	const session = config.edit?.session ?? {};
 	const isLocked = session.status === 'submitting';
 	const { store } = result;
+	// the sessions of the features of the registry, kept with the editor; the ones this viewport offers
+	const [featureSessionList] = useState(() => (result.store && kind === 'diagram' ? (registry?.featureList ?? []).map(feature => feature.editCreate?.({
+		store: result.store, registry, config, canvas, stores,
+		isOnGet: () => Boolean(config.featureList?.includes(feature.id) || result.store.value.viewport?.featureList?.includes(feature.id)),
+	})).filter(Boolean) : []));
+	const featureList = featureSessionList.filter(item => item.isOn);
+	useEffect(() => () => featureSessionList.forEach(item => item.dispose?.()), [featureSessionList]);
 	// inline data is edited like any block; the data of an asset reference
 	// only at its head and while the object is not locked, since a save
 	// writes the head (the mode list already refuses other references)
@@ -91,7 +130,7 @@ export const DiagramVisualEdit = observer(function DiagramVisualEdit({ data, con
 	const cancel = () => { if (!isLocked) void onEvent?.('editCancelRequest'); };
 	const isFixed = Boolean(store?.isStructureFixed);
 	// nothing is focused any more: said to a host that wants to know (a session with no change ends there)
-	const restReport = () => { if (store && !store.display && !store.cell && !store.create) config.onEditRest?.(store.report); };
+	const restReport = () => { if (store && !store.display && !store.cell && !store.create && !featureList.some(item => item.isFocused)) config.onEditRest?.(store.report); };
 	// a line whose end was let go off every handle: free where it was dropped, or, where the
 	// structure is given and a line joins two things or is not there, taken away
 	// the end of a line that a handle takes when a carried end is dropped on it: the end carried,
@@ -113,9 +152,18 @@ export const DiagramVisualEdit = observer(function DiagramVisualEdit({ data, con
 	// being typed, where the keys stay the browser's: the typing it takes
 	// back reaches the draft through the field's input event, as the typing did
 	const keyDown = event => {
-		if (event.nativeEvent.isComposing) return;
+		// a key a control inside took is the control's (the field of a cell of the cell edit layer
+		// takes Escape and Ctrl/⌘ + Enter for itself and lets them bubble): the editor does not act
+		// on it again (step out, save the session)
+		if (event.nativeEvent.isComposing || event.defaultPrevented) return;
 		const isMod = (event.ctrlKey || event.metaKey) && !event.altKey;
 		const key = event.key.toLowerCase();
+		// a feature first: a key of its own (a tool let go, its focus stepped out of)
+		if (editor && !store.cell && !store.create && featureList.some(item => item.keyDown?.(event, editor))) {
+			event.preventDefault();
+			event.stopPropagation();
+			return;
+		}
 		if (event.key === 'Enter' && isMod) {
 			event.preventDefault();
 			event.stopPropagation();
@@ -144,13 +192,30 @@ export const DiagramVisualEdit = observer(function DiagramVisualEdit({ data, con
 	};
 	const editor = store && isAllowed ? {
 		store, isLocked, change, canvas, kind,
+		// ---- the features this viewport offers (their sessions) ----
+		featureList,
+		paneClick: position => featureList.some(item => item.paneClick?.(position, editor)),
+		createActionListGet: target => [...(config.createActionList ?? []), ...featureList.flatMap(item => item.createActionListGet?.(target ?? { kind: 'canvas' }, editor) ?? [])],
+		createTextGet: target => featureList.map(item => item.createTextGet?.(target ?? { kind: 'canvas' }, editor)).find(Boolean),
+		// a node resized by its corners: its new box, as one step; a feature placing it writes it its way
+		nodeResize: (nodeId, rect) => change(() => featureList.some(item => item.nodeResize?.(nodeId, rect, editor)) || store.nodeResize(nodeId, rect)),
+		// a right-click: the panel of a double-click with what can be done there, when a feature or
+		// the host has something to offer for it; false leaves the browser's own menu
+		contextOpen: (target) => {
+			if (isLocked || !featureList.length || !editor.createActionListGet(target).length) return false;
+			if (target.kind === 'node') store.select(target.nodeId);
+			else if (target.kind === 'line') store.selectConnection(target.connectionId);
+			else store.selectionClear();
+			store.createOpen(target.position, { target });
+			return true;
+		},
 		// ---- the path of the edit card ----
 		navigate: path => { store.pathSet(path); },
-		select: (nodeId, options = {}) => { store.select(nodeId, options); },
-		selectConnection: connectionId => { store.selectConnection(connectionId); },
+		select: (nodeId, options = {}) => { featureList.forEach(item => item.focusClear?.()); store.select(nodeId, options); },
+		selectConnection: connectionId => { featureList.forEach(item => item.focusClear?.()); store.selectConnection(connectionId); },
 		handleClick: (nodeId, handleId) => { store.handleClick(nodeId, handleId); },
 		stepOut: () => { store.pathUp(); if (!store.display) { focusRoot(); restReport(); } },
-		clearSelection: () => { store.selectionClear(); focusRoot(); restReport(); },
+		clearSelection: () => { featureList.forEach(item => item.focusClear?.()); store.selectionClear(); focusRoot(); restReport(); },
 		cancelCell: () => { change(() => store.cellCancel()); focusRoot(); },
 		// ---- the history of the draft ----
 		// the draft put back a step; the focus returns to the editor root when
@@ -272,6 +337,8 @@ export const DiagramVisualEdit = observer(function DiagramVisualEdit({ data, con
 					change(() => store.connectionEndpointSet(connectionId, role, endpoint));
 					return;
 				}
+				// a feature may take the drop: a node it places is moved by a parameter of its rule
+				if (featureList.some(item => item.nodeDrop?.(node, position, editor))) return;
 				const authored = store.nodeGet(node.id);
 				if (authored?.position && authored.position !== 'auto' && !authored.isPositionLocked) change(() => store.nodeMove(node.id, position));
 			});
@@ -327,11 +394,17 @@ export const DiagramVisualEdit = observer(function DiagramVisualEdit({ data, con
 		frame = requestAnimationFrame(open);
 		return () => cancelAnimationFrame(frame);
 	}, [createRequest?.key]); // eslint-disable-line react-hooks/exhaustive-deps
-	return <div ref={root} tabIndex={-1} className={`doc-vis-edit${editor ? ' is-active' : ''}${isInPopup ? ' is-popup' : ''}`} onKeyDown={keyDown} onClick={event => {
+	// the edit card of a focus of a feature (a thing that is not a node or a line), hidden like the
+	// card of the path while something else is going on
+	const isCardDocked = featureList.some(item => item.isCardDocked);
+	const cardHeadActionList = editor && !isCardDocked ? featureList.flatMap(item => item.cardHeadActionListGet?.(editor) ?? []) : [];
+	const featureCard = editor && !isCardDocked && !store.display && !store.cell && !store.interaction && !store.create ? featureList.map(item => item.cardGet?.(editor)).find(Boolean) ?? null : null;
+	return <div ref={root} tabIndex={-1} className={`doc-vis-edit${editor ? ' is-active' : ''}${isInPopup ? ' is-popup' : ''}${editor && featureList.some(item => item.Panel) ? ' has-feature-panel' : ''}`} onKeyDown={keyDown} onClick={event => {
 		if (event.target === event.currentTarget || event.target.classList.contains('doc-vis-card-static')) editor?.clearSelection();
 	}}>
 		{result.message || reasonRefused ? <div role="alert" className="doc-edit-message doc-vis-edit-message">{result.message || reasonRefused}</div> : null}
 		{store ? renderContent({ data: { ...data, source: store.rawDraft, raw: store.rawDraft }, editor }) : null}
+		{editor ? featureList.map(item => (item.Panel ? <item.Panel key={item.id} session={item} editor={editor} isInPopup={isInPopup} /> : null)) : null}
 		<EditFloatingPanel label={config.editLabel ?? (kind === 'diagram' ? 'Diagram' : 'Table')} head={store ? <>
 			<span className={`doc-vis-dirty${store.isDirty ? ' is-dirty' : ''}`} role="status">{store.isDirty ? 'Unsaved changes' : 'No changes'}</span>
 			{editor ? <span className="doc-vis-history" role="group" aria-label="History">
@@ -354,6 +427,6 @@ export const DiagramVisualEdit = observer(function DiagramVisualEdit({ data, con
 				<ValueMenu label="Save to" value={store.saveTarget} values={['asset', 'inline']} valueLabels={saveTargetLabels} isLocked={isLocked || !isAllowed} onChange={value => change(() => store.saveTargetSet(value))} />
 			</span> : null}
 		</> : null} actions={<EditActions status={session.status} message={session.message || store?.message} titleCancel="Cancel" isSubmitDisabled={!store || !isAllowed} onSubmit={submit} onCancel={cancel} />} />
-		{editor && store.isCardShown ? <DiagramEditCard editor={editor} onKeyDown={keyDown} /> : null}
+		{featureCard ? <DiagramEditCard key="feature" editor={editor} onKeyDown={keyDown} card={featureCard} headActionList={cardHeadActionList} /> : editor && store.isCardShown && !isCardDocked ? <DiagramEditCard editor={editor} onKeyDown={keyDown} headActionList={cardHeadActionList} /> : null}
 	</div>;
 });

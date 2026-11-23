@@ -1,6 +1,6 @@
 # Card Diagram Flexible Switch: Design
 
-A feature layer over the [card diagram framework](card-diagram.md): **many scenes in one viewport**, each with a path, switched smoothly. A reader moves between an overview, the diagram inside one of its cards, a detail of that diagram, and back; at any scene they can pan, zoom and take a picture. The layer knows nodes, connections, paths and cameras, never what a diagram is about. What authors write is in [comp-card-diagram-switch.md](../comp-mdx/card-diagram-switch/comp-card-diagram-switch.md); this document is the design, and what to go through before changing it.
+A feature layer over the [card diagram framework](card-diagram.md): **many scenes in one viewport**, each with a path, switched smoothly. A reader moves between an overview, the diagram inside one of its cards, a detail of that diagram, and back; at any scene they can pan, zoom and take a picture. The layer knows nodes, connections, paths and cameras, never what a diagram is about. What authors write is in [card-diagram-usage-flexible-switch.md](card-diagram-usage-flexible-switch.md); this document is the design, and what to go through before changing it.
 
 ```text
 [path bar]                overview > tables > account     ←  picture  fit  box
@@ -68,7 +68,7 @@ A direct `scene-stack` may declare `data.focusPath`. `switchStackPresentationBui
 
 ## The views of a scene
 
-What an author writes is in [Views of a scene](../comp-mdx/card-diagram-switch/comp-card-diagram-switch.md#views-of-a-scene). A view has a diagram and a box of its own; the rest of a scene (its path, its label, its place in the tree) is shared.
+What an author writes is in [Views of a scene](card-diagram-usage-flexible-switch.md#views-of-a-scene). A view has a diagram and a box of its own; the rest of a scene (its path, its label, its place in the tree) is shared.
 
 **A view is drawn as a scene is.** A path may name a view (`/overview/er@matrix`), read by `switchPathViewRead`. Everything keyed by a path, the entries of the store, cameras, measurements, a step of a switch, the mask, is keyed by that full form, so nothing downstream of `SwitchStore.entryGet` knows views exist. Providers, labels and the tree of paths use the scene alone. A path written without a view resolves when it is read (`pathResolved`), so a key is never ambiguous.
 
@@ -166,7 +166,7 @@ A stack is a kind of plain React like the embedded scene, so it may stand on the
 
 **The height of a stack** is the height of its node, in which it scrolls, or that of its items (`isHeightFullEmbedded`, `isHeightFullFocused`; `switchStackHeightIsFull`). The store turns a stack at full height into a node of `height: auto` when it reads a scene (`entrySourceLoad`), so the rest of the layer knows no other case: it is measured as any card of that height, its scroll position reads 0 whatever another copy keeps (`stackFullKeySet`), and the camera follows its height as its items are drawn, until the reader moves it. What is chosen later (`stackHeightFullSet`, its button) is kept per presentation and goes first; the scenes drawing that copy are read again. A switch on the canvas must not jitter: the current camera is kept as the reader's own, so nothing refits it, the nodes keep what React Flow measured (`flowRefresh`; a node it has not measured is hidden for some frames), and a stack at full height keeps the room of the scrollbar (`scrollbar-gutter`), or its items would change scale.
 
-**The stack's title bar** is outside the scrolling frame. `titleBar` is text, or `{ text | itemList, isVisibleEmbedded?, isVisibleFocused? }`; its visibility follows presentation, not static rendering. Both flags default to true. Absence preserves legacy chrome. `SceneStackTitleBar` renders text or registered `visualizationTitle` components, with stable per-node/item instance IDs and normal component event routing. It wraps content at a minimum height of 34 px; resizing the scrolling frame updates its measured geometry. The authoring contract and examples are in [The stack title bar](../comp-mdx/card-diagram-switch/comp-card-diagram-switch.md#the-stack-title-bar). `switchDependenciesCollect` visits title components even when hidden and descends into stack item nodes, so their declared dependencies survive a build.
+**The stack's title bar** is outside the scrolling frame. `titleBar` is text, or `{ text | itemList, isVisibleEmbedded?, isVisibleFocused? }`; its visibility follows presentation, not static rendering. Both flags default to true. Absence preserves legacy chrome. `SceneStackTitleBar` renders text or registered `visualizationTitle` components, with stable per-node/item instance IDs and normal component event routing. It wraps content at a minimum height of 34 px; resizing the scrolling frame updates its measured geometry. The authoring contract and examples are in [The stack title bar](card-diagram-usage-flexible-switch.md#the-stack-title-bar). `switchDependenciesCollect` visits title components even when hidden and descends into stack item nodes, so their declared dependencies survive a build.
 
 **The wheel** follows [the rule of every canvas](card-diagram.md#the-wheel-over-a-canvas). In its own scene a stack takes the wheel while it can still scroll, and the end of that gesture stops there; a stack with nothing left to scroll, a stack embedded in a card, and a pinch all leave the wheel to the canvas, which zooms. An embedded stack still scrolls by its scrollbar.
 
@@ -269,6 +269,9 @@ edit
   label?                 the word of the editor's bar (the kind of thing edited)
   registry?              the kinds the draft may hold, else the viewport's
   createSourceList?, createActionList?     of the panel of a double-click, while editing
+  featureList?           the feature layers offered while editing (parametric-canvas: the tool bar and the
+                         panel of card-diagram-parametric-canvas.md). A scene made again from data at every
+                         change offers none; one only partly made from data may
 ```
 
 **An edit starts from a click on the thing to change.** No mode is entered first: a click on a card, a row, a cell, a line (or its label), or the title of a scene whose draft has that thing starts the edit **with that thing focused** (`SwitchStore.sceneEditSelectOf`, `sceneEditStart(select)`): a text cell is being typed, a choice has its menu open, a row or a label has the edit card beside it. The pencil of the bar starts it with nothing focused, and ends it again.
@@ -319,7 +322,7 @@ Save         the whole document written once: each draft in the place of its dia
              comments included
 ```
 
-The page is told the document, never the diagram of one scene, so its dirty mark and its Save are the block's (`SwitchSceneEditStore.js`). A scene made of tabs of another has no diagram of its own: it is edited through the scene it arranges. A component whose scenes are generated from data offers no visual mode of its document (`cardDiagramSwitchDefineOptionsBuild({ isSceneEditable: false })`): what an author changes there is the data, as text, or wherever the data is written from, or, where its provider says so, a scene edited in place ([A scene edited in place](#a-scene-edited-in-place)), its draft written back as data.
+The page is told the document, never the diagram of one scene, so its dirty mark and its Save are the block's (`SwitchSceneEditStore.js`). The **feature layers** a document names at its top (`featureList: [parametric-canvas]`) are offered for every scene it edits, as `viewport.featureList` of one diagram offers them for itself; the registry of the layer keeps the features of the registry it is built from, so their data is read in every scene ([Features](card-diagram-impl.md#features)). A scene made of tabs of another has no diagram of its own: it is edited through the scene it arranges. A component whose scenes are generated from data offers no visual mode of its document (`cardDiagramSwitchDefineOptionsBuild({ isSceneEditable: false })`): what an author changes there is the data, as text, or wherever the data is written from, or, where its provider says so, a scene edited in place ([A scene edited in place](#a-scene-edited-in-place)), its draft written back as data.
 
 ## Adding to it
 

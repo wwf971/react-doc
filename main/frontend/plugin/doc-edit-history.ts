@@ -243,6 +243,21 @@ export class DocEditHistory {
     this.entryListByPath.delete(path);
   }
 
+  // a document moved or renamed (doc-relocate.ts): its entries follow it, so an undo after the
+  // move writes the document where it is now. an entry of several files is listed under each
+  // of them, and names the moved one by its new path
+  pathMove(pathFrom: string, pathTo: string) {
+    if (pathFrom === pathTo) return;
+    const list = this.entryListByPath.get(pathFrom);
+    if (!list) return;
+    for (const entry of list) {
+      if (entry.docPath === pathFrom) entry.docPath = pathTo;
+      for (const change of entry.fileChangeList) if (change.path === pathFrom) change.path = pathTo;
+    }
+    this.entryListByPath.delete(pathFrom);
+    this.entryListByPath.set(pathTo, [...(this.entryListByPath.get(pathTo) ?? []), ...list]);
+  }
+
   private entryDoneLastGet(path: string): HistoryEntry | undefined {
     const list = this.entryListByPath.get(path) ?? [];
     for (let index = list.length - 1; index >= 0; index -= 1) if (list[index].state === 'done') return list[index];

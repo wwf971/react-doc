@@ -86,7 +86,8 @@ export const DiagramERView = observer(function DiagramERView({ data = {}, config
 	// the height is an authored prop (data.height); config.height is the
 	// form a host passes it in
 	const heightDiagram = store.viewport.size.height === 'auto' ? 620 : store.viewport.size.height;
-	const context = { config, registry, editor, measurementSet: store.measurementSet, edgeGeometry: edgeGeometry.current, search };
+	// canvasStore: the canvas model itself, for a layer of a feature drawn over the canvas (what its placer answered: store.placed)
+	const context = { config, registry, editor, measurementSet: store.measurementSet, edgeGeometry: edgeGeometry.current, search, canvasStore: store };
 
 	useEffect(() => {
 		if (store.source !== sourceDiagram) store.sourceLoad(sourceDiagram, Boolean(editor));
@@ -182,9 +183,11 @@ const DiagramERCanvas = observer(function DiagramERCanvas({ store, viewState, is
 	};
 	const nodeList = [
 		...store.nodeList.map(node => {
-			const draggable = node.type === 'visualizationNode' ? isEditing && !isLocked && !isFixed && !node.data.node.isPositionLocked : node.type === 'visualizationPoint' ? isEditing && !isLocked : node.draggable;
+			const draggable = node.type === 'visualizationNode' ? isEditing && !isLocked && !isFixed && !node.data.node.isPositionLocked && !node.data.node.isDerived : node.type === 'visualizationPoint' ? isEditing && !isLocked : node.draggable;
 			return decorate(node, [draggable], () => ({ ...node, draggable }));
 		}),
+		// the create panel: a corner of it where it was asked for (DiagramCreateNode turns it about
+		// that point to stay inside the canvas)
 		...(create ? [{ id: '~create', type: 'visualizationCreate', position: create.position, initialWidth: 300, initialHeight: 240, draggable: false, selectable: false, focusable: false, connectable: false, zIndex: 1000, data: { position: create.position } }] : []),
 	];
 	const edgeList = store.edgeList.map(edge => {
@@ -251,6 +254,17 @@ const DiagramERCanvas = observer(function DiagramERCanvas({ store, viewState, is
 				const rect = wrapper.current?.getBoundingClientRect();
 				return rect ? screenToFlowPosition({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }) : null;
 			},
+			// for the features of the editor (node-registry.js: feature): what a placer answered the
+			// last time the nodes were placed, a dragged place given up, and a box of the canvas on the screen
+			placedGet: placerId => store.placed.get(placerId),
+			nodeSizeGet: id => store.measurements[id] ?? null,
+			placeOverrideSet: (key, position) => store.placeOverrideSet(key, position),
+			placeOverrideClear: () => store.placeOverrideClear(),
+			boxRectGet: (box) => {
+				const from = flowToScreenPosition({ x: box.x, y: box.y });
+				const to = flowToScreenPosition({ x: box.x + box.width, y: box.y + box.height });
+				return { left: from.x, top: from.y, right: to.x, bottom: to.y, width: to.x - from.x, height: to.y - from.y };
+			},
 		};
 		editor.canvas.current = canvas;
 		return () => { if (editor.canvas.current === canvas) editor.canvas.current = null; };
@@ -294,7 +308,7 @@ const DiagramERCanvas = observer(function DiagramERCanvas({ store, viewState, is
 	return (
 		<ReactFlow
 			ref={wrapper}
-			className="doc-er-diagram-flow"
+			className={`doc-er-diagram-flow${(editor?.featureList ?? []).map(session => (session.flowClassName ? ` ${session.flowClassName}` : '')).join('')}`}
 			data-ready={isReady ? '' : undefined}
 			style={{ '--doc-vis-zoom': zoom }}
 			nodes={nodeList}
@@ -330,14 +344,38 @@ const DiagramERCanvas = observer(function DiagramERCanvas({ store, viewState, is
 			// at all; a mouse-enter handler keeps it on, so the text of a card
 			// stays selectable while reading and a drag on its title line pans
 			onNodeMouseEnter={nodeMouseEnterNoop}
-			onNodeClick={isEditing ? (event, node) => { if (node.type === 'visualizationNode' && !event.target.closest('.doc-card, .doc-vis-operator')) editor.select(node.id); } : undefined}
+			onNodeClick={isEditing ? (event, node) => {
+				if (node.type !== 'visualizationNode') return;
+				// a node a feature derives (a copy) stands for its source
+				const derived = node.data.node.derived;
+				if (derived) editor.select(derived.nodeIdSource);
+				else if (!event.target.closest('.doc-card, .doc-vis-operator')) editor.select(node.id);
+			} : undefined}
 			onEdgeClick={isEditing ? (_event, edge) => { if (editor.store.selection?.connectionId !== edge.id) editor.selectConnection(edge.id); } : undefined}
 			onEdgeDoubleClick={isEditing && !isLocked && !isFixed ? (event, edge) => {
 				// the browser takes a double-click for selecting the word nearest to it
 				window.getSelection()?.removeAllRanges();
 				editor.change(() => editor.anchorAdd(edge.id, screenToFlowPosition({ x: event.clientX, y: event.clientY })));
 			} : undefined}
-			onPaneClick={isEditing ? () => { editor.clearSelection(); editor.createClose(); } : undefined}
+			onPaneClick={isEditing ? (event) => {
+				// a feature may take the click (a tool armed puts its thing there)
+				if (editor.paneClick?.(screenToFlowPosition({ x: event.clientX, y: event.clientY }))) return;
+				editor.clearSelection();
+				editor.createClose();
+			} : undefined}
+			// a right-click on a thing, or on the empty canvas: what can be done there, in the panel of a
+			// double-click, when a feature or the host offers something; else the browser's own menu
+			onNodeContextMenu={isEditing && !isLocked ? (event, node) => {
+				if (node.type !== 'visualizationNode') return;
+				const nodeId = node.data.node.derived?.nodeIdSource ?? node.id;
+				if (editor.contextOpen?.({ kind: 'node', nodeId, position: screenToFlowPosition({ x: event.clientX, y: event.clientY }) })) event.preventDefault();
+			} : undefined}
+			onEdgeContextMenu={isEditing && !isLocked ? (event, edge) => {
+				if (editor.contextOpen?.({ kind: 'line', connectionId: edge.id, position: screenToFlowPosition({ x: event.clientX, y: event.clientY }) })) event.preventDefault();
+			} : undefined}
+			onPaneContextMenu={isEditing && !isLocked ? (event) => {
+				if (editor.contextOpen?.({ kind: 'canvas', position: screenToFlowPosition({ x: event.clientX, y: event.clientY }) })) event.preventDefault();
+			} : undefined}
 			onDoubleClick={isEditing ? event => { if (event.target.classList?.contains('react-flow__pane')) editor.createOpen(screenToFlowPosition({ x: event.clientX, y: event.clientY })); } : undefined}
 			onConnectStart={isEditing ? (_event, params) => editor.connectStart(params.nodeId, params.handleId) : undefined}
 			onConnect={isEditing ? connection => editor.connect(connection) : undefined}
@@ -351,6 +389,8 @@ const DiagramERCanvas = observer(function DiagramERCanvas({ store, viewState, is
 			<Controls showInteractive={false}><DiagramSearchControl search={search} /></Controls>
 			{viewport.isMiniMapVisible ? <MiniMap position="bottom-right" pannable zoomable /> : null}
 			<DiagramPinLayer pinList={store.graph?.pinList} registry={registry} config={config} />
+			{/* what the features of the editor draw over the canvas (a tool bar, the marks of a structure) */}
+			{(editor?.featureList ?? []).map(session => (session.CanvasLayer ? <session.CanvasLayer key={session.id} session={session} editor={editor} /> : null))}
 		</ReactFlow>
 	);
 });

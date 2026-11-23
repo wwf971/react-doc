@@ -12,8 +12,11 @@ import { Waypoints } from '../../../../main/frontend/UICommon.js';
 //   kind
 //     type        the renderer type authored in `renderer: { type }`
 //     label       its name in the create panel and in messages
-//     contract    { dataNormalize?, anchorListGet, sizeDefault, sizeMin? }:
-//                 what the diagram may assume about the node (DiagramERData.js)
+//     contract    { dataNormalize?, anchorListGet, sizeDefault, sizeMin?, resizeAxisList?, styleList? }:
+//                 what the diagram may assume about the node (DiagramERData.js). resizeAxisList: what
+//                 its resize handles change, where the rule of DiagramNodeResize.js (read from the
+//                 node) is wrong for the kind; styleList: the keys of node.style its card draws
+//                 (DiagramNodeStyle.js)
 //     schema      the card schema (TableCardSchema.js) when the node is a
 //                 card the editor knows rows and fields of; null otherwise
 //     Card        the component drawing the node: { node, schema, anchorRef,
@@ -31,7 +34,34 @@ import { Waypoints } from '../../../../main/frontend/UICommon.js';
 //                       without `version`, turned into { version: 1, node }
 //     arrangerList      the arrangers the editor and the apis of the component
 //                       offer (card-diagram-arrange.md); none by default
-export function nodeRegistryBuild({ id, label, kindList, cardLegacyConvert, arrangerList = [] }) {
+//     featureList       the features of its diagrams (below); none by default
+//
+// A **feature** is a layer over the diagrams of a registry that the engine knows only through
+// hooks, never by name (card-diagram-impl.md#features): it owns a section of the data of a diagram,
+// may place nodes, and may join the visual editor. The parametric canvas is one.
+//
+//   feature
+//     id            what a viewport names to offer it for editing (viewport.featureList)
+//     dataKey       the top-level key of a diagram it owns
+//     graphResolve(value, graph, { registry }) -> { data?, nodeList?, placer? } | undefined
+//                   called by diagramNormalize after the nodes and the connections are read, with
+//                   the value of its key; it throws for what it refuses. data is kept as
+//                   graph.featureById[id]; nodeList are nodes it derives (already normalized, id
+//                   starting with ~, isDerived); placer places nodes (DiagramERData.js: diagramPlacesGet)
+//     editCreate({ store, registry, config, canvas, stores, isOnGet }) -> a session of the visual editor, or nothing
+//                   (DiagramVisualEdit.jsx: what a session may answer). stores: the stores of the page
+//     configDefineList   keys of the component config its diagram components declare for it
+//                   (card-diagram-comp.js), in the form of doc_page_impl_config.md#component-level-config
+//     kindList      kinds it brings (what it draws with: a shape, a text): kinds of every registry
+//                   listing it, after the registry's own, offered by its create panel like any other
+//     apiListBuild({ changeApi, readApi }) -> apis   the apis of the diagram components listing it,
+//                   for an agent (DiagramApiList.js): changeApi(options, command(store, params, ends,
+//                   diagram)) changes the draft of an open session or the block, readApi(options,
+//                   read(store, params, diagram)) answers what is read
+export function nodeRegistryBuild({ id, label, kindList: kindOwnList, cardLegacyConvert, arrangerList = [], featureList = [] }) {
+	// a registry built from another one's kindList holds the kinds of its features already: the same
+	// kind is no second declaration
+	const kindList = [...kindOwnList, ...featureList.flatMap(feature => feature.kindList ?? []).filter(kind => !kindOwnList.includes(kind))];
 	const kindByType = {};
 	for (const kind of kindList) {
 		if (kindByType[kind.type]) throw new Error(`Node registry ${id}: the type ${kind.type} is declared twice.`);
@@ -46,7 +76,12 @@ export function nodeRegistryBuild({ id, label, kindList, cardLegacyConvert, arra
 		create: kind.create.nodeCreate,
 	}));
 	createEntryList.push({ id: 'connection', label: 'Connection', description: 'A line with two free ends; drag an end onto a handle.', icon: Waypoints, keywordList: ['line', 'edge', 'relationship'], isConnection: true });
-	return { id, label, kindList, kindByType, createEntryList, cardLegacyConvert, arrangerList };
+	const featureById = {};
+	for (const feature of featureList) {
+		if (featureById[feature.id]) throw new Error(`Node registry ${id}: the feature ${feature.id} is declared twice.`);
+		featureById[feature.id] = feature;
+	}
+	return { id, label, kindList, kindByType, createEntryList, cardLegacyConvert, arrangerList, featureList, featureById };
 }
 
 // the create entries of a registry matching what is typed: label first, then

@@ -5,6 +5,7 @@ import { apiByIdNav } from './api-nav.js';
 import { apiByIdPage } from './api-page.js';
 import { apiByIdObject } from './api-object.js';
 import { apiByIdPlayground } from './api-playground.js';
+import { apiByIdSource } from './api-source.js';
 import { apiByIdStruct } from './api-struct.js';
 
 // all apis the package registers, by id ({layer}/{name}), the counterpart
@@ -24,4 +25,5 @@ export const apiById = {
   ...apiByIdPage,
   ...apiByIdObject,
   ...apiByIdPlayground,
+  ...apiByIdSource,
 };

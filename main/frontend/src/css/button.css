@@ -171,3 +171,13 @@
 .doc-button-group > button[data-danger]:hover:not(:disabled) {
   color: var(--color-fd-destructive, #dc2626);
 }
+
+/* the grip of a floating button group (comp-doc/edit/EditButtonGroup.jsx): dragged to move what it
+   belongs to among its siblings */
+.doc-button-group > .doc-edit-button-group-grip:not(:disabled) {
+  cursor: grab;
+}
+
+.doc-button-group > .doc-edit-button-group-grip:not(:disabled):active {
+  cursor: grabbing;
+}

@@ -220,7 +220,7 @@ function autoChildren(fileManifest, context) {
       type: 'folder',
       name: itemNameCreate({}, itemTextResolve({}, labelRoot, id), context, {
         assetKey: tagSidePanelAssetKeyGet({ folderPath: pathRoot }),
-        dataItem: { kind: 'folder', sourcePath: pathRoot },
+        dataItem: { kind: 'folder', sourcePath: pathRoot, ...(entries.some((entry) => entry.managed) ? { isManaged: true } : {}) },
         itemId: id,
       }),
       collapsible: true,
@@ -268,7 +268,7 @@ function folderChildren(entries, position, context, partId, pathFolder, generate
       type: 'folder',
       name: itemNameCreate({}, itemTextResolve({}, subDir, id), context, {
         assetKey: tagSidePanelAssetKeyGet({ folderPath: pathSub }),
-        dataItem: { kind: 'folder', sourcePath: pathSub, isGenerated: Boolean(generatedFrom) },
+        dataItem: { kind: 'folder', sourcePath: pathSub, isGenerated: Boolean(generatedFrom), ...(entriesSub.some((entry) => entry.managed) ? { isManaged: true } : {}) },
         generatedFrom,
         itemId: id,
       }),
@@ -448,7 +448,7 @@ function convertSourceFolder(node, position, context, partId) {
     type: 'folder',
     name: itemNameCreate(node, itemTextResolve(node, pathFolder.split('/').at(-1), id), context, {
       assetKey,
-      dataItem: { kind: 'folder', sourcePath: pathFolder, isSourceFolder: true },
+      dataItem: { kind: 'folder', sourcePath: pathFolder, isSourceFolder: true, ...(entries.some((entry) => entry.managed) ? { isManaged: true } : {}) },
       itemId: id,
     }),
     collapsible: node.collapsible !== false,
@@ -520,6 +520,8 @@ function docPageCreate(node, entries, position, context, isFolderIndex = false, 
         filePath: entry.internalPath,
         isTextCustom: node.text !== undefined,
         ...(generatedFrom ? { isGenerated: true } : {}),
+        // a document of a virtual root (doc_page_impl_doc_managed.md): its glyph says so
+        ...(entry.managed ? { isManaged: true } : {}),
       },
       generatedFrom,
       isItemDisplayApplied: true,

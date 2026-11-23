@@ -1,0 +1,848 @@
+/* The parametric canvas (card-diagram-parametric-canvas.md): what the feature draws in the visual
+   editor of a diagram. Its buttons, notes and the properties of its cards are the shared classes
+   of the edit layer and of the edit card (.doc-button-icon, .doc-note, .doc-vis-card-panel); this
+   file lays out what is its own: the tool bar, the marks over the canvas, the panel. */
+
+/* ---------- the tool bar (ParametricToolBar.jsx), at the top left of the viewport ---------- */
+
+/* only the bar itself takes the pointer: the line under it (what the armed tool waits for) lets a
+   gesture start where it stands */
+.doc-param-toolbar {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 0.3rem;
+	margin: 8px;
+	pointer-events: none !important;
+	user-select: none;
+	font-family: ui-sans-serif, system-ui, sans-serif;
+	font-size: 0.72rem;
+	line-height: 1.3;
+}
+
+.doc-param-toolbar-row {
+	pointer-events: all;
+	display: flex;
+	align-items: stretch;
+	gap: 1px;
+	padding: 2px;
+	border: 1px solid var(--color-fd-border);
+	border-radius: 4px;
+	background: var(--color-fd-popover, var(--color-fd-background));
+	box-shadow: 0 3px 10px rgb(15 23 42 / 10%);
+}
+
+.doc-param-tool {
+	position: relative;
+	display: inline-flex;
+	align-items: stretch;
+	border-radius: 3px;
+}
+
+.doc-param-tool-main,
+.doc-param-tool-more,
+.doc-param-tool-entry-main,
+.doc-param-mode-main {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.3rem;
+	border: 0;
+	background: transparent;
+	color: var(--color-fd-foreground);
+	font: inherit;
+	cursor: pointer;
+}
+
+.doc-param-tool-main {
+	padding: 0.25rem 0.4rem;
+	border-radius: 3px;
+	white-space: nowrap;
+}
+
+.doc-param-tool:not(.is-group) > .doc-param-tool-main {
+	padding-right: 0.2rem;
+	border-radius: 3px 0 0 3px;
+}
+
+.doc-param-tool-more {
+	padding: 0 0.2rem;
+	border-radius: 0 3px 3px 0;
+	color: var(--color-fd-muted-foreground);
+}
+
+.doc-param-tool-main:hover:not(:disabled),
+.doc-param-tool-more:hover:not(:disabled),
+.doc-param-tool-entry-main:hover:not(:disabled),
+.doc-param-mode-main:hover:not(:disabled),
+.doc-param-tool.is-open > button {
+	background: var(--color-fd-accent);
+}
+
+.doc-param-tool-main:disabled,
+.doc-param-mode-main:disabled {
+	opacity: 0.5;
+	cursor: default;
+}
+
+/* the tool a click on the canvas will place */
+.doc-param-tool.is-armed > .doc-param-tool-main,
+.doc-param-tool.is-armed > .doc-param-tool-more {
+	background: color-mix(in srgb, var(--color-fd-primary) 14%, transparent);
+	color: var(--color-fd-primary);
+}
+
+.doc-param-toolbar-hint {
+	padding: 0.15rem 0.45rem;
+	border-radius: 3px;
+	background: color-mix(in srgb, var(--color-fd-primary) 10%, var(--color-fd-background));
+	color: var(--color-fd-foreground);
+}
+
+/* while a tool is armed: the gesture surface over the whole canvas, under the tool bar and the
+   controls (the panels of React Flow stand at 5). It takes the pointer, so a box may start over a card */
+.doc-param-gesture {
+	position: absolute;
+	inset: 0;
+	z-index: 4;
+	cursor: crosshair;
+	touch-action: none;
+}
+
+/* the ghost of what the gesture will make, in the coordinates of the diagram */
+/* where the thing would go: an outline only, never a block standing in the way of what is there */
+.doc-param-ghost {
+	position: absolute;
+	top: 0;
+	left: 0;
+	box-sizing: border-box;
+	border: 1.5px dashed var(--color-fd-primary);
+	border-radius: 4px;
+	background: transparent;
+	pointer-events: none;
+}
+
+/* a box being drawn: lightly filled, so the area it takes reads at once */
+.doc-param-ghost.is-drawn {
+	background: color-mix(in srgb, var(--color-fd-primary) 5%, transparent);
+}
+
+/* a thing that is there, pointed at by the gesture */
+.doc-param-ghost.is-mark {
+	border-style: solid;
+	border-width: 1px;
+	background: color-mix(in srgb, var(--color-fd-primary) 4%, transparent);
+}
+
+.doc-param-ghost-line {
+	position: absolute;
+	top: 0;
+	left: 0;
+	overflow: visible;
+	pointer-events: none;
+}
+
+.doc-param-ghost-line line {
+	stroke: var(--color-fd-primary);
+	stroke-width: 1.5;
+	stroke-dasharray: 5 4;
+	vector-effect: non-scaling-stroke;
+}
+
+.doc-param-ghost-text {
+	position: absolute;
+	top: 0;
+	left: 0;
+	width: 0;
+	height: 0;
+	pointer-events: none;
+}
+
+.doc-param-ghost-text > span {
+	position: absolute;
+	top: 4px;
+	left: 0;
+	padding: 0 0.3rem;
+	border-radius: 3px;
+	background: var(--color-fd-primary);
+	color: var(--color-fd-primary-foreground, #fff);
+	font-family: ui-sans-serif, system-ui, sans-serif;
+	font-size: 10.5px;
+	line-height: 1.6;
+	white-space: nowrap;
+	transform: scale(calc(1 / var(--doc-vis-zoom, 1)));
+	transform-origin: top left;
+}
+
+/* the cue of the armed mode beside the pointer, before the gesture starts: as large on the screen
+   at every zoom, down and right of the pointer, never in its way */
+.doc-param-cue {
+	position: absolute;
+	top: 0;
+	left: 0;
+	width: 0;
+	height: 0;
+	pointer-events: none;
+}
+
+.doc-param-cue > span {
+	position: absolute;
+	top: 0;
+	left: 0;
+	display: flex;
+	flex-direction: column;
+	padding: 0.2rem 0.45rem;
+	border: 1px solid var(--color-fd-border);
+	border-radius: 4px;
+	background: var(--color-fd-popover, var(--color-fd-background));
+	box-shadow: 0 2px 8px rgb(15 23 42 / 12%);
+	color: var(--color-fd-foreground);
+	font-family: ui-sans-serif, system-ui, sans-serif;
+	font-size: 11px;
+	line-height: 1.4;
+	white-space: nowrap;
+	transform: scale(calc(1 / var(--doc-vis-zoom, 1))) translate(16px, 18px);
+	transform-origin: top left;
+}
+
+.doc-param-cue strong {
+	font-weight: 600;
+}
+
+.doc-param-cue em {
+	color: var(--color-fd-muted-foreground);
+	font-size: 10px;
+	font-style: normal;
+}
+
+/* how a tool is placed: the create modes it offers, each opening its parameters */
+.doc-param-tool-heading {
+	margin: 0.35rem 0 0.15rem;
+	color: var(--color-fd-muted-foreground);
+	font-size: 0.66rem;
+	font-weight: 600;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+}
+
+.doc-param-mode-row {
+	display: flex;
+	align-items: stretch;
+	border-radius: 3px;
+}
+
+.doc-param-mode-main {
+	display: grid !important;
+	flex: 1 1 auto;
+	grid-template-columns: 14px auto minmax(0, 1fr) auto;
+	min-width: 0;
+	gap: 0.4rem !important;
+	padding: 0.24rem 0.3rem;
+	border-radius: 3px 0 0 3px;
+	text-align: left;
+}
+
+.doc-param-mode-label {
+	font-weight: 600;
+	white-space: nowrap;
+}
+
+.doc-param-mode-description {
+	min-width: 0;
+	overflow: hidden;
+	color: var(--color-fd-muted-foreground);
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.doc-param-mode-default {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.15rem;
+	color: var(--color-fd-muted-foreground);
+	font-size: 0.66rem;
+	white-space: nowrap;
+}
+
+.doc-param-mode.is-armed > .doc-param-mode-row > button {
+	background: color-mix(in srgb, var(--color-fd-primary) 14%, transparent);
+}
+
+.doc-param-mode-detail {
+	margin: 0.1rem 0 0.35rem 0.45rem;
+	padding: 0.1rem 0 0.2rem 0.5rem;
+	border-left: 2px solid var(--color-fd-border);
+}
+
+.doc-param-mode-detail .doc-button {
+	margin-top: 0.3rem;
+}
+
+.doc-param-tool-kept {
+	margin: 0.3rem 0 0.2rem;
+}
+
+/* the dropdown of a tool (its parameters) or of a group of tools */
+.doc-param-tool-drop {
+	position: absolute;
+	top: calc(100% + 4px);
+	left: 0;
+	z-index: 40;
+	box-sizing: border-box;
+	width: 300px;
+	max-height: 420px;
+	padding: 0.3rem;
+	overflow-y: auto;
+	border: 1px solid var(--color-fd-border);
+	border-radius: 4px;
+	background: var(--color-fd-popover, var(--color-fd-background));
+	box-shadow: 0 6px 18px rgb(0 0 0 / 16%);
+}
+
+.doc-param-tool-entry {
+	border-radius: 3px;
+}
+
+.doc-param-tool-entry-row {
+	display: flex;
+	align-items: stretch;
+}
+
+.doc-param-tool-entry-main {
+	display: grid !important;
+	flex: 1 1 auto;
+	grid-template-columns: 14px auto minmax(0, 1fr);
+	min-width: 0;
+	gap: 0.4rem !important;
+	padding: 0.28rem 0.35rem;
+	border-radius: 3px 0 0 3px;
+	text-align: left;
+}
+
+.doc-param-tool-entry-label {
+	font-weight: 600;
+	white-space: nowrap;
+}
+
+.doc-param-tool-entry-description {
+	min-width: 0;
+	overflow: hidden;
+	color: var(--color-fd-muted-foreground);
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.doc-param-tool-entry.is-armed > .doc-param-tool-entry-row > button {
+	background: color-mix(in srgb, var(--color-fd-primary) 14%, transparent);
+}
+
+.doc-param-tool-detail {
+	padding: 0.2rem 0.45rem 0.4rem;
+	font-size: 0.74rem;
+}
+
+.doc-param-tool-entry > .doc-param-tool-detail {
+	margin: 0.1rem 0 0.3rem 0.5rem;
+	border-left: 2px solid var(--color-fd-border);
+}
+
+.doc-param-tool-detail-note {
+	margin: 0.15rem 0 0.3rem;
+}
+
+/* ---------- over the canvas (ParametricCanvasLayer.jsx), in the coordinates of the diagram ---------- */
+
+.doc-param-guide {
+	position: absolute;
+	top: 0;
+	left: 0;
+	overflow: visible;
+	pointer-events: none;
+}
+
+.doc-param-guide line {
+	stroke: var(--color-fd-primary);
+	stroke-width: 1.2;
+	stroke-dasharray: 4 3;
+	vector-effect: non-scaling-stroke;
+}
+
+.doc-param-guide rect {
+	fill: none;
+	stroke: var(--color-fd-primary);
+	stroke-width: 1;
+	stroke-opacity: 0.45;
+	vector-effect: non-scaling-stroke;
+}
+
+/* the origin of a group: a mark as large on the screen at every zoom, with the name of its group */
+.doc-param-origin {
+	position: absolute;
+	top: 0;
+	left: 0;
+	width: 0;
+	height: 0;
+	pointer-events: none;
+}
+
+.doc-param-origin-mark {
+	position: absolute;
+	top: -7px;
+	left: -7px;
+	box-sizing: border-box;
+	width: 14px;
+	height: 14px;
+	padding: 0;
+	border: 1.5px solid var(--color-fd-primary);
+	border-radius: 50%;
+	background: var(--color-fd-background);
+	transform: scale(calc(1 / var(--doc-vis-zoom, 1)));
+	cursor: move;
+	pointer-events: all;
+}
+
+.doc-param-origin-mark::after {
+	position: absolute;
+	inset: 3px;
+	border-radius: 50%;
+	background: var(--color-fd-primary);
+	content: '';
+}
+
+.doc-param-origin.is-focused .doc-param-origin-mark,
+.doc-param-origin-mark:hover {
+	box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-fd-primary) 28%, transparent);
+}
+
+.doc-param-origin-name {
+	position: absolute;
+	bottom: 10px;
+	left: -7px;
+	color: var(--color-fd-primary);
+	font-family: ui-sans-serif, system-ui, sans-serif;
+	font-size: 10.5px;
+	font-weight: 600;
+	white-space: nowrap;
+	opacity: 0.8;
+	transform: scale(calc(1 / var(--doc-vis-zoom, 1)));
+	transform-origin: bottom left;
+}
+
+/* the box of a layout member: a dashed frame around what it arranges, its name on its top edge */
+.doc-param-layout-box {
+	position: absolute;
+	top: 0;
+	left: 0;
+	box-sizing: border-box;
+	border: 1px dashed color-mix(in srgb, var(--color-fd-primary) 55%, transparent);
+	border-radius: 5px;
+	pointer-events: none;
+}
+
+.doc-param-layout-box.is-selected {
+	border-style: solid;
+	border-color: var(--color-fd-primary);
+	background: color-mix(in srgb, var(--color-fd-primary) 5%, transparent);
+}
+
+.doc-param-layout-box.is-empty {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.doc-param-layout-tab {
+	position: absolute;
+	bottom: 100%;
+	left: 4px;
+	padding: 0 0.35rem;
+	border: 0;
+	border-radius: 3px 3px 0 0;
+	background: color-mix(in srgb, var(--color-fd-primary) 14%, var(--color-fd-background));
+	color: var(--color-fd-primary);
+	font-family: ui-sans-serif, system-ui, sans-serif;
+	font-size: 10.5px;
+	font-weight: 600;
+	line-height: 1.5;
+	white-space: nowrap;
+	transform: scale(calc(1 / var(--doc-vis-zoom, 1)));
+	transform-origin: bottom left;
+	cursor: pointer;
+	pointer-events: all;
+}
+
+.doc-param-layout-box.is-selected .doc-param-layout-tab {
+	background: var(--color-fd-primary);
+	color: var(--color-fd-primary-foreground, #fff);
+}
+
+.doc-param-layout-empty {
+	color: var(--color-fd-muted-foreground);
+	font-family: ui-sans-serif, system-ui, sans-serif;
+	font-size: 10.5px;
+	white-space: nowrap;
+}
+
+/* a node a repeat spawns: its source drawn again, a little lighter, since it is nobody's to edit */
+.doc-vis-edit .doc-vis-node.is-derived {
+	opacity: 0.72;
+}
+
+/* ---------- the panel (ParametricPanel.jsx) ---------- */
+
+/* in the page: under the viewport, as wide as it, over what follows (nothing is added to the flow) */
+.doc-vis-edit.has-feature-panel {
+	position: relative;
+}
+
+.doc-param-panel {
+	position: absolute;
+	top: calc(100% + 6px);
+	right: 0;
+	left: 0;
+	z-index: 30;
+	display: flex;
+	flex-direction: column;
+	box-sizing: border-box;
+	height: 270px;
+	border: 1px solid var(--color-fd-border);
+	border-radius: 6px;
+	background: var(--color-fd-background);
+	box-shadow: 0 6px 20px rgb(15 23 42 / 14%);
+	color: var(--color-fd-foreground);
+	font-family: ui-sans-serif, system-ui, sans-serif;
+	font-size: 0.74rem;
+	line-height: 1.35;
+	text-align: left;
+	cursor: auto;
+}
+
+.doc-param-panel.is-collapsed {
+	height: auto;
+}
+
+/* in the block popup: docked at its bottom, the canvas taking the room above */
+.doc-vis-edit.is-popup > .doc-param-panel {
+	position: static;
+	flex: 0 0 auto;
+	height: 280px;
+	border-width: 1px 0 0;
+	border-radius: 0;
+	box-shadow: none;
+}
+
+.doc-vis-edit.is-popup > .doc-param-panel.is-collapsed {
+	height: auto;
+}
+
+.doc-param-panel-head {
+	display: flex;
+	flex: 0 0 auto;
+	align-items: center;
+	gap: 0.45rem;
+	min-height: 28px;
+	padding: 0 0.5rem 0 0.6rem;
+	border-bottom: 1px solid var(--color-fd-border);
+}
+
+.doc-param-panel.is-collapsed .doc-param-panel-head {
+	border-bottom: 0;
+}
+
+.doc-param-panel-count {
+	margin: 0;
+}
+
+.doc-param-panel-fold {
+	margin-left: auto;
+}
+
+/* the switch of the edit card stands before the fold button and takes the free room itself */
+.doc-param-card-place + .doc-param-panel-fold {
+	margin-left: 0.3rem;
+}
+
+.doc-param-search {
+	display: flex;
+	align-items: center;
+	gap: 0.3rem;
+	width: 220px;
+	max-width: 40%;
+	margin-left: 0.4rem;
+	padding: 0.1rem 0.3rem;
+	border: 1px solid var(--color-fd-border);
+	border-radius: 3px;
+	color: var(--color-fd-muted-foreground);
+}
+
+.doc-param-search input {
+	flex: 1 1 auto;
+	min-width: 0;
+	border: 0;
+	background: transparent;
+	color: var(--color-fd-foreground);
+	font: inherit;
+	outline: none;
+}
+
+.doc-param-search:focus-within {
+	border-color: var(--color-fd-primary);
+}
+
+.doc-param-panel-body {
+	display: grid;
+	flex: 1 1 auto;
+	grid-template-columns: minmax(240px, 34%) minmax(0, 1fr) minmax(240px, 30%);
+	min-height: 0;
+}
+
+/* the edit card floating beside the thing: the panel is the tree and the relations alone */
+.doc-param-panel-body.is-card-floating {
+	grid-template-columns: minmax(240px, 34%) minmax(0, 1fr);
+}
+
+/* where the edit card stands: a label and two choices, in the compact buttons of the edit layer */
+.doc-param-card-place {
+	display: inline-flex;
+	flex: 0 0 auto;
+	align-items: center;
+	gap: 0.4rem;
+	margin-left: auto;
+}
+
+.doc-param-card-place-label {
+	color: var(--color-fd-muted-foreground);
+	white-space: nowrap;
+}
+
+.doc-param-card-place .doc-button-group {
+	--doc-button-group-height: 20px;
+	box-shadow: none;
+}
+
+.doc-param-card-place .doc-button-group > button {
+	gap: 0.25rem;
+	font-size: 0.7rem;
+	white-space: nowrap;
+}
+
+.doc-param-panel-body > * {
+	min-width: 0;
+	min-height: 0;
+	overflow: auto;
+}
+
+.doc-param-panel-body > * + * {
+	border-left: 1px solid var(--color-fd-border);
+}
+
+.doc-param-empty {
+	margin: 0.6rem 0.7rem;
+}
+
+/* the tree: tight rows, as a file explorer lists files */
+.doc-param-tree {
+	padding: 0.25rem 0;
+}
+
+.doc-param-tree-item {
+	display: flex;
+	align-items: center;
+	gap: 0.3rem;
+	min-height: 22px;
+	padding-right: 0.5rem;
+	white-space: nowrap;
+	cursor: pointer;
+	user-select: none;
+}
+
+.doc-param-tree-item:hover {
+	background: var(--color-fd-accent);
+}
+
+.doc-param-tree-item.is-selected {
+	background: color-mix(in srgb, var(--color-fd-primary) 13%, transparent);
+}
+
+.doc-param-tree-fold {
+	display: inline-flex;
+	flex: 0 0 auto;
+	align-items: center;
+	justify-content: center;
+	width: 14px;
+	height: 14px;
+	padding: 0;
+	border: 0;
+	border-radius: 2px;
+	background: transparent;
+	color: var(--color-fd-muted-foreground);
+	cursor: pointer;
+}
+
+.doc-param-tree-icon {
+	flex: 0 0 auto;
+	color: var(--color-fd-muted-foreground);
+}
+
+.doc-param-tree-item.is-group .doc-param-tree-icon,
+.doc-param-tree-item.is-layout .doc-param-tree-icon {
+	color: var(--color-fd-primary);
+}
+
+.doc-param-tree-item.is-group .doc-param-tree-label,
+.doc-param-tree-item.is-free .doc-param-tree-label {
+	font-weight: 600;
+}
+
+/* the words of a thing keep their room: its kind gives way first, then how it is placed */
+.doc-param-tree-label {
+	flex: 0 1 auto;
+	min-width: 2.5rem;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+/* a name nobody gave: the word of the thing, dimmed */
+.doc-param-tree-label.is-default {
+	color: var(--color-fd-muted-foreground);
+}
+
+.doc-param-tree-kind {
+	flex: 0 30 auto;
+	min-width: 0;
+	overflow: hidden;
+	color: var(--color-fd-muted-foreground);
+	font-size: 0.68rem;
+	text-overflow: ellipsis;
+}
+
+.doc-param-tree-summary {
+	flex: 1 1000 0%;
+	min-width: 0;
+	margin-left: 0.3rem;
+	overflow: hidden;
+	color: var(--color-fd-muted-foreground);
+	font-size: 0.68rem;
+	text-align: right;
+	text-overflow: ellipsis;
+}
+
+/* the relations of what is selected: a small canvas of its own, zoomed by the wheel and panned by a
+   drag (it never scrolls, and the page never scrolls under it) */
+.doc-param-panel-body > .doc-param-graph {
+	position: relative;
+	overflow: hidden;
+	background: color-mix(in srgb, var(--color-fd-muted, #f1f5f9) 35%, var(--color-fd-background));
+	cursor: grab;
+	overscroll-behavior: contain;
+	touch-action: none;
+}
+
+.doc-param-graph:active {
+	cursor: grabbing;
+}
+
+.doc-param-graph-view {
+	position: absolute;
+	top: 0;
+	left: 0;
+	transform-origin: 0 0;
+}
+
+.doc-param-graph-view .doc-card-icon,
+.doc-param-graph-view [data-node-id] {
+	cursor: pointer;
+}
+
+.doc-param-graph-reset {
+	position: absolute;
+	top: 6px;
+	right: 6px;
+	width: 20px !important;
+	height: 20px !important;
+	border: 1px solid var(--color-fd-border) !important;
+	background: var(--color-fd-background) !important;
+}
+
+/* the tree and the properties scroll by themselves; at their end the page does not take the wheel */
+.doc-param-tree,
+.doc-param-card {
+	overscroll-behavior: contain;
+}
+
+/* the edit card docked: the look of the card, without its popup */
+.doc-param-card.doc-vis-card-panel {
+	padding: 0.35rem 0.7rem 0.5rem;
+	font-size: 0.76rem;
+}
+
+/* the menu of an item of the tree: the panel of a right-click, where the pointer was */
+.doc-param-menu {
+	position: fixed;
+	z-index: 1600;
+}
+
+body:has(.doc-block-popup .doc-vis-edit) .doc-param-menu {
+	z-index: calc(var(--doc-vis-modal-z-index, 100000) + 2);
+}
+
+/* ---------- the kinds it draws with (ParametricShape.jsx) ----------
+   a shape: its outline drawn to the size of its node, filled and edged by the style of the node
+   (--doc-node-fill, --doc-node-stroke: DiagramNodeStyle.js), its words in the middle; a text: words
+   standing by themselves, a color behind them when the node has a fill */
+.doc-vis-node-content:has(> .doc-param-shape), .doc-vis-node-content:has(> .doc-param-text) { overflow: visible; }
+.doc-param-shape {
+	--doc-param-shape-fill: var(--doc-node-fill, var(--color-fd-background));
+	--doc-param-shape-edge: var(--doc-node-stroke, color-mix(in srgb, var(--color-fd-foreground) 55%, var(--color-fd-border)));
+	position: relative;
+	box-sizing: border-box;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 100%;
+	height: 100%;
+	color: var(--color-fd-foreground);
+	font-family: ui-sans-serif, system-ui, sans-serif;
+}
+.doc-param-shape-drawing { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+.doc-param-shape-outline { fill: var(--doc-param-shape-fill); stroke: var(--doc-param-shape-edge); stroke-linejoin: round; }
+.doc-param-shape-box { position: absolute; inset: 0; box-sizing: border-box; border-color: var(--doc-param-shape-edge); border-radius: 3px; background: var(--doc-param-shape-fill); pointer-events: none; }
+.doc-param-shape[data-shape='rounded'] .doc-param-shape-box { border-radius: 14px; }
+.doc-param-shape-words { position: relative; max-width: 86%; max-height: 100%; overflow: hidden; text-align: center; overflow-wrap: anywhere; }
+/* a triangle has room in its lower part */
+.doc-param-shape[data-shape='triangle'] .doc-param-shape-words { max-width: 56%; margin-top: 22%; }
+.doc-param-shape[data-shape='diamond'] .doc-param-shape-words { max-width: 60%; }
+.doc-param-shape-text { display: inline-block; min-width: 1ch; line-height: 1.3; }
+.doc-param-shape[data-text-size='s'] .doc-param-shape-words { font-size: 0.68rem; }
+.doc-param-shape[data-text-size='m'] .doc-param-shape-words { font-size: 0.8rem; font-weight: 600; }
+.doc-param-shape[data-text-size='l'] .doc-param-shape-words { font-size: 1rem; font-weight: 700; }
+
+.doc-param-text {
+	box-sizing: border-box;
+	padding: 2px 6px;
+	border-radius: 5px;
+	background: var(--doc-node-fill, transparent);
+	color: var(--color-fd-foreground);
+	font-family: ui-sans-serif, system-ui, sans-serif;
+	font-size: 0.8rem;
+	line-height: 1.35;
+	white-space: pre-wrap;
+}
+.doc-param-text[data-text-size='s'] { font-size: 0.68rem; }
+.doc-param-text[data-text-size='l'] { font-size: 1.05rem; }
+.doc-param-text[data-text-size='xl'] { font-size: 1.5rem; line-height: 1.2; letter-spacing: -0.01em; }
+.doc-param-text[data-weight='bold'] { font-weight: 700; }
+.doc-param-text[data-align='center'] { text-align: center; }
+.doc-param-text[data-align='right'] { text-align: right; }
+.doc-param-text[data-tone='slate'] { color: var(--doc-vis-stroke-slate); }
+.doc-param-text[data-tone='blue'] { color: var(--doc-vis-stroke-blue); }
+.doc-param-text[data-tone='teal'] { color: var(--doc-vis-stroke-teal); }
+.doc-param-text[data-tone='green'] { color: var(--doc-vis-stroke-green); }
+.doc-param-text[data-tone='amber'] { color: var(--doc-vis-stroke-amber); }
+.doc-param-text[data-tone='red'] { color: var(--doc-vis-stroke-red); }
+.doc-param-text[data-tone='violet'] { color: var(--doc-vis-stroke-violet); }
+.doc-param-text-words { display: inline-block; min-width: 1ch; }
+
+/* an origin lying on a resize handle of the member selected steps aside: faded, the pointer passing
+   to the handle (ParametricCanvasLayer.jsx) */
+.doc-param-origin.is-yielding { opacity: 0.35; }
+.doc-param-origin.is-yielding .doc-param-origin-mark { pointer-events: none; }

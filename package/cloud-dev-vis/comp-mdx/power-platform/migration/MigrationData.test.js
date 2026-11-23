@@ -8,6 +8,7 @@ import { routeOverlapListGet, routePathPolylineGet, routePathRunListGet, routePo
 import { labelSizeEstimate } from '../../card-diagram/DiagramLabelPlace.js';
 import { cardIndexItemOf } from '../../card-diagram/CardIndexData.js';
 import { CARD_GRAPH_LABEL_HEIGHT, cardGraphSearchMatch } from '../../card-diagram/CardGraphData.js';
+import { cardIconTextStrip } from '../../card-diagram/CardIconTokenData.js';
 import { switchPresentationBuild, switchViewHoverResolve, switchViewListOf, switchViewResolve } from '../../card-diagram-switch/SwitchData.js';
 import { powerPlatformNodeRegistry } from '../power-platform-node-registry.js';
 import { migrationCategoryOf, migrationModelBuild, migrationPathBuild, migrationRankBuild } from './MigrationData.js';
@@ -57,7 +58,7 @@ test('run and verify flows place locations and outputs in base-layer color block
 		// the outputs block only holds the report and its label
 		assert.ok(blockOf('artifacts').size.height < blockOf('target').size.height);
 		assert.equal(blockOf('artifacts').position.y + blockOf('artifacts').size.height, blockOf('source').position.y + blockOf('source').size.height);
-		for (const id of ['source', 'target']) assert.equal(blockOf(id).data.itemList[0].icon, 'database');
+		for (const id of ['source', 'target']) assert.match(blockOf(id).data.itemList[0].text, /^\{\{icon:database\}\} /);
 		for (const node of diagram.nodes.filter(node => node.id.startsWith('flow-table:'))) assert.ok(contains(blockOf('source'), node));
 		for (const node of diagram.nodes.filter(node => node.id.startsWith('flow-batch:'))) assert.ok(contains(blockOf('server'), node));
 		assert.ok(target.position.x > blockOf('server').position.x + blockOf('server').size.width);
@@ -264,7 +265,7 @@ test('the reports stand in a frame of the outputs, in the overview and in its ta
 	for (const path of ['/overview', '/overview/tabs/run']) {
 		const frame = provider.sceneGet(path).diagram.nodes.find((node) => node.id === 'area:artifacts');
 		assert.equal(frame.renderer.type, 'color-block');
-		assert.equal(frame.data.fill, 'none');
+		assert.equal(frame.style.fill, 'none');
 	}
 });
 
@@ -416,7 +417,8 @@ test('the patterns of finding a row: a title, then lanes of data titled with the
 	const all = providerMatch.sceneGet('/overview/verify/match').diagram;
 	assert.doesNotThrow(() => diagramNormalize({ version: 1, ...all }, registryMatch));
 	const nodeOf = (diagram, id) => diagram.nodes.find((node) => node.id === id);
-	const laneTextOf = (id) => nodeOf(all, `match:${id}:lane`).data.itemList.map((item) => item.text).join(' | ');
+	// the words of the labels (the icon before the title is a token of the text)
+	const laneTextOf = (id) => nodeOf(all, `match:${id}:lane`).data.itemList.map((item) => cardIconTextStrip(item.text)).join(' | ');
 	assert.equal(laneTextOf('guid'), 'Pattern 1: Same GUID | Tables: TA');
 	assert.equal(laneTextOf('key'), 'Pattern 2: Another column | Tables: TU');
 	assert.equal(laneTextOf('pair'), 'Pattern 3: The pair | Tables: TN');
@@ -435,7 +437,7 @@ test('the patterns of finding a row: a title, then lanes of data titled with the
 	assert.ok(!nodeOf(all, 'match:pair:source').handles.some((handle) => handle.anchor.target === 'row/tableid'));
 	// the columns of the flows: their headings, each card inside its column, what the server does in one column
 	const lane = nodeOf(all, 'match:pair:lane');
-	assert.deepEqual(lane.data.columnList.map((column) => [column.icon, column.text]), [['database', 'Source database (Source)'], ['server', 'Migration server'], ['database', 'Target database (Target)']]);
+	assert.deepEqual(lane.data.columnList.map((column) => column.text), ['{{icon:database}} Source database (Source)', '{{icon:server}} Migration server', '{{icon:database}} Target database (Target)']);
 	assert.ok(nodeOf(all, 'match:pair:source').data.nameLogical === 'n', 'the database is said by the column');
 	const inColumn = (node, column) => node.position.x >= lane.position.x + column.x && node.position.x + node.size.width <= lane.position.x + column.x + column.width;
 	const [columnSource, columnServer, columnTarget] = lane.data.columnList;
@@ -559,12 +561,12 @@ test('the plan after the migration: a report of its own, in the overview and the
 	// its server is one of its own
 	const master = provider.sceneGet('/overview/post/master').diagram;
 	const block = master.nodes.find((node) => node.id === 'post-master:block');
-	assert.deepEqual(block.data.columnList.map((column) => column.text), ['Source database (PW)', 'Post-processing server', 'Target database (Connect)']);
+	assert.deepEqual(block.data.columnList.map((column) => column.text), ['{{icon:database}} Source database (PW)', '{{icon:server}} Post-processing server', '{{icon:database}} Target database (Connect)']);
 	assert.match(block.data.itemList.at(-1).text, /Columns to update: TA\.m/);
 	assert.equal(master.nodes.find((node) => node.id === 'post-master:source').data.badge, 'Master');
 	assert.equal(master.nodes.find((node) => node.id === 'post-master:refer-source').data.badge, undefined);
 	const audit = provider.sceneGet('/overview/post/audit').diagram;
-	assert.deepEqual(audit.nodes.find((node) => node.id === 'post-audit:block').data.columnList.map((column) => column.text), ['Source database (PW)', 'Migration server', 'Post-processing server', 'Target database (Connect)']);
+	assert.deepEqual(audit.nodes.find((node) => node.id === 'post-audit:block').data.columnList.map((column) => cardIconTextStrip(column.text)), ['Source database (PW)', 'Migration server', 'Post-processing server', 'Target database (Connect)']);
 	assert.equal(audit.nodes.find((node) => node.id === 'post-audit:target-run').data.rows[0].tone, 'red');
 	assert.equal(audit.nodes.find((node) => node.id === 'post-audit:target-post').data.rows[0].tone, 'green');
 	assert.match(audit.nodes.find((node) => node.id === 'post-audit:target-run').data.nameLogical, /^Loaded \/ /);

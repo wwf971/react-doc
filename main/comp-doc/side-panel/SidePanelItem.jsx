@@ -1,5 +1,5 @@
 import { isValidElement, useEffect, useRef } from 'react';
-import { Ellipsis, FileText, FolderIcon, FolderTreeIcon, Move, Pencil, RotateCw } from '../../frontend/UICommon.js';
+import { Ellipsis, FileBox, FileText, FolderCog, FolderIcon, FolderTreeIcon, Move, Pencil, RotateCw } from '../../frontend/UICommon.js';
 import { TagList } from '../../../built-in/comp-mdx/tag/TagList.jsx';
 import './SidePanelItem.css';
 
@@ -42,6 +42,12 @@ import './SidePanelItem.css';
 //                            name says it follows the files
 //   data.isSourceFolder      the item mirrors a source folder: a small tree
 //                            glyph after the name, its path as the title
+//   data.isManaged           the item is a document, or mirrors a folder, of a
+//                            virtual root (doc_page_impl_doc_managed.md): the
+//                            glyphs of managed documents (a folder with a cog,
+//                            a file in a box) in place of the plain ones; an
+//                            item written in the side panel that shows a
+//                            managed document carries the box after its name
 //
 // Events emitted:
 //   tagOverviewOpenRequest { tagId }      a tag was clicked
@@ -90,9 +96,7 @@ export function SidePanelItem({ data = {}, config = {}, onEvent }) {
     <span className="doc-side-panel-item" data-surface={config.surface ?? 'sidebar'}>
       {isSidebar && data.isGenerated ? (
         <span className="doc-side-panel-item-generated" aria-hidden="true">
-          {data.kind === 'folder'
-            ? <FolderIcon className="doc-side-panel-item-generated-icon" size={12} strokeWidth={1.8} />
-            : <FileText className="doc-side-panel-item-generated-icon" size={12} strokeWidth={1.8} />}
+          {generatedIconGet(data)}
         </span>
       ) : null}
       {isTextEditing ? (
@@ -115,8 +119,20 @@ export function SidePanelItem({ data = {}, config = {}, onEvent }) {
         </span>
       )}
       {isSidebar && data.isSourceFolder ? (
-        <span className="doc-side-panel-item-source-folder" title={`Mirrors the source folder ${data.sourcePath ?? ''}: its items follow the files`}>
-          <FolderTreeIcon aria-hidden="true" className="doc-side-panel-item-source-folder-icon" size={12} strokeWidth={1.8} />
+        <span
+          className="doc-side-panel-item-source-folder"
+          title={data.isManaged
+            ? `Mirrors the virtual root ${data.sourcePath ?? ''}: documents the page keeps in .doc-page/doc-managed/, its items follow them`
+            : `Mirrors the source folder ${data.sourcePath ?? ''}: its items follow the files`}
+        >
+          {data.isManaged
+            ? <FolderCog aria-hidden="true" className="doc-side-panel-item-source-folder-icon doc-managed-glyph" size={12} strokeWidth={1.8} />
+            : <FolderTreeIcon aria-hidden="true" className="doc-side-panel-item-source-folder-icon" size={12} strokeWidth={1.8} />}
+        </span>
+      ) : null}
+      {isSidebar && data.isManaged && !data.isGenerated && !data.isSourceFolder && data.kind !== 'folder' ? (
+        <span className="doc-side-panel-item-source-folder" title={`A managed document: ${data.filePath ?? ''}, kept by the page in a virtual root`}>
+          <FileBox aria-hidden="true" className="doc-side-panel-item-source-folder-icon doc-managed-glyph" size={12} strokeWidth={1.8} />
         </span>
       ) : null}
       {tagList.length > 0 ? (
@@ -309,4 +325,14 @@ function sidePanelItemTagListShownGet(data, config) {
   const tagIdListShown = configGlobal.TagsDisplayAtSidePanelItemsList;
   if (!Array.isArray(tagIdListShown)) return data.tagList;
   return data.tagList.filter((tag) => tagIdListShown.includes(tag.id));
+}
+
+// the glyph before an item generated from a source folder: a folder or a file, of a virtual root
+// when the item is managed
+function generatedIconGet(data) {
+  const className = `doc-side-panel-item-generated-icon${data.isManaged ? ' doc-managed-glyph' : ''}`;
+  if (data.kind === 'folder') {
+    return data.isManaged ? <FolderCog className={className} size={12} strokeWidth={1.8} /> : <FolderIcon className={className} size={12} strokeWidth={1.8} />;
+  }
+  return data.isManaged ? <FileBox className={className} size={12} strokeWidth={1.8} /> : <FileText className={className} size={12} strokeWidth={1.8} />;
 }

@@ -100,17 +100,25 @@ export function sourcePathTreeBuild(spec, manifests) {
   const nodeByPath = new Map();
   const nodeRootList = [];
 
+  // the folders of virtual roots (doc_page_impl_doc_managed.md): drawn as such, the root
+  // itself said to be one
+  const dirManagedSet = new Set((manifests.dirManifest ?? []).filter((dir) => dir.isManaged).map((dir) => dir.internalPath));
   const nodeDirEnsure = (path) => {
     const nodeExisting = nodeByPath.get(path);
     if (nodeExisting) return nodeExisting;
     const parsed = sourcePathParse(path);
+    const isRoot = !parsed || parsed.relPath === '';
     const node = {
       id: path,
-      label: parsed && parsed.relPath === '' ? path : path.slice(path.lastIndexOf('/') + 1),
+      label: isRoot ? path : path.slice(path.lastIndexOf('/') + 1),
       kind: 'dir',
       isDisabled: true,
       childList: [],
     };
+    if (dirManagedSet.has(path)) {
+      node.isManaged = true;
+      if (isRoot) node.detail = 'virtual root';
+    }
     nodeByPath.set(path, node);
     if (!parsed || parsed.relPath === '') {
       nodeRootList.push(node);
@@ -132,6 +140,7 @@ export function sourcePathTreeBuild(spec, manifests) {
       id: candidate.path,
       label: candidate.path.slice(indexSlash + 1),
       kind: 'file',
+      ...(candidate.entry?.managed ? { isManaged: true } : {}),
       isDisabled: false,
       childList: [],
     });

@@ -1,4 +1,3 @@
-import fs from 'node:fs';
 import { createHash } from 'node:crypto';
 import {
   docSourceDependenciesCollect,
@@ -6,6 +5,7 @@ import {
   type DocSourceDependencyCollect,
 } from './doc-source-dependency.ts';
 import { linkIndexBuild } from '../src/lib/doc-link-index.js';
+import { sourceEntryTextRead, type SourceEntryManaged } from './doc-source-access.ts';
 
 // The link index of the workspace (design: doc_page_impl_nav_backlink.md#the-link-index),
 // built on the development server when the source is scanned and at build
@@ -24,7 +24,7 @@ export type DocLinkIndexReference = Omit<DocSourceDependency, 'sourcePath'>;
 export type DocLinkIndexDoc = { contentHash: string; linkList: DocLinkIndexReference[] };
 export type DocLinkIndex = { version: number; byDoc: Record<string, DocLinkIndexDoc> };
 
-type DocEntry = { internalPath: string; ext: string; absPath: string };
+type DocEntry = { internalPath: string; ext: string; absPath: string; managed?: SourceEntryManaged };
 
 export class DocLinkIndexBuilder {
   private docByPath = new Map<string, DocLinkIndexDoc>();
@@ -40,7 +40,7 @@ export class DocLinkIndexBuilder {
       if (entry.ext !== 'md' && entry.ext !== 'mdx') continue;
       let text: string;
       try {
-        text = fs.readFileSync(entry.absPath, 'utf-8');
+        text = sourceEntryTextRead(entry);
       } catch {
         continue;
       }

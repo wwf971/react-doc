@@ -489,6 +489,113 @@ connections:
   - { id: status-note, source: { nodeId: account, handleId: status }, target: { nodeId: note, handleId: in } }
 ```
 
+## A parametric canvas
+
+A viewport that names `parametric-canvas` in `viewport.featureList` offers the drawing layer while it is edited: a **tool bar** over the canvas, and a **panel** under it with the structure of the scene. Press **Edit**, then:
+
+- drag **Step**: only its gap to *Source* changes, and *Target* follows it;
+- drag the round mark named *Pipeline* (the origin of the group): the whole group moves;
+- drag a stage of the row over another: the row orders them, at one gap;
+- click the name *Stages* on the dashed frame, and change its gap in the panel;
+- pick a tool, then click the canvas: with something of the group selected it goes into the group;
+- pick **Cards**, **Color block**, and drag a box out around some cards: it takes that size. The chevron of a tool shows the other ways it can be placed (**Next to** puts a note beside a card, following it);
+- pick **Shapes**, **Diamond**, and drag it out; type its words where they stand, and choose its fill under **Style** in its edit card;
+- pick **Patterns**, **Captioned**, and click the canvas: a shape and its caption, which follows it wherever it goes;
+- double-click the empty canvas and type a few words, then Enter: they are a text there; or type `/` and the name of a tool (`/shape-ellipse`);
+- right-click a card, or an item of the tree, for what can be done with it.
+
+<!--renderComp=CardDiagram,title=A parametric canvas-->
+```yaml
+version: 1
+viewport:
+  size: { height: 520 }
+  featureList: [parametric-canvas]
+nodes:
+  - id: source
+    renderer: { type: card-note }
+    data: { title: Source, text: where it starts, tone: blue }
+    handles:
+      - { id: in, direction: in, anchor: { side: left } }
+      - { id: out, direction: out, anchor: { side: right } }
+  - id: step
+    renderer: { type: card-note }
+    data: { title: Step, text: what is done to it, tone: teal }
+    handles:
+      - { id: in, direction: in, anchor: { side: left } }
+      - { id: out, direction: out, anchor: { side: right } }
+  - id: target
+    renderer: { type: card-note }
+    data: { title: Target, text: where it ends, tone: green }
+    handles:
+      - { id: in, direction: in, anchor: { side: left } }
+      - { id: out, direction: out, anchor: { side: right } }
+  - id: remark
+    renderer: { type: card-label }
+    data: { title: halfway between the two ends, icon: link, tone: slate }
+    handles: []
+  - id: stage-a
+    renderer: { type: card-brief }
+    data: { title: Extract, icon: database, tone: blue }
+    handles: []
+  - id: stage-b
+    renderer: { type: card-brief }
+    data: { title: Transform, icon: workflow, tone: teal }
+    handles: []
+  - id: stage-c
+    renderer: { type: card-brief }
+    data: { title: Load, icon: send, tone: green }
+    handles: []
+  - id: tick
+    renderer: { type: card-label }
+    data: { title: run, icon: play, tone: amber }
+    handles: []
+  - id: aside
+    renderer: { type: card-note }
+    position: { x: 640, y: 300 }
+    data: { title: A free element, text: its place is its own, tone: slate }
+    handles: []
+connections:
+  - id: source-step
+    source: { nodeId: source, handleId: out }
+    target: { nodeId: step, handleId: in }
+  - id: step-target
+    source: { nodeId: step, handleId: out }
+    target: { nodeId: target, handleId: in }
+parametric:
+  groupList:
+    - id: pipeline
+      name: Pipeline
+      root: { x: 60, y: 110 }
+      memberList:
+        - { id: source, node: source }
+        - id: step
+          node: step
+          parent: source
+          constraint: { type: beside, side: right, gap: 70 }
+        - id: target
+          node: target
+          parent: step
+          constraint: { type: beside, side: right, gap: 70 }
+        - id: remark
+          node: remark
+          parentList: [source, target]
+          constraint: { type: between, t: 0.5, y: -70 }
+        - id: stages
+          name: Stages
+          layout: { type: array, direction: row, gap: 24 }
+          parent: source
+          constraint: { type: offset, x: 0, y: 70, point: top-left, pointParent: bottom-left }
+        - { id: stage-a, node: stage-a, parent: stages }
+        - { id: stage-b, node: stage-b, parent: stages }
+        - { id: stage-c, node: stage-c, parent: stages }
+        - id: runs
+          name: Runs
+          layout: { type: repeat, count: 5, direction: row, gap: 12 }
+          parent: stage-a
+          constraint: { type: beside, side: bottom, gap: 50, align: 0 }
+        - { id: tick, node: tick, parent: runs }
+```
+
 ## Add your own
 
 Everything above is ordinary content: copy a block, or add one from the insert menu in edit mode.

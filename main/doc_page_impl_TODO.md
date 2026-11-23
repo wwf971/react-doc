@@ -24,7 +24,7 @@ How the list is kept (also in `AGENTS.md`):
 
 ## Card diagram animation
 
-- <a id="animation-visual-edit"></a>**A visual edit mode of an animation.** An animation is edited as its source ([Card Diagram Animation](../package/cloud-dev-vis/comp-mdx/card-diagram-animation/comp-card-diagram-animation.md)). Editing the diagram with the framework's editor, and states and tracks from the control area, would be its visual mode; the diagram's part is `DiagramVisualEdit` on `document.diagram`.
+- <a id="animation-visual-edit"></a>**A visual edit mode of an animation.** An animation is edited as its source ([Card Diagram Animation](../package/cloud-dev-vis/doc/card-diagram-usage-animation.md)). Editing the diagram with the framework's editor, and states and tracks from the control area, would be its visual mode; the diagram's part is `DiagramVisualEdit` on `document.diagram`.
 - <a id="animation-scrub"></a>**Scrubbing.** The progress on a line shows where a transition is but cannot be dragged; everything is a function of the frame, so a drag would be `seekTo`.
 
 ## Connection lines of a card diagram
@@ -44,12 +44,23 @@ How the list is kept (also in `AGENTS.md`):
 - <a id="switch-layout-drag"></a>**Moving the nodes of a generated scene.** The reader adjusts the bounding box of a scene; the nodes of a generated scene stand where its generator puts them. Their positions could be kept in the same layout item.
 - <a id="migration-report-animate"></a>**The sequences of a run.** The reports of a migration are drawn as tables and cards; the sequence of requests and retries of a batch is not yet a scene.
 
+## Card diagram parametric canvas
+
+What the [parametric canvas](../package/cloud-dev-vis/doc/card-diagram-parametric-canvas.md) leaves for later:
+
+- <a id="parametric-tool-bar-edit"></a>**Editing the tool bar.** The tool bar is data (`ParametricToolMap`), and a tool's name, parameters and way of placing are changed on the bar. Adding, removing and duplicating a tool, putting tools under a group, ordering them and keeping one off the bar are written in the config by hand. It waits for [config a layer contributes to](#config-layer-contribute): a tool is an entry each layer may give.
+- <a id="parametric-group-inside"></a>**Inside a group.** A point inside a card (of a row of it), lines among the copies of a repeat, a repeat inside a repeat. 
+- <a id="parametric-ink"></a>**Handwriting.** Strokes drawn by hand over a scene, with an eraser that takes a whole stroke and one that splits what it touches. `perfect-freehand` (MIT) is the candidate for the outline of a stroke; splitting a stroke is its points cut where the eraser passed.
+
 ## Settings panel
 
 - <a id="settings-as-mdx"></a>**The settings panels as MDX documents.** The tabs of the settings panel are built in code from config items (`ConfigPanel`) and custom components (the Workspace graph, the Services tab). Written as MDX documents of a built-in doc page, with components for their parts, they would get everything a document has: blocks that open in the block popup, in-place editing, a layout an author changes without code. The Workspace graph already opens in the block popup through `BlockPopupSurface` with a `popupKey`, the step a block of such a document would take anyway.
 
 ## Config
 
+- <a id="config-layer-contribute"></a>**Config a layer contributes to, and config of a feature.** Today a value is **stacked**: a later level replaces the value of the levels below (a `stringMap` alone is merged entry by entry). Some config is of another nature: each layer **provides things**, and what the page has is all of them together. The first place that wants it is the tool bar of the [parametric canvas](../package/cloud-dev-vis/doc/card-diagram-parametric-canvas.md#the-tool-bar): a tool is a template, the package ships some, a doc page or a workspace adds its own, a reader changes or hides one, and none of them should have to repeat the others. Two things to design, both general:
+  - **A contributed value**: a key whose value is a collection of items with ids, each level giving items, changing one or taking one away, with an order that needs no renumbering ([ranks](doc_page_impl_config.md#ranks)); the settings panel showing which layer gave each item; a write from the page going to one item of one layer.
+  - **Config of a feature**: keys that belong to a feature of a package rather than to one component (the parametric canvas is a feature of every diagram component, and declares `ParametricToolMap` once per component today, as a key of type `any` whose layers do not merge), declared by the feature, written beside `compConfig`, and handed to the components that use the feature.
 - <a id="config-declaration-edit"></a>**Adding and removing config keys and declarations from the page.** The doc page layer edits a value a declaration already holds; adding a key to a declaration, removing one, and adding a declaration are written in the files ([The doc page layer](doc_page_impl_config.md#the-doc-page-layers)). The yaml utilities that insert and remove keys in place are the place to start ([YAML utilities](doc_page_impl_yaml_utils.md)).
 
 ## Editing
@@ -86,7 +97,11 @@ How the list is kept (also in `AGENTS.md`):
 
 ## Source
 
-- <a id="source-file-rename"></a>**Renaming and moving a file from the page.** A file is created and deleted from the page ([creating and deleting files](doc_page_impl_source.md#creating-and-deleting-files)), but renamed or moved only on disk, where every link to it, every side-panel `doc` and every asset dependency naming it breaks. A rename from the page would rewrite those references in the same request. The link index of the development server (`plugin/doc-link-index.ts`: every reference of every document with its line, [Backlinks](doc_page_impl_nav_backlink.md#the-link-index)) already finds the documents and lines to rewrite, the side-panel nodes are found through `nodeSource`, and the file operations of `plugin/doc-source-file.ts` are where a rename with its rollback belongs.
+- <a id="source-file-rename"></a>**Moves beyond one file.** A file is moved or renamed from the page with every reference to it (links of every document, the side panels and entries naming it), into and out of virtual roots ([Relocation](doc_page_impl_nav_backlink.md#relocation)). Missing: a **folder** moved or renamed (every file under it in one plan; `relocatePlanBuild` takes a list of moves already, a folder would be its files, and a folder of a virtual root only its records), and a file of a mirrored folder moved by dragging its item; **the undo of a move** as one step (the move back with the references put back, recorded beside the edit history, which today only lets the moved document's entries follow it, `DocEditHistory.pathMove`); and the references relocation does not rewrite yet: the source dependencies of asset versions (`dependencySet` of the store, refused on a locked version), the document of a playground (`playground.yaml`), the `sourceFolder` of a side panel when a folder moves.
+
+- <a id="doc-managed-cloud"></a>**Managed documents on a cloud.** A virtual root is kept on the local disk in two forms, plain and pack ([Managed documents](doc_page_impl_doc_managed.md#toward-a-cloud)); a page hosted on a cloud would keep its roots as pack objects in an object storage (s3: `{rootId}/{docId}.rdoc`, listed by reading each record at the head of its object). Missing: a driver of a remote root behind the one door of the source (`plugin/doc-source-access.ts`) and in the page (reading a bucket without a development server: the decoding is `lib/doc-managed-pack.js` already, with `CompressionStream`), writes checked by version (`If-Match`, the edit layer's `hashBase`), the authorization of the auth layer ([Auth](doc_page_impl_auth.md)), and moving a whole root between the local disk and a bucket, as a partition of a frontend object moves between storage points ([asset storage](doc_page_impl_asset_storage.md#changing-the-storage-of-a-partition)).
+- <a id="doc-managed-block-ref"></a>**What the ids of blocks are for.** A document of mode block keeps an id per block and list item, kept through edits ([The block mode](doc_page_impl_doc_managed.md#the-block-mode)). Nothing uses them yet: a reference to a block by its id (`~notes/a.md#^k3f9a2`, resolved by the navigation layer like an anchor, kept valid by the ids instead of a written `Anchor`), a backlink to a block, and a remote root writing one block instead of a document.
+- <a id="doc-managed-root-change"></a>**A virtual root renamed, deleted, or moved between doc pages from the page.** A root is made and its name, mode and form changed in the Managed documents tab; its alias is the root of every path of its documents, so renaming it is a relocation of all of them, and deleting it a deletion of all of them with their references; both, and moving a root folder to another doc page, are done on disk today.
 
 ## Navigation
 

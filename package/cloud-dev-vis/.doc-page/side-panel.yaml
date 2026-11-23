@@ -12,8 +12,9 @@ sidePanelById:
           - doc: ~cloud-dev-vis/comp-mdx/power-platform/comp-diagram-er.md
           - doc: ~cloud-dev-vis/comp-mdx/power-platform/comp-powerplatform.md
           - doc: ~cloud-dev-vis/comp-mdx/aws/comp-aws.md
-          - doc: ~cloud-dev-vis/comp-mdx/card-diagram-animation/comp-card-diagram-animation.md
-          - doc: ~cloud-dev-vis/comp-mdx/card-diagram-switch/comp-card-diagram-switch.md
+          - doc: ~cloud-dev-vis/doc/card-diagram-usage-animation.md
+          - doc: ~cloud-dev-vis/doc/card-diagram-usage-flexible-switch.md
+          - doc: ~cloud-dev-vis/doc/card-diagram-usage-parametric-canvas.md
           # a document of this checkout only: a clone has none, and this item then opens
           # an error page that offers to create it (main/doc_page_impl_test.md)
           - id: card-diagram-playground
@@ -28,6 +29,7 @@ sidePanelById:
               - doc: ~cloud-dev-vis/doc/card-diagram-impl.md
               - doc: ~cloud-dev-vis/doc/card-diagram-animation.md
               - doc: ~cloud-dev-vis/doc/card-diagram-flexible-switch.md
+              - doc: ~cloud-dev-vis/doc/card-diagram-parametric-canvas.md
               - doc: ~cloud-dev-vis/doc/power-platform-migration.md
               - doc: ~cloud-dev-vis/doc/power-platform.md
               - doc: ~cloud-dev-vis/doc/aws.md

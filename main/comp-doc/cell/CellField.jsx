@@ -73,7 +73,8 @@ export const CellField = observer(function CellField({
         title={isClickable ? undefined : editUnavailableReason || undefined}
         onClick={isClickable ? (event) => {
           event.stopPropagation();
-          cellStore.fieldOpen(key, text, { clientX: event.clientX, clientY: event.clientY });
+          // the width as read (layout pixels: a canvas's zoom does not count): the open field keeps it
+          cellStore.fieldOpen(key, text, { clientX: event.clientX, clientY: event.clientY }, { widthRead: rootRef.current?.offsetWidth });
         } : undefined}
       >
         <CellValue
@@ -106,6 +107,7 @@ export const CellField = observer(function CellField({
       className={`doc-cell-field${className ? ` ${className}` : ''}`}
       data-open=""
       data-inline={isInline ? '' : undefined}
+      style={field.widthRead ? { ...rest.style, '--doc-cell-width-read': `${field.widthRead}px` } : rest.style}
       onKeyDown={keyDownHandle}
     >
       <CellEdit

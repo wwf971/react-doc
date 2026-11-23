@@ -25,6 +25,8 @@ import path from 'node:path';
 export type SourceFileEntry = {
   absPath: string;
   internalPath: string;
+  // a managed document (doc-source-access.ts): its files are moved into backups together
+  managed?: { doc: { fileList: string[] } };
 };
 
 export type SourceFileMoved = { file: string; backup: string };
@@ -70,6 +72,12 @@ export function sourceFileDeleteListResolve(
     if (!isFile) throw new SourceFileDeleteRequestError(`not a regular file: ${internalPath}`);
     if (absPathSeen.has(absPath)) continue;
     absPathSeen.add(absPath);
+    // a managed document is several files of its root (doc-managed-store.ts): each one is
+    // moved into a backup of its own, so restoring them puts the document back
+    if (fileEntry.managed) {
+      for (const file of fileEntry.managed.doc.fileList) fileList.push({ absPath: file, internalPath: fileEntry.internalPath });
+      continue;
+    }
     fileList.push(fileEntry);
   }
   return fileList;

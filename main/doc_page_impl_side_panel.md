@@ -220,7 +220,7 @@ side-panel.yaml                          side panel
 | editing | a generated item is not renamed, moved, removed or bound, and nothing is placed next to it; its menu says why, naming the folder it mirrors. It can be read again (refresh). The source-folder item itself is an item of the file: renamed, moved, removed, rebound, detached |
 | search | the source-folder item is found by its name; the search does not go into the folder, so a generated item is not found ([Searching the items](#searching-the-items)) |
 
-**How it looks.** The reader tells the file tree from the authored items before clicking: a generated item has a small file or folder glyph before its name (`data.isGenerated`), and the source-folder item a small tree glyph after its name, the folder's path as its hover title (`data.isSourceFolder`). Both are drawn by the default renderer on the `sidebar` surface in every mode, so nothing moves when edit mode is toggled; a custom renderer wrapping `SidePanelItem` keeps them.
+**How it looks.** The reader tells the file tree from the authored items before clicking: a generated item has a small file or folder glyph before its name (`data.isGenerated`), and the source-folder item a small tree glyph after its name, the folder's path as its hover title (`data.isSourceFolder`). A source folder that is a virtual root, or lies in one ([Managed documents](doc_page_impl_doc_managed.md#in-the-page)), has the glyphs of managed documents instead (a folder with a cog, a file in a box, in their own tint; `data.isManaged`), and an authored item showing a managed document carries the box after its name. Both are drawn by the default renderer on the `sidebar` surface in every mode, so nothing moves when edit mode is toggled; a custom renderer wrapping `SidePanelItem` keeps them.
 
 ## Semantic parts
 
@@ -502,13 +502,14 @@ A flow list or a flow mapping cannot take an item in place and is refused with a
 
 ```text
 Rename · Move… · Refresh                          the buttons of the label
+Rename document… · Move document…                 the document the item shows (written or mirrored)
 New folder ▸ · New document ▸                     Above / Below / Inside, last
 Change document… · Bind document… · Bind folder…  the binding changes the item offers
   · Change folder… · Detach…                      (see "Changing the structure")
 Remove…
 ```
 
-**Rename** reports `sidePanelTextEditStartRequest` with the `instanceId` of the rendering the menu was opened from, so that rendering owns the edit as if its pencil was clicked; **Move…** reports `sidePanelItemMovePickerOpenRequest` with the point of the menu, so the picker opens there; every other entry reports the request of its change. All go through the event router with `placement: 'sidePanelContextMenu'`. An entry that does not apply is disabled with its reason as hover title, the reasons being those of the move and of the structure changes (`lib/side-panel-move.js`, `lib/side-panel-node.js`). The open state is `DocSidePanelStore.contextMenu { itemId, instanceId, point }`; opening closes the menu that is open and opens the new one on the next frame, so a right click on another row while the menu is open moves the menu there. A pointer down outside or Escape closes it.
+**Rename** reports `sidePanelTextEditStartRequest` with the `instanceId` of the rendering the menu was opened from, so that rendering owns the edit as if its pencil was clicked; **Move…** reports `sidePanelItemMovePickerOpenRequest` with the point of the menu, so the picker opens there; **Rename document…** and **Move document…** move the document's file, not the item: they open the move dialog of the source layer at the point of the menu (`DocRelocateStore.dialogOpen`), where the file gets another name, folder or root, a virtual root making it managed ([Relocation](doc_page_impl_nav_backlink.md#relocation)), and every item naming it is rebound with its links; every other entry reports the request of its change. All go through the event router with `placement: 'sidePanelContextMenu'`. An entry that does not apply is disabled with its reason as hover title, the reasons being those of the move and of the structure changes (`lib/side-panel-move.js`, `lib/side-panel-node.js`). The open state is `DocSidePanelStore.contextMenu { itemId, instanceId, point }`; opening closes the menu that is open and opens the new one on the next frame, so a right click on another row while the menu is open moves the menu there. A pointer down outside or Escape closes it.
 
 **History.** A move is not in the edit history, which holds documents only ([The Edit History](doc_page_impl_edit_history.md#what-is-not-recorded)); the answer of the move names both files with their texts before and after, what a history of the side panel would keep ([TODO](doc_page_impl_TODO.md#edit-history-side-panel)). The events of the sidePanel route pass the host application first, like every component report.
 
@@ -711,8 +712,8 @@ comp-doc/side-panel/SidePanelItem.jsx      default renderer (common/SidePanelIte
 comp-doc/side-panel/side-panel-drag.js     the drag: rows measured, zones, depth, auto open / scroll
 comp-doc/side-panel/SidePanelDragOverlay.jsx  drop indicator, ghost label, move notice
 comp-doc/side-panel/SidePanelMovePicker.jsx   the move picker
-comp-doc/side-panel/SidePanelItemContextMenu.jsx  menu of an item: Rename, Move…, Refresh, new items,
-                                                  binding, Remove…
+comp-doc/side-panel/SidePanelItemContextMenu.jsx  menu of an item: Rename, Move…, Refresh, Rename / Move
+                                                  document…, new items, binding, Remove…
 comp-doc/side-panel/SidePanelItemDialog.jsx  the dialog of a new folder, a binding, a detach, a removal
 comp-doc/side-panel/DocSidebarFolder.jsx   default folder gesture, open state by item id, an unfolded
                                            sole root drawn as its children (its root row first when bound)

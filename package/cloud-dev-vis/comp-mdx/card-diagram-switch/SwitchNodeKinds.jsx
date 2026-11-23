@@ -5,6 +5,7 @@ import { RegisteredComp } from '../../../../main/comp-doc/registry/RegisteredCom
 import { nodeRegistryBuild } from '../card-diagram/node-registry.js';
 import { diagramNormalize } from '../card-diagram/DiagramERData.js';
 import { DiagramNodeContent, DiagramRenderContext, useDiagramSearchMark } from '../card-diagram/DiagramRender.jsx';
+import { nodeStyleVarsOf } from '../card-diagram/DiagramNodeStyle.js';
 import { SwitchContext, SwitchStaticScene } from './SwitchStatic.jsx';
 import { SwitchViewSwitcher, SwitchViewTabs } from './SwitchViewSwitcher.jsx';
 import { SWITCH_EMBED_CHROME_HEIGHT, SWITCH_TITLE_FONT_SIZE, SWITCH_TITLE_HEIGHT, switchBoxClipBuild, switchEmbedCardRectOf, switchEmbedMapBuild, switchPathViewBuild, switchPathViewRead, switchPresentationBuild, switchPresentationChildIsDrawn, switchStackFrameIsVisible, switchStackItemLayout, switchStackPresentationBuild, switchStackTitleBarNormalize, switchStackTitleBarRead } from './SwitchData.js';
@@ -182,7 +183,7 @@ const SceneStackItem = observer(function SceneStackItem({ item, index, isWheelTa
 			) : null}
 			{/* drawn in a static copy too, inert, so a mask or a picture has the same rows */}
 			{isTabs ? <SwitchViewTabs store={store} presentation={presentation} viewAsked={item.view} isInert={isStatic} isWheelTaken={isWheelTaken} /> : null}
-			<div ref={bodyRef} className="doc-switch-stack-item-body" style={heightBody ? { height: heightBody } : undefined}>
+			<div ref={bodyRef} className="doc-switch-stack-item-body" style={{ ...(heightBody ? { height: heightBody } : {}), ...(nodeCard ? nodeStyleVarsOf(nodeCard) : {}) }}>
 				{nodeCard ? <DiagramNodeContent id={item.id} node={nodeCard} config={config} registry={registry} anchorRef={anchorRefNone} visualization={visualization} /> : null}
 				{layout ? (
 					<div className="doc-switch-embed-world" style={{ transform: `translate(${layout.map.tx}px, ${layout.map.ty}px) scale(${layout.map.scale})`, clipPath: store.sceneBoxIsChosen(pathShown, item.box) ? switchBoxClipBuild(box) : undefined }}>
@@ -484,5 +485,5 @@ export const switchNodeKindList = [sceneEmbedNodeKind, sceneStackNodeKind, scene
 
 // the registry of a series with the kinds of the layer
 export function switchRegistryBuild(registry) {
-	return nodeRegistryBuild({ id: `${registry.id}-switch`, label: registry.label, kindList: [...registry.kindList, ...switchNodeKindList], cardLegacyConvert: registry.cardLegacyConvert });
+	return nodeRegistryBuild({ id: `${registry.id}-switch`, label: registry.label, kindList: [...registry.kindList, ...switchNodeKindList], cardLegacyConvert: registry.cardLegacyConvert, featureList: registry.featureList });
 }

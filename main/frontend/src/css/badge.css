@@ -37,3 +37,26 @@
   border-color: color-mix(in srgb, var(--color-fd-destructive, #dc2626) 60%, var(--color-fd-border));
   color: var(--color-fd-destructive, #dc2626);
 }
+
+/* ---------- managed documents ----------
+   what the page keeps itself in a virtual root (doc_page_impl_doc_managed.md):
+   its glyphs (a folder with a cog, a file in a box) and its badge share one
+   tint, apart from the primary color of links. a component colors its glyph
+   with the variable in its own stylesheet (a rule of a layer would lose to it) */
+:root {
+  --doc-managed-color: #0f8577;
+}
+
+.dark {
+  --doc-managed-color: #45c2b1;
+}
+
+.doc-badge[data-kind="managed"] {
+  background: color-mix(in srgb, var(--doc-managed-color) 14%, transparent);
+  color: var(--doc-managed-color);
+}
+
+.doc-badge-outline[data-managed] {
+  border-color: color-mix(in srgb, var(--doc-managed-color) 55%, var(--color-fd-border));
+  color: var(--doc-managed-color);
+}

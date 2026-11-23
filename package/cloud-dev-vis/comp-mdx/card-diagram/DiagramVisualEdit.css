@@ -65,10 +65,17 @@
 	background: color-mix(in srgb, var(--color-fd-primary) 4%, transparent);
 }
 
-.doc-er-table.is-selected,
-.doc-vis-operator.is-selected {
-	outline: 2px solid var(--color-fd-primary);
-	outline-offset: 1px;
+/* a node selected, of any kind: one frame, exactly on its box (DiagramRender: data-selected), a
+   thin line of the focus color as thick on the screen at every zoom; a kind drawn to a size has its
+   resize handles on this frame (DiagramResizeHandles.jsx). A card marks a part of itself selected (a
+   row, a field, its footer) in its own way, never the card as a whole */
+.doc-vis-node[data-selected]::after {
+	content: '';
+	position: absolute;
+	inset: calc(-0.75px / var(--doc-vis-zoom, 1));
+	z-index: 2;
+	border: calc(1.5px / var(--doc-vis-zoom, 1)) solid var(--doc-vis-focus);
+	pointer-events: none;
 }
 
 .doc-card-row.is-selected {
@@ -245,15 +252,34 @@
 	min-height: 3.4rem;
 }
 
-/* in a cell the control takes the place of the text: same font, same line
-   height, no padding; the frame is an outline, which takes no room */
+/* in a cell the control takes the place of the words, in exactly their box: the same font, the
+   same line height (the host's control sets 1 on what holds the words: undone), no padding, no
+   border, no margin, so its text box is the box of the words as read, to the fraction of a pixel.
+   A card as wide as its title would otherwise get a text box narrower than the title, and the last
+   letter would go to a second line. The frame is an outline, which takes no room (the viewport of
+   the host's control lets it show; a card clipping its title still hides it), and a tint inside
+   the words' box, which nothing clips; an empty cell keeps the height of a line */
+.doc-vis-text.is-cell .editable-value-container,
+.doc-vis-text.is-cell .editable-value-container .editable-value-content-row,
+.doc-vis-text.is-cell .editable-value-container .value-text-viewport {
+	line-height: inherit;
+}
+
+.doc-vis-text.is-cell .editable-value-container .value-text-viewport {
+	overflow: visible;
+}
+
 .doc-vis-text.is-cell .editable-value-container .value-text-viewport .editable-value-text {
-	min-height: 0;
-	margin: 0 -2px;
-	padding: 0 2px;
+	width: 100%;
+	max-width: none;
+	min-height: 1lh;
+	margin: 0;
+	padding: 0;
 	border: 0;
+	border-radius: 1px;
 	outline: 1.5px solid var(--color-fd-primary);
-	outline-offset: 1px;
+	outline-offset: 2px;
+	background: color-mix(in srgb, var(--color-fd-primary) 8%, transparent);
 	font: inherit;
 	line-height: inherit;
 }
@@ -310,14 +336,15 @@
 }
 
 .doc-vis-text.is-cell .doc-vis-text-plain {
-	min-height: 0;
-	margin: 0 -2px;
-	padding: 0 2px;
-	width: calc(100% + 4px);
+	width: 100%;
+	min-height: 1lh;
+	margin: 0;
+	padding: 0;
 	border: 0;
+	border-radius: 1px;
 	outline: 1.5px solid var(--color-fd-primary);
-	outline-offset: 1px;
-	background: var(--color-fd-background);
+	outline-offset: 2px;
+	background: color-mix(in srgb, var(--color-fd-primary) 8%, transparent);
 	font: inherit;
 	line-height: inherit;
 }
@@ -385,13 +412,6 @@
 	padding: 0 0.3rem;
 }
 
-.doc-card-toolbar-grip:not(:disabled) {
-	cursor: grab;
-}
-
-.doc-card-toolbar-grip:not(:disabled):active {
-	cursor: grabbing;
-}
 
 /* where a dragged row or field will land: a line before the sibling the
    pointer is above, or after the last */
@@ -927,8 +947,7 @@ body:has(.doc-block-popup .doc-vis-edit) .prop-editor-color-popover {
 	border-top: 1px solid var(--color-fd-border);
 }
 
-.doc-vis-card-number,
-.doc-vis-card-color {
+.doc-vis-card-number {
 	box-sizing: border-box;
 	height: 1.35rem;
 	padding: 0 0.3rem;
@@ -1073,10 +1092,14 @@ body:has(.doc-block-popup .doc-vis-edit) .prop-editor-color-popover {
 
 /* ---------- the create panel ---------- */
 
+/* its line height is its own: inherited, it was the height of a line of the document around the
+   canvas (28px), which made every row of the panel on the canvas taller than the same panel opened
+   elsewhere (portaled to the body, 1.5) */
 .doc-vis-create-panel {
 	box-sizing: border-box;
 	width: 300px;
 	padding: 0.35rem;
+	line-height: 1.5;
 	border: 1px solid var(--color-fd-border);
 	border-radius: 3px;
 	background: var(--color-fd-popover, var(--color-fd-background));
@@ -1106,6 +1129,13 @@ body:has(.doc-block-popup .doc-vis-edit) .prop-editor-color-popover {
 	outline: none;
 }
 
+/* the field of the panel: a text of the page with its slash mode (EditSourceSurface, plain), one
+   line, its placeholder drawn under it while it is empty */
+.doc-vis-create-field-box { position: relative; flex: 1 1 auto; min-width: 0; }
+.doc-vis-create-field-box .doc-vis-create-field { min-height: 1lh; overflow: hidden; color: var(--color-fd-foreground); white-space: pre; outline: none; cursor: text; }
+.doc-vis-create-placeholder { position: absolute; inset: 0; overflow: hidden; color: var(--color-fd-muted-foreground); white-space: nowrap; text-overflow: ellipsis; pointer-events: none; }
+.doc-vis-create-text { color: var(--color-fd-foreground); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
 .doc-vis-create-list {
 	display: grid;
 	gap: 1px;
@@ -1116,6 +1146,9 @@ body:has(.doc-block-popup .doc-vis-edit) .prop-editor-color-popover {
 
 /* an action that cannot be done here: listed, greyed out, its reason in the place of its description */
 .doc-vis-create-option.is-disabled { opacity: 0.5; cursor: default; }
+/* an action that takes something away: its words and its icon in the red of the danger buttons */
+.doc-vis-create-option.is-danger > svg,
+.doc-vis-create-option.is-danger > .doc-vis-create-label { color: var(--color-fd-destructive, #dc2626); }
 .doc-vis-create-option {
 	display: grid;
 	grid-template-columns: 14px auto minmax(0, 1fr);
@@ -1302,3 +1335,92 @@ body:has(.doc-block-popup .doc-vis-edit) .prop-editor-color-popover {
 .doc-vis-menu-action strong { font-weight: 500; }
 .doc-vis-menu-action small { opacity: 0.7; font-size: 0.85em; }
 .doc-vis-menu-action.is-disabled { opacity: 0.5; }
+
+/* ---------- a color (DiagramColorValue.jsx) ----------
+   a row of swatches, wrapping where the column is narrow: the look of the kind (dashed), none
+   (crossed), the tones as they will look, and a color of one's own (a ring of hues, or the color
+   chosen); the one chosen ringed in the primary color. Its picker stands below it */
+.doc-vis-color { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; box-sizing: border-box; width: 100%; min-width: 0; min-height: 1.35rem; padding: 2px 0; }
+/* in the host's PropEditor a value cell keeps its content on one line and clips it (scrolled by the
+   wheel): a row of swatches is let wrap there instead, so every swatch stays in reach */
+.doc-vis-card-body .keyvalues-cell.cell-clip > .keyvalues-cell-clip-inner:has(.doc-vis-color) { flex: 1 1 auto; width: auto; min-width: 0; white-space: normal; transform: none !important; }
+.doc-vis-card-body .prop-editor-value-shell:has(> .doc-vis-color) { flex: 1 1 auto; width: 100%; min-width: 0; }
+.doc-vis-color-swatch {
+	position: relative;
+	box-sizing: border-box;
+	flex: none;
+	width: 16px;
+	height: 16px;
+	padding: 0;
+	border: 1px solid color-mix(in srgb, var(--doc-vis-color-swatch-edge, var(--color-fd-foreground)) 45%, var(--color-fd-border));
+	border-radius: 4px;
+	background: var(--doc-vis-color-swatch, var(--color-fd-background));
+	cursor: pointer;
+}
+.doc-vis-color-swatch:hover:not(:disabled) { border-color: var(--color-fd-foreground); }
+.doc-vis-color-swatch:focus-visible { outline: 2px solid var(--color-fd-ring, var(--color-fd-primary)); outline-offset: 1px; }
+.doc-vis-color-swatch.is-selected { box-shadow: 0 0 0 1.5px var(--color-fd-background), 0 0 0 3px var(--color-fd-primary); }
+.doc-vis-color-swatch:disabled { opacity: 0.4; cursor: default; }
+.doc-vis-color-swatch.is-default { border-style: dashed; border-color: var(--color-fd-muted-foreground); background: none; }
+.doc-vis-color-swatch.is-default::after { content: ''; position: absolute; inset: 3px; border-radius: 2px; background: color-mix(in srgb, var(--color-fd-muted-foreground) 30%, transparent); }
+.doc-vis-color-swatch.is-none { background: linear-gradient(to top right, transparent calc(50% - 0.75px), #dc2626 calc(50% - 0.75px), #dc2626 calc(50% + 0.75px), transparent calc(50% + 0.75px)), var(--color-fd-background); }
+.doc-vis-color-swatch.is-custom { margin-left: 4px; border-color: transparent; border-radius: 999px; background: conic-gradient(#ef4444, #f59e0b, #eab308, #22c55e, #06b6d4, #3b82f6, #8b5cf6, #ec4899, #ef4444); }
+.doc-vis-color-swatch.is-custom::after { content: ''; position: absolute; inset: 4px; border-radius: 999px; background: var(--color-fd-background); }
+.doc-vis-color-swatch.is-custom.is-set::after { background: var(--doc-vis-color-swatch); box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-fd-foreground) 20%, transparent); }
+
+/* the picker of a color of one's own: the host's ColorPicker in the colors and sizes of the page */
+.doc-vis-color-popup {
+	position: fixed;
+	z-index: 1000;
+	box-sizing: border-box;
+	width: 252px;
+	padding: 8px;
+	border: 1px solid var(--color-fd-border);
+	border-radius: 6px;
+	background: var(--color-fd-popover, var(--color-fd-background));
+	box-shadow: 0 8px 24px rgb(15 23 42 / 16%);
+	color: var(--color-fd-foreground);
+	font-family: ui-sans-serif, system-ui, sans-serif;
+	font-size: 0.72rem;
+	line-height: 1.4;
+}
+.doc-vis-color-popup .color-picker-root { width: 100%; height: auto; padding: 0; border: 0; background: none; box-shadow: none; color: inherit; }
+.doc-vis-color-popup .color-picker-header { display: none; }
+.doc-vis-color-popup .color-picker-body { height: auto; }
+.doc-vis-color-popup .color-picker-sv-box { height: 128px; border-color: var(--color-fd-border); }
+.doc-vis-color-popup .color-picker-field-list { gap: 2px; }
+.doc-vis-color-popup .color-picker-field-row { grid-template-columns: 12px minmax(0, 1fr) 46px; gap: 6px; color: inherit; font-size: 0.68rem; }
+.doc-vis-color-popup .color-picker-field-label,
+.doc-vis-color-popup .color-picker-value-row span { color: var(--color-fd-muted-foreground); font-size: 0.68rem; }
+.doc-vis-color-popup .color-picker-field-number,
+.doc-vis-color-popup .color-picker-value-input { height: 1.35rem; border-color: var(--color-fd-border); border-radius: 2px; background: var(--color-fd-background); color: inherit; font-family: ui-sans-serif, system-ui, sans-serif; font-size: 0.7rem; }
+.doc-vis-color-popup .color-picker-preview-row { grid-template-columns: 24px minmax(0, 1fr); height: auto; margin-top: 8px; }
+.doc-vis-color-popup .color-picker-preview-chip { width: 22px; height: 22px; border-color: var(--color-fd-border); }
+.doc-vis-color-popup .color-picker-value-row { grid-template-columns: 34px minmax(0, 1fr); }
+.doc-vis-color-native { width: 100%; height: 2rem; padding: 0; border: 1px solid var(--color-fd-border); border-radius: 4px; background: none; }
+.doc-vis-color-popup-actions { display: flex; align-items: center; gap: 6px; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--color-fd-border); }
+.doc-vis-color-popup-actions > .doc-note { flex: 1; min-width: 0; margin: 0; color: var(--color-fd-muted-foreground); font-size: 0.66rem; }
+
+/* the resize handles of the node selected (DiagramResizeHandles.jsx): centered on the frame of the
+   selection (React Flow moves each by half its size, and scales it to stay as large on the screen at
+   every zoom); a circle at a corner, a pill along the middle of an edge */
+.react-flow__resize-control.handle.doc-vis-resize-handle { box-sizing: border-box; z-index: 3; width: 10px; height: 10px; border: 1.5px solid var(--doc-vis-focus); border-radius: 50%; background: var(--color-fd-background); }
+.react-flow__resize-control.handle.doc-vis-resize-handle.is-edge.top,
+.react-flow__resize-control.handle.doc-vis-resize-handle.is-edge.bottom { width: 16px; height: 7px; border-radius: 4px; }
+.react-flow__resize-control.handle.doc-vis-resize-handle.is-edge.left,
+.react-flow__resize-control.handle.doc-vis-resize-handle.is-edge.right { width: 7px; height: 16px; border-radius: 4px; }
+/* a corner of a node changing one dimension acts as an edge of that axis: drawn at its corner */
+.react-flow__resize-control.handle.doc-vis-resize-handle.is-corner.is-at-top { top: 0; }
+.react-flow__resize-control.handle.doc-vis-resize-handle.is-corner.is-at-bottom { top: 100%; }
+.react-flow__resize-control.handle.doc-vis-resize-handle.is-corner.is-at-left { left: 0; }
+.react-flow__resize-control.handle.doc-vis-resize-handle.is-corner.is-at-right { left: 100%; }
+.react-flow__resize-control.handle.doc-vis-resize-handle.is-corner { width: 10px; height: 10px; border-radius: 50%; }
+.react-flow__resize-control.handle.doc-vis-resize-handle:hover { background: color-mix(in srgb, var(--doc-vis-focus) 18%, var(--color-fd-background)); }
+/* an edge resizes along its whole length: a strip on the frame, as thick on the screen at every zoom,
+   seen only by its cursor; the node handles stand over it, so a line is still drawn from them */
+.react-flow__resize-control.line.doc-vis-resize-edge { z-index: 1; border: 0; background: none; }
+.react-flow__resize-control.line.doc-vis-resize-edge.left,
+.react-flow__resize-control.line.doc-vis-resize-edge.right { width: calc(8px / var(--doc-vis-zoom, 1)); }
+.react-flow__resize-control.line.doc-vis-resize-edge.top,
+.react-flow__resize-control.line.doc-vis-resize-edge.bottom { height: calc(8px / var(--doc-vis-zoom, 1)); }
+.doc-vis-node:has(> .doc-vis-resize-edge) > .react-flow__handle { z-index: 4; }

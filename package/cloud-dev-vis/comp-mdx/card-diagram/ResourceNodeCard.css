@@ -5,7 +5,7 @@
 .doc-resource-card .doc-er-table-title {
 	align-items: center;
 	gap: 0.45rem;
-	background: color-mix(in srgb, var(--resource-accent) 7%, var(--color-fd-background));
+	background: color-mix(in srgb, var(--resource-accent) 7%, var(--doc-node-fill, var(--color-fd-background)));
 	border-top: 2px solid var(--resource-accent);
 	border-radius: 0.7rem 0.7rem 0 0;
 }

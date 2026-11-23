@@ -1,0 +1,52 @@
+format: md
+frontmatter: ""
+blockList:
+  - blockId: w239p8
+    kind: heading
+    text: "# Kept as Blocks"
+  - blockId: rg7udc
+    kind: paragraph
+    gapBefore: 1
+    text: "This document is kept in **mode block**: the root holds its blocks and the items of its lists, each with an id of its own, and its text is built from them whenever the page reads it. Every write is read back into blocks; a block that stayed, or was edited in place, keeps its id."
+  - blockId: o29cbp
+    kind: heading
+    gapBefore: 1
+    text: "## A list"
+  - blockId: 8zgq1k
+    kind: list
+    gapBefore: 1
+    list:
+      itemList:
+        - itemId: txn8c1
+          marker: "-"
+          text: "Blocks are the root-level blocks of the edit layer: headings, paragraphs, lists, code, components."
+        - itemId: 1dv6ja
+          marker: "-"
+          text: "The items of a list are a tree:"
+          itemList:
+            - itemId: 371o29
+              marker: "-"
+              text: each with its marker and its text,
+            - itemId: oqz2wk
+              marker: "-"
+              text: and an id that survives edits of its text.
+        - itemId: 3zzbba
+          marker: "-"
+          text: A block whose structure would not write its text again is kept as its text, so nothing is lost.
+  - blockId: kqygm9
+    kind: heading
+    gapBefore: 1
+    text: "## A code block"
+  - blockId: 7n5yix
+    kind: code
+    gapBefore: 1
+    text: |-
+      ```yaml
+      blockList:
+        - { blockId: k3f9a2, kind: heading, text: "# Kept as Blocks" }
+      ```
+  - blockId: fl7y64
+    kind: paragraph
+    gapBefore: 1
+    text: "The settings panel lists the blocks of this document with their ids: Managed documents, the root `~example:notes`, then the list icon on its row."
+gapAfter: 1

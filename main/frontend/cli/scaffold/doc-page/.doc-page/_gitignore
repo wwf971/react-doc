@@ -7,3 +7,6 @@
 service-kernel.yaml
 service-backup/
 service-infra/
+# a managed document deleted or moved out of its virtual root is kept as hidden
+# backups beside its files (main/doc_page_impl_doc_managed.md)
+doc-managed/*/.*.deleted

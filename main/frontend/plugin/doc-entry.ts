@@ -7,6 +7,7 @@ import { excludePatternTextListRead } from './doc-source-exclude.ts';
 import { PACKAGE_CONFIG_FILE_NAME, docPackageNameOfFolderGet, docPackageSpecListRead, type DocPackageSpec } from './doc-package.ts';
 import { sidePanelEffectiveGet, sidePanelRootUnfoldApply } from './doc-sidebar-effective.ts';
 import { typeSectionRead, type TypeSection } from './doc-type-config.ts';
+import { docManagedFolderListGet, docManagedRootListRead } from './doc-managed-store.ts';
 
 // The workspace, its doc pages, the entry of each and the yaml files it reaches.
 // design: doc_page_impl_source.md#the-workspace, doc_page_impl_side_panel.md#the-document-entry
@@ -139,7 +140,8 @@ export type DocPageRoot = {
   path: string;
   // the path the rule names, absolute
   pathRule: string;
-  kind: 'folder' | 'file';
+  // managed: a virtual root, its documents kept by the page (doc_page_impl_doc_managed.md)
+  kind: 'folder' | 'file' | 'managed';
 };
 
 // where a doc page is mentioned: the workspace (fromEntryFile '') or a
@@ -196,6 +198,9 @@ export type DocPageLoaded = {
   api: EntryFileSection;
   objectFrontend: EntryFileSection;
   playground: EntryFileSection;
+  // its virtual roots of managed documents (doc-managed-store.ts): undefined the
+  // convention folder .doc-page/doc-managed/ (doc-managed.yaml beside the entry names others)
+  docManaged: EntryFileSection;
   // "type" of the entry: the types it declares (doc-type-config.ts); undefined: type.yaml beside it
   type: TypeSection;
 };
@@ -218,7 +223,7 @@ export type DocPageInfo = {
   // page writes nothing into its folder (a package, unless served alone)
   packageName: string;
   isReadOnly: boolean;
-  rootList: { alias: string; path: string; kind: 'folder' | 'file' }[];
+  rootList: { alias: string; path: string; kind: 'folder' | 'file' | 'managed' }[];
   mentionList: { alias: string; isAliasGiven: boolean; fromAlias: string; file: string; place: string }[];
 };
 
@@ -361,10 +366,10 @@ type LoadContext = {
   warningList: string[];
 };
 
-const FILE_KEY_LIST = ['docEntry', 'source', 'tag', 'config', 'asset', 'assetStorage', 'service', 'comp', 'hotkey', 'api', 'objectFrontend', 'type', 'playground', 'packageList', 'sidePanelDefault', 'sidePanelById'];
+const FILE_KEY_LIST = ['docEntry', 'source', 'tag', 'config', 'asset', 'assetStorage', 'service', 'comp', 'hotkey', 'api', 'objectFrontend', 'type', 'playground', 'docManaged', 'packageList', 'sidePanelDefault', 'sidePanelById'];
 // the sections an entry alone may hold: each names a config file of the doc
 // page (or switches the feature off), found beside the entry by convention
-const ENTRY_FILE_SECTION_KEY_LIST = ['asset', 'assetStorage', 'service', 'comp', 'hotkey', 'api', 'objectFrontend', 'playground'] as const;
+const ENTRY_FILE_SECTION_KEY_LIST = ['asset', 'assetStorage', 'service', 'comp', 'hotkey', 'api', 'objectFrontend', 'playground', 'docManaged'] as const;
 const CONFIG_FILE_KEY_LIST = ['config', 'variable'];
 const WORKSPACE_FILE_KEY_LIST = ['title', 'titleShort', 'homeDoc', 'homeItem', 'docPageList', 'packageList', 'config', 'hotkey', 'assetStorage'];
 const ENTRY_FILE_SUFFIX = '-entry.yaml';
@@ -912,6 +917,7 @@ function docPageRegister(entryFile: string, mention: DocPageMention, isRoot: boo
     api: undefined,
     objectFrontend: undefined,
     playground: undefined,
+    docManaged: undefined,
     type: undefined,
   };
   context.docPageByEntryFile.set(entryFile, docPage);
@@ -1008,6 +1014,9 @@ function fileLoad(filePath: string, context: LoadContext, entryOwnerFrom: string
     );
   }
 
+  // the virtual roots of a doc page come before its own rules, so that its rules (tags,
+  // config, removals by path) apply to managed documents as to files
+  if (file.isEntry) docManagedRootRuleListAdd(filePathResolved, context);
   sourceSectionLoad(content.source, file, context);
   tagSectionLoad(content.tag, file, context);
   configSectionLoad(content.config, file.filePath, ['config'], file.entryOwner, context);
@@ -1152,6 +1161,12 @@ function sourceSectionLoad(source: any, file: DocYamlFile, context: LoadContext)
     }
     if (docPage) {
       const rootSame = docPage.rootList.find((root) => root.alias === alias);
+      if (rootSame?.kind === 'managed') {
+        throw new Error(
+          `[doc-source] the alias "${alias}" of the doc page "${docPageAlias}" is a virtual root of managed documents (${rootSame.path});`
+            + ` a folder cannot join it (${placeRules} rules[${index}]); give the rule another alias`,
+        );
+      }
       if (rootSame && !pathIsInside(pathRoot, rootSame.path)) {
         throw new Error(
           `[doc-source] two roots of the doc page "${docPageAlias}" share the alias "${alias}": ${rootSame.path} and ${pathRoot}`
@@ -1170,6 +1185,32 @@ function sourceSectionLoad(source: any, file: DocYamlFile, context: LoadContext)
     return ruleLoaded;
   });
   context.sourceRuleList.push(...ruleListRebased);
+}
+
+// the virtual roots of a doc page (doc_page_impl_doc_managed.md#in-the-source): every root
+// of its managed folders is a root of its source, collected recursively, as the rule
+// { action: addManaged, alias, path, rootId } before the rules of its entry. its alias is
+// one of the doc page's like a folder's: a rule naming a folder under it is an error
+function docManagedRootRuleListAdd(entryFile: string, context: LoadContext) {
+  const docPage = context.docPageByEntryFile.get(entryFile);
+  if (!docPage) return;
+  for (const folder of docManagedFolderListGet(entryFile, docPage.docManaged)) {
+    for (const root of docManagedRootListRead(folder)) {
+      const rootSame = docPage.rootList.find((one) => one.alias === root.alias);
+      if (rootSame) {
+        throw new Error(`[doc-source] two roots of the doc page "${docPage.alias}" share the alias "${root.alias}": ${rootSame.path} and the virtual root ${root.dirAbs}`);
+      }
+      docPage.rootList.push({ alias: root.alias, path: root.dirAbs, pathRule: root.dirAbs, kind: 'managed' });
+      context.sourceRuleList.push({
+        action: 'addManaged',
+        alias: root.alias,
+        path: path.relative(context.configDir, root.dirAbs) || '.',
+        rootId: root.rootId,
+        collect: 'recursive',
+        docPageAlias: docPage.alias,
+      });
+    }
+  }
 }
 
 function pathIsInside(filePath: string, folder: string): boolean {

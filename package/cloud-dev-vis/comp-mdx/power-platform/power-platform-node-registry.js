@@ -1,6 +1,6 @@
 import { GitBranch, ListChecks, TableProperties, Workflow } from '../../../../main/frontend/UICommon.js';
 import { nodeRegistryBuild, resourceNodeCreateBuild, resourceNodeSimpleBuild } from '../card-diagram/node-registry.js';
-import { cardDiagramNodeKindList } from '../card-diagram/card-diagram-node-registry.js';
+import { cardDiagramFeatureList, cardDiagramNodeKindList } from '../card-diagram/card-diagram-node-registry.js';
 import { resourceCardSchemaBuild } from '../card-diagram/TableCardSchema.js';
 import { dataverseAnchorListGet, dataverseCardNormalize, dataverseChoiceAnchorListGet } from './DataverseCardData.js';
 import { dataverseCardLegacyConvert, dataverseChoiceSchema, dataverseTableSchema } from './DataverseCardSchema.js';
@@ -69,8 +69,9 @@ export const powerPlatformNodeRegistry = nodeRegistryBuild({
 	id: 'power-platform',
 	label: 'Power Platform',
 	kindList: [...cardDiagramNodeKindList, ...operatorNodeKindList, dataverseTableNodeKind, dataverseChoiceNodeKind, powerAutomateNodeKind, businessRuleNodeKind],
-
 	arrangerList: [...erArrangerList, diagramArrangerScatter],
+	// the features of the base series too (the parametric canvas): offered where a viewport names them
+	featureList: cardDiagramFeatureList,
 });
 
 // DiagramDataverseEntity: one Dataverse table card, outside a canvas

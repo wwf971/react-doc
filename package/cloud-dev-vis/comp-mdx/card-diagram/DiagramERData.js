@@ -1,6 +1,7 @@
 import { routeNormalize, routeTypeHasAnchors } from './DiagramRoute.js';
 import { CARD_SIMPLE_HEIGHT, CARD_SIMPLE_WIDTH, cardSimpleAnchorOf, nodeDisplayRead } from './CardSimpleData.js';
 import { CARD_FOOTER_ANCHOR } from './TableCardSchema.js';
+import { nodeStyleRead } from './DiagramNodeStyle.js';
 
 const sides = ['left', 'right', 'top', 'bottom'];
 const lineTypes = ['straight', 'bezier', 'step', 'smoothstep', 'polyline'];
@@ -97,7 +98,10 @@ export function viewportNormalize(value = {}, height = 620) {
 		if (view !== 'auto' && (view.x < range.x[0] || view.x > range.x[1] || view.y < range.y[0] || view.y > range.y[1])) throw new Error('viewport.view translation is outside viewport.range.');
 	}
 	if (value.isMiniMapVisible !== undefined && typeof value.isMiniMapVisible !== 'boolean') throw new Error('viewport.isMiniMapVisible must be boolean.');
-	return { size: { width: dimension(size.width, 'viewport.size.width'), height: dimension(size.height ?? height, 'viewport.size.height') }, view, range, zoom: { min, max }, isMiniMapVisible: value.isMiniMapVisible ?? false };
+	// the features this viewport offers for editing (node-registry.js: feature): a layer is not
+	// there for an author unless the viewport says so
+	const featureList = value.featureList === undefined ? [] : list(value.featureList, 'viewport.featureList').map(item => text(item, 'viewport.featureList'));
+	return { size: { width: dimension(size.width, 'viewport.size.width'), height: dimension(size.height ?? height, 'viewport.size.height') }, view, range, zoom: { min, max }, isMiniMapVisible: value.isMiniMapVisible ?? false, featureList };
 }
 
 // the ER grammar written before `version: 1` (tables and relationships),
@@ -196,6 +200,8 @@ export function diagramNormalize(input, registry, resolve, height = 620) {
 		const { renderer, contract } = rendererRead(node.renderer, `${id}.renderer`, 'visualizationNode', resolve, registry);
 		const dataInput = mapping(node.data ?? {}, `${id}.data`);
 		const data = mapping(contract.dataNormalize ? contract.dataNormalize(dataInput) : dataInput, `${id}.data`);
+		// its colors (DiagramNodeStyle.js): the keys its kind draws
+		nodeStyleRead(node.style, id, renderer.type ? registry?.kindByType[renderer.type] : undefined, renderer.type ?? renderer.component);
 		if (typeof contract.anchorListGet !== 'function') throw new Error(`${id}: renderer requires anchorListGet.`);
 		const anchors = [...list(contract.anchorListGet(data), `${id}.anchors`)];
 		const anchorsById = unique(anchors, `${id}.anchors`);
@@ -302,7 +308,20 @@ export function diagramNormalize(input, registry, resolve, height = 620) {
 		return result;
 	});
 	unique(connections, 'connections');
-	return { nodes, pinList, connections, layout: layoutResolved, viewport: viewportNormalize(value.viewport, height) };
+	const graph = { nodes, pinList, connections, layout: layoutResolved, viewport: viewportNormalize(value.viewport, height), featureById: {} };
+	// the features of the registry (node-registry.js): each reads the section of the diagram it
+	// owns, and may derive nodes and place nodes. The engine knows none of them by name
+	for (const feature of registry?.featureList ?? []) {
+		const resolved = feature.graphResolve?.(feature.dataKey ? value[feature.dataKey] : undefined, graph, { registry });
+		if (!resolved) continue;
+		if (resolved.data !== undefined) graph.featureById[feature.id] = resolved.data;
+		if (resolved.nodeList?.length) graph.nodes = [...graph.nodes, ...resolved.nodeList];
+		if (resolved.placer) graph.layout = { ...graph.layout, placerList: [...(graph.layout.placerList ?? []), resolved.placer] };
+	}
+	for (const featureId of graph.viewport.featureList) {
+		if (!registry?.featureById?.[featureId]) throw new Error(`viewport.featureList: unknown feature "${featureId}" (this diagram knows: ${(registry?.featureList ?? []).map(feature => feature.id).join(', ') || 'none'}).`);
+	}
+	return graph;
 }
 
 // the corners of the viewport a node may be pinned to (node.pin)
@@ -310,6 +329,11 @@ export const NODE_PIN_LIST = ['top-right', 'top-left', 'bottom-right', 'bottom-l
 
 export function diagramPositionsGet(nodes, layout, measurements = {}) {
 	return diagramPlacesGet(nodes, layout, measurements).positions;
+}
+
+// the size a placer gave a node (one dimension or both), over what it would be
+export function nodeSizePlacedOf(size, sizePlaced) {
+	return sizePlaced ? { ...size, ...sizePlaced } : size;
 }
 
 // the size of a node as drawn: what is written, else what was measured, else its default
@@ -334,17 +358,29 @@ function aroundRead(input, id) {
 // where every node is, and the size of those drawn around others: a background with `around`
 // is the union of the rects of its nodes as drawn (their measured sizes included), with its
 // padding, so it follows them when a card grows. positions: Map id -> { x, y }; sizeById:
-// Map id -> { width, height } of those backgrounds alone
-export function diagramPlacesGet(nodes, layout, measurements = {}) {
-	const positions = diagramPositionsBaseGet(nodes.filter(node => !node.around), layout, measurements);
+// Map id -> { width, height } of those backgrounds, and of the nodes a placer sizes
+//
+// A **placer** (layout.placerList, given by a feature of the registry: node-registry.js) places
+// nodes by rules of its own, from their sizes as drawn, each time they are asked for:
+//   { id, isPlaced(nodeId), place({ nodes, positions, sizeById, sizeOf(node), override }) -> anything }
+// it writes into positions (and into sizeById a size it dictates, { width?, height? }); what it
+// answers is kept as placedById.get(id), for whoever draws over the diagram. A node it places has
+// no place in the automatic layout and its own `position` is not read. override: Map id -> { x, y },
+// the place of a node while it is dragged, so what follows it follows it there
+export function diagramPlacesGet(nodes, layout, measurements = {}, override) {
+	const placerList = layout.placerList ?? [];
+	const isPlaced = node => placerList.some(placer => placer.isPlaced(node.id));
+	const positions = diagramPositionsBaseGet(nodes.filter(node => !node.around && !isPlaced(node)), layout, measurements);
 	const sizeById = new Map();
+	const placedById = new Map();
+	for (const placer of placerList) placedById.set(placer.id, placer.place({ nodes, positions, sizeById, sizeOf: node => nodeDimensionsGet(node, measurements), override }));
 	const byId = new Map(nodes.map(node => [node.id, node]));
 	for (const node of nodes) {
 		if (!node.around) continue;
 		const rectList = node.around.nodeIdList.flatMap((idOther) => {
 			const other = byId.get(idOther);
 			const position = positions.get(idOther);
-			return other && position ? [{ ...position, ...nodeDimensionsGet(other, measurements) }] : [];
+			return other && position ? [{ ...position, ...nodeSizePlacedOf(nodeDimensionsGet(other, measurements), sizeById.get(idOther)) }] : [];
 		});
 		if (rectList.length === 0) continue;
 		const { top, right, bottom, left } = node.around.padding;
@@ -353,7 +389,7 @@ export function diagramPlacesGet(nodes, layout, measurements = {}) {
 		positions.set(node.id, { x, y });
 		sizeById.set(node.id, { width: Math.max(...rectList.map(rect => rect.x + rect.width)) + right - x, height: Math.max(...rectList.map(rect => rect.y + rect.height)) + bottom - y });
 	}
-	return { positions, sizeById };
+	return { positions, sizeById, placedById };
 }
 
 function diagramPositionsBaseGet(nodes, layout, measurements) {

@@ -6,6 +6,7 @@ import { cardRowAnchorBuild, fieldOfRow } from './TableCardSchema.js';
 import { cardFooterIsShown, cardFooterTextOf, cardRowDisplayIdListOf, cardViewDefaultGet, cardViewDrawBuild, cardViewLabelOf, cardViewListGet, cardViewSourceOf, cardViewSwitcherIsShown } from './TableCardData.js';
 import { TextValue, ValueMenu } from './DiagramValueControls.jsx';
 import { useDiagramSearchMark } from './DiagramRender.jsx';
+import { EditButtonGroup } from '../../../../main/comp-doc/edit/EditButtonGroup.jsx';
 import './DiagramER.css';
 
 // The generic table-like card of a diagram node (card-diagram-impl.md#the-table-card):
@@ -265,53 +266,18 @@ function CardRowGroup({ group, anchorRef }) {
 	return <div ref={refSet} data-group-id={group.id} data-tone={group.tone || undefined} className="doc-card-row-group" style={place ?? { visibility: 'hidden' }} title={group.label || undefined} />;
 }
 
-// the toolbar of a focused row or field: the control group of the edit
-// layer (.doc-button-group), floating beside the row (left of the card) or
-// above the field header. the grip drags the item to another place among
-// its siblings (a pointer drag, the drop place shown as a line on the
-// card); the other buttons act at once. a button the card does not support
-// is disabled, and its title says why
+// the toolbar of a focused row or field: the floating button group of the edit layer
+// (EditButtonGroup, doc_page_impl_edit.md#floating-button-groups), floating beside the row (left of
+// the card) or above the field header. the grip drags the item to another place among its siblings
+// (a pointer drag, the drop place shown as a line on the card); the other buttons act at once,
+// each a change of the editor. a button the card does not support is disabled, and its title says why
 //
-//   grip        { Icon, axis: 'x' | 'y', title, isDisabled, reason, indexFrom,
+//   grip        { Icon, axis: 'x' | 'y' | 'xy', title, isDisabled, reason, indexFrom,
 //                 rectListGet() -> the rects of the siblings, onPreview(insertion), onDrop(indexTo) }
 //   actionList  [{ id, Icon, title, isDisabled?, reason?, isDanger?, act() }]
 export function CardToolbar({ className = '', editor, grip, actionList }) {
-	return <div className={`doc-card-toolbar doc-button-group nodrag nopan ${className}`.trim()} role="toolbar" onClick={event => event.stopPropagation()}>
-		{grip ? <button type="button" className="doc-card-toolbar-grip" title={grip.isDisabled ? grip.reason : grip.title} aria-label={grip.title} disabled={editor.isLocked || grip.isDisabled} onPointerDown={event => reorderStart(event, grip)}><grip.Icon size={13} /></button> : null}
-		{actionList.map(action => <button key={action.id} type="button" title={action.isDisabled ? action.reason ?? action.title : action.title} aria-label={action.title} disabled={editor.isLocked || action.isDisabled} data-danger={action.isDanger ? '' : undefined}
-			onClick={event => { event.stopPropagation(); editor.change(() => action.act()); }}><action.Icon size={13} /></button>)}
-	</div>;
-}
-
-// a pointer drag from a grip: the pointer is captured by the grip, the
-// insertion place among the siblings follows it (before the sibling whose
-// middle the pointer is above, or after the last), and the drop reports the
-// index the item moves to
-function reorderStart(event, grip) {
-	if (event.button !== 0) return;
-	event.preventDefault();
-	event.stopPropagation();
-	const target = event.currentTarget;
-	target.setPointerCapture(event.pointerId);
-	let indexTo = grip.indexFrom;
-	const move = moveEvent => {
-		const rectList = grip.rectListGet();
-		const at = grip.axis === 'y' ? moveEvent.clientY : moveEvent.clientX;
-		let insertion = rectList.findIndex(rect => at < (grip.axis === 'y' ? rect.top + rect.height / 2 : rect.left + rect.width / 2));
-		if (insertion < 0) insertion = rectList.length;
-		indexTo = insertion > grip.indexFrom ? insertion - 1 : insertion;
-		grip.onPreview(insertion);
-	};
-	const end = () => {
-		target.removeEventListener('pointermove', move);
-		target.removeEventListener('pointerup', end);
-		target.removeEventListener('pointercancel', end);
-		try { target.releasePointerCapture(event.pointerId); } catch { /* released already */ }
-		grip.onDrop(indexTo);
-	};
-	target.addEventListener('pointermove', move);
-	target.addEventListener('pointerup', end);
-	target.addEventListener('pointercancel', end);
+	return <EditButtonGroup className={`doc-card-toolbar nodrag nopan ${className}`.trim()} isLocked={editor.isLocked} grip={grip}
+		actionList={actionList.map(action => ({ ...action, act: () => editor.change(() => action.act()) }))} />;
 }
 
 // one value of a card: text to read, or in the editor a control that edits it

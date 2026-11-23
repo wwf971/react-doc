@@ -353,7 +353,10 @@ export function switchDocNormalize(input) {
 	const root = switchPathNormalize(value.root ?? value.sceneList[0].path);
 	if (!sceneByPath.has(root)) throw new Error(`The root ${root} is not a scene.`);
 	if (value.depthMax !== undefined && !(Number.isInteger(value.depthMax) && value.depthMax >= 0)) throw new Error('depthMax is how deep scenes inside cards are drawn: 0 or more.');
-	return { title: String(value.title ?? ''), root, height: value.height, depthMax: value.depthMax, transition: value.transition ?? {}, defaults: value.defaults, sceneByPath };
+	// the feature layers offered while a scene of the document is edited (viewport.featureList of a
+	// diagram, for every scene at once: card-diagram-flexible-switch.md#editing-a-block-of-scenes)
+	if (value.featureList !== undefined && !(Array.isArray(value.featureList) && value.featureList.every((id) => typeof id === 'string'))) throw new Error('featureList is a list of the ids of features (parametric-canvas).');
+	return { title: String(value.title ?? ''), root, height: value.height, depthMax: value.depthMax, transition: value.transition ?? {}, defaults: value.defaults, featureList: value.featureList ?? [], sceneByPath };
 }
 
 // the scenes of a document, as the layer asks for them. onBoxSave: what a box the

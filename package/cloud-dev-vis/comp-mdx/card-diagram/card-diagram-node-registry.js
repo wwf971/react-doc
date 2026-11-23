@@ -14,13 +14,15 @@ import { diagramArrangerLanesAcross, diagramArrangerLanesDown, diagramArrangerLa
 import { SceneBoxCard } from './SceneBoxCard.jsx';
 import { CardMatrix } from './CardMatrix.jsx';
 import { cardMatrixNormalize, cardMatrixWidthGet } from './CardMatrixData.js';
-import { ColorBlock, colorBlockNormalize } from './ColorBlock.jsx';
+import { ColorBlock, colorBlockNormalize, colorBlockSearchMatch } from './ColorBlock.jsx';
+import { cardIconTextBuild } from './CardIconTokenData.js';
 import { CardIndex } from './CardIndex.jsx';
 import { cardIndexHeightGet, cardIndexNormalize, cardIndexSearchMatch, cardIndexWidthGet } from './CardIndexData.js';
 import { CardLegend } from './CardLegend.jsx';
 import { cardLegendHeightGet, cardLegendNormalize } from './CardLegendData.js';
 import { CardGraph } from './CardGraph.jsx';
 import { cardGraphNormalize, cardGraphSearchMatch, cardGraphSizeGet } from './CardGraphData.js';
+import { parametricCanvasFeature } from '../card-diagram-parametric-canvas/ParametricFeature.jsx';
 
 // The node kinds of the base series (card-diagram-impl.md#node-registries): a
 // generic table card with authored fields and rows, without any limit on
@@ -47,7 +49,7 @@ export const tableNodeKind = {
 export const operatorNodeKind = {
 	type: 'operator',
 	label: 'Operator',
-	contract: { anchorListGet: () => [{ id: 'body', sideList: sideAllList }], sizeDefault: { width: 220, height: 100 } },
+	contract: { anchorListGet: () => [{ id: 'body', sideList: sideAllList }], sizeDefault: { width: 220, height: 100 }, styleList: ['fill'] },
 	schema: null,
 	Card: OperatorCard,
 	create: {
@@ -62,7 +64,8 @@ export const operatorNodeKind = {
 // two compact cards, for what is mostly read at a glance: a note (a title, a line
 // of text, small figures, a tone), and a brief pill (an icon, a title, a line of
 // figures). neither has rows: a line joins the body of the card
-const compactContract = (sizeDefault) => ({ anchorListGet: () => [{ id: 'body', sideList: sideAllList }], sizeDefault });
+// (their body takes a fill: DiagramNodeStyle.js; what a generator writes takes no resize handles)
+const compactContract = (sizeDefault, styleList = ['fill'], extra = {}) => ({ anchorListGet: () => [{ id: 'body', sideList: sideAllList }], sizeDefault, styleList, ...extra });
 
 export const cardNoteNodeKind = {
 	type: 'card-note',
@@ -115,7 +118,7 @@ export const cardLabelNodeKind = {
 export const cardThreeDotsNodeKind = {
 	type: 'card-three-dots',
 	label: 'Left out',
-	contract: compactContract({ width: 170, height: 40 }),
+	contract: compactContract({ width: 170, height: 40 }, [], { resizeAxisList: [] }),
 	schema: null,
 	Card: CardThreeDots,
 };
@@ -141,7 +144,7 @@ export const cardDatabaseNodeKind = {
 export const cardIconNodeKind = {
 	type: 'card-icon',
 	label: 'Icon',
-	contract: { dataNormalize: cardIconNormalize, anchorListGet: cardIconAnchorListGet, anchorRectEstimate: cardIconAnchorRectEstimate, searchMatch: cardIconSearchMatch, sizeDefault: { width: 180, height: 32 } },
+	contract: { dataNormalize: cardIconNormalize, anchorListGet: cardIconAnchorListGet, anchorRectEstimate: cardIconAnchorRectEstimate, searchMatch: cardIconSearchMatch, sizeDefault: { width: 180, height: 32 }, styleList: ['fill'], resizeAxisList: ['width'] },
 	schema: null,
 	Card: CardIcon,
 	create: {
@@ -157,7 +160,7 @@ export const cardIconNodeKind = {
 export const cardCaptionNodeKind = {
 	type: 'card-caption',
 	label: 'Caption',
-	contract: compactContract({ width: 180, height: 16 }),
+	contract: compactContract({ width: 180, height: 16 }, [], { resizeAxisList: [] }),
 	schema: null,
 	Card: CardCaption,
 };
@@ -166,7 +169,7 @@ export const cardCaptionNodeKind = {
 export const cardMatrixNodeKind = {
 	type: 'card-matrix',
 	label: 'Matrix',
-	contract: { dataNormalize: cardMatrixNormalize, anchorListGet: () => [{ id: 'body', sideList: sideAllList }], sizeDefault: { width: 520, height: 240 } },
+	contract: { dataNormalize: cardMatrixNormalize, anchorListGet: () => [{ id: 'body', sideList: sideAllList }], sizeDefault: { width: 520, height: 240 }, styleList: ['fill'], resizeAxisList: [] },
 	schema: null,
 	Card: CardMatrix,
 	create: {
@@ -198,15 +201,26 @@ export const sceneBoxNodeKind = {
 	},
 };
 
+// a light rectangle behind cards with labels (ColorBlock.jsx): the words of a label are typed where
+// they stand, an icon among them as a token ({{icon:boxes}} Group); its look is set in the edit card:
+// its tone, and the style of its node, a fill (none: a frame) and an edge
+const colorBlockToneList = ['slate', 'blue', 'teal', 'green', 'amber', 'red', 'violet'];
 export const colorBlockNodeKind = {
 	type: 'color-block',
 	label: 'Color block',
-	contract: { isBackground: true, dataNormalize: colorBlockNormalize, anchorListGet: () => [], sizeDefault: { width: 400, height: 300 }, sizeMin: { width: 80, height: 60 } },
+	contract: {
+		isBackground: true, dataNormalize: colorBlockNormalize, anchorListGet: () => [], sizeDefault: { width: 400, height: 300 }, sizeMin: { width: 80, height: 60 },
+		searchMatch: colorBlockSearchMatch, styleList: ['fill', 'stroke'],
+		propertyList: [
+			{ id: 'tone', label: 'Tone', kind: 'enum', valueDefault: 'slate', values: colorBlockToneList, valueLabels: Object.fromEntries(colorBlockToneList.map(tone => [tone, tone[0].toUpperCase() + tone.slice(1)])) },
+			{ id: 'labelSide', label: 'Labels', kind: 'enum', valueDefault: 'bottom', values: ['bottom', 'top'], valueLabels: { bottom: 'At the bottom', top: 'At the top' } },
+		],
+	},
 	schema: null,
 	Card: ColorBlock,
 	create: {
 		description: 'A light background rectangle with text and icons along the bottom.', icon: Boxes, keywordList: ['background', 'swimlane', 'group', 'area'],
-		nodeCreate: idNext => ({ id: idNext('block'), renderer: { type: 'color-block' }, size: { width: 400, height: 300 }, data: { tone: 'blue', itemList: [{ id: 'label', text: 'Group', icon: 'boxes' }] }, handles: [] }),
+		nodeCreate: idNext => ({ id: idNext('block'), renderer: { type: 'color-block' }, size: { width: 400, height: 300 }, data: { tone: 'blue', itemList: [{ id: 'label', text: cardIconTextBuild('boxes', 'Group') }] }, handles: [] }),
 	},
 };
 
@@ -216,7 +230,7 @@ export const cardIndexNodeKind = {
 	type: 'card-index',
 	label: 'Index',
 	contract: {
-		dataNormalize: cardIndexNormalize, anchorListGet: () => [{ id: 'body', sideList: sideAllList }], searchMatch: cardIndexSearchMatch,
+		dataNormalize: cardIndexNormalize, anchorListGet: () => [{ id: 'body', sideList: sideAllList }], searchMatch: cardIndexSearchMatch, resizeAxisList: [],
 		sizeDefault: { width: 800, height: 400 }, sizeEstimate: (node) => ({ width: cardIndexWidthGet(node.data), height: cardIndexHeightGet(node.data) }),
 	},
 	schema: null,
@@ -229,7 +243,7 @@ export const cardIndexNodeKind = {
 export const cardLegendNodeKind = {
 	type: 'card-legend',
 	label: 'Legend',
-	contract: { dataNormalize: cardLegendNormalize, anchorListGet: () => [], sizeDefault: { width: 240, height: 120 }, sizeEstimate: (node) => ({ height: cardLegendHeightGet(node.data) }) },
+	contract: { dataNormalize: cardLegendNormalize, anchorListGet: () => [], sizeDefault: { width: 240, height: 120 }, sizeEstimate: (node) => ({ height: cardLegendHeightGet(node.data) }), resizeAxisList: [] },
 	schema: null,
 	Card: CardLegend,
 };
@@ -240,7 +254,7 @@ export const cardGraphNodeKind = {
 	type: 'card-graph',
 	label: 'Graph',
 	contract: {
-		dataNormalize: cardGraphNormalize, anchorListGet: () => [{ id: 'body', sideList: sideAllList }], searchMatch: cardGraphSearchMatch,
+		dataNormalize: cardGraphNormalize, anchorListGet: () => [{ id: 'body', sideList: sideAllList }], searchMatch: cardGraphSearchMatch, resizeAxisList: [],
 		sizeDefault: { width: 800, height: 600 }, sizeEstimate: (node) => cardGraphSizeGet(node.data),
 	},
 	schema: null,
@@ -249,4 +263,8 @@ export const cardGraphNodeKind = {
 
 export const cardDiagramNodeKindList = [tableNodeKind, operatorNodeKind, cardNoteNodeKind, cardBriefNodeKind, cardLabelNodeKind, cardThreeDotsNodeKind, cardDatabaseNodeKind, cardIconNodeKind, cardCaptionNodeKind, cardMatrixNodeKind, sceneBoxNodeKind, colorBlockNodeKind, cardIndexNodeKind, cardLegendNodeKind, cardGraphNodeKind];
 
-export const cardDiagramNodeRegistry = nodeRegistryBuild({ id: 'card-diagram', label: 'Card diagram', kindList: cardDiagramNodeKindList, arrangerList: [diagramArrangerOutline, diagramArrangerLayers, diagramArrangerLanesDown, diagramArrangerLanesAcross, diagramArrangerBlocks, diagramArrangerScatter] });
+// the features of the diagrams of the base series: the parametric canvas (card-diagram-parametric-canvas.md).
+// a series lists the ones its diagrams have in its own registry
+export const cardDiagramFeatureList = [parametricCanvasFeature];
+
+export const cardDiagramNodeRegistry = nodeRegistryBuild({ id: 'card-diagram', label: 'Card diagram', kindList: cardDiagramNodeKindList, arrangerList: [diagramArrangerOutline, diagramArrangerLayers, diagramArrangerLanesDown, diagramArrangerLanesAcross, diagramArrangerBlocks, diagramArrangerScatter], featureList: cardDiagramFeatureList });

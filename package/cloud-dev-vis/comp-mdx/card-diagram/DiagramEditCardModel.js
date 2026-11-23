@@ -2,6 +2,7 @@ import { lineTypeList, markerTypeList, endpointIsDangling } from './DiagramERDat
 import { cardSchemaGet, cardRowAnchorBuild, fieldValuesOf, fieldValueLabelsOf, nodePropertyListGet } from './TableCardSchema.js';
 import { cardRowDisplayIdListOf, CARD_VIEW_MODE_LABEL, cardViewLabelOf, cardViewListGet, cardViewSourceOf, cardViewSwitcherIsShown, cardFooterIsShown, cardFooterTextOf } from './TableCardData.js';
 import { strokeDashList } from './DiagramEditStore.js';
+import { LINE_STROKE_SWATCH_LIST, nodeStyleKeyListOf, nodeStyleLabelOf, nodeStyleSwatchListOf } from './DiagramNodeStyle.js';
 import { cardTabList, tabPathGet, pathLabelListGet, rowNameGet, selectionPathBuild } from './DiagramEditPath.js';
 import { routeAnchorPointGet, routeDirectionFacingList, routeEndPointGet, routeResolve, routeTypeHasAnchors, routeTypeIsBezier, ROUTE_DIRECTION_LIST } from './DiagramRoute.js';
 
@@ -22,7 +23,9 @@ import { routeAnchorPointGet, routeDirectionFacingList, routeEndPointGet, routeR
 //   section    { id, label, propertyList, actionList, note? }
 //   property   { id, label, kind: text | enum | bool | number | color, value,
 //                values?, valueLabels?, isSearchable?, isMultiline?, isReadOnly?, placeholder?,
-//                min?, max?, step?, set(value) -> boolean }
+//                min?, max?, step?, set(value, { groupKey }?) -> boolean }
+//              a color: swatchList [{ value, label, css, edgeCss? }], isDefaultOffered?, defaultLabel?,
+//                isNoneOffered? (DiagramColorValue.jsx); set takes the groupKey of a picker's drag
 //   action     { id, label, kind?: 'danger', isDisabled?, reason?, act() }
 //
 // In a draft whose structure is given (store.isStructureFixed: a scene edited in place) the card
@@ -69,7 +72,8 @@ export function cardModelBuild(editor) {
 	const model = { title, kindLabel, tabList, tabId: display.tab, segmentList, view: { type: 'detail', sectionList: [] } };
 
 	const propertyOf = (definition, item, setter) => ({
-		id: definition.id, label: definition.label, kind: definition.kind, value: item?.[definition.id] ?? (definition.kind === 'bool' ? false : ''),
+		// a value not written reads as its default where the definition says what that is (valueDefault)
+		id: definition.id, label: definition.label, kind: definition.kind, value: item?.[definition.id] ?? definition.valueDefault ?? (definition.kind === 'bool' ? false : ''),
 		values: fieldValuesOf(definition, item), valueLabels: fieldValueLabelsOf(definition, item), isSearchable: definition.isSearchable, isMultiline: definition.isMultiline,
 		set: value => change(() => setter(definition.id, value)),
 	});
@@ -90,14 +94,25 @@ export function cardModelBuild(editor) {
 		}
 		return { id: `handles-${target.replace('/', '-')}`, label, propertyList, actionList: [] };
 	};
+	// the style of a node: a color per key its kind draws, the look of the kind when none is chosen
+	const styleSectionOf = (id) => {
+		const nodeStyled = store.nodeGet(id);
+		const keyList = nodeStyleKeyListOf(store.registry?.kindByType[nodeStyled?.renderer?.type]);
+		if (!keyList.length) return null;
+		return { id: 'style', label: 'Style', propertyList: keyList.map(key => ({
+			id: `style-${key}`, label: nodeStyleLabelOf(key), kind: 'color', value: nodeStyled.style?.[key] ?? '',
+			swatchList: nodeStyleSwatchListOf(key), isDefaultOffered: true, defaultLabel: `Default: the ${key === 'fill' ? 'fill' : 'edge'} of its kind`, isNoneOffered: true,
+			set: (value, option) => change(() => store.nodeStyleSet(id, key, value || undefined, option)),
+		})), actionList: [] };
+	};
 	const lineSectionList = lineConnection => {
-		const lineSet = (field, value) => change(() => store.connectionSet(lineConnection.id, field, value));
+		const lineSet = (field, value, option) => change(() => store.connectionSet(lineConnection.id, field, value, option));
 		const endText = endpoint => endpointIsDangling(endpoint) ? `free at ${endpoint.position.x}, ${endpoint.position.y}` : `${store.nodeGet(endpoint.nodeId)?.data?.name ?? endpoint.nodeId} / ${endpoint.handleId}`;
 		return [
 			{ id: 'line', label: 'Line', propertyList: [
 				{ id: 'label', label: 'Label', kind: 'text', value: lineConnection.label?.text ?? '', set: value => lineSet('label', value) },
 				{ id: 'lineType', label: 'Line type', kind: 'enum', value: lineConnection.renderer?.type ?? 'smoothstep', values: lineTypeList, valueLabels: lineTypeLabels, set: value => lineSet('lineType', value) },
-				{ id: 'stroke', label: 'Color', kind: 'color', value: lineConnection.style?.stroke ?? '#64748b', set: value => lineSet('stroke', value) },
+				{ id: 'stroke', label: 'Color', kind: 'color', value: lineConnection.style?.stroke ?? '#64748b', swatchList: LINE_STROKE_SWATCH_LIST, set: (value, option) => lineSet('stroke', value, option) },
 				{ id: 'strokeWidth', label: 'Thickness', kind: 'number', value: lineConnection.style?.strokeWidth ?? 1.5, min: 0.5, max: 12, step: 0.5, set: value => lineSet('strokeWidth', value) },
 				{ id: 'strokeDash', label: 'Dash', kind: 'enum', value: store.strokeDashGet(lineConnection), values: strokeDashList.map(item => item.id), valueLabels: Object.fromEntries(strokeDashList.map(item => [item.id, item.label])), set: value => lineSet('strokeDash', value) },
 				{ id: 'markerStart', label: 'Start arrow', kind: 'enum', value: lineConnection.markerStart ?? 'none', values: markerTypeList, valueLabels: markerLabels, set: value => lineSet('markerStart', value) },
@@ -402,6 +417,9 @@ export function cardModelBuild(editor) {
 					],
 				});
 			}
+			// its colors (DiagramNodeStyle.js): the keys of node.style its kind draws
+			const style = styleSectionOf(nodeId);
+			if (style) sectionList.push(style);
 			const header = schema ? handleSection('header', 'Title handles', schema.isHeaderHandleAllowed(node.data)) : null;
 			if (header) sectionList.push(header);
 			// the footer: shown by itself, or because a line leaves the bottom of the card
@@ -415,13 +433,17 @@ export function cardModelBuild(editor) {
 				const footer = isFooterWritten || isFooterNeeded ? handleSection('footer', 'Footer handles', true, ['bottom', 'left', 'right']) : null;
 				if (footer) sectionList.push(footer);
 			}
-			if (store.kind === 'diagram') {
+			// a feature of the editor (node-registry.js: feature) may place the node, and then says where
+			// it stands in its own sections; its own position is then nothing to remember or lock
+			const featureList = editor.featureList ?? [];
+			if (store.kind === 'diagram' && !featureList.some(session => session.nodeIsPlaced?.(nodeId))) {
 				const isRemembered = Boolean(node.position && node.position !== 'auto');
 				sectionList.push({ id: 'position', label: 'Position', propertyList: [
 					{ id: 'remember', label: 'Remember', kind: 'bool', value: isRemembered, isReadOnly: Boolean(node.isPositionLocked), set: value => change(() => store.positionRememberSet(nodeId, value, editor.nodePositionGet(nodeId))) },
 					{ id: 'lock', label: 'Locked', kind: 'bool', value: Boolean(node.isPositionLocked), set: value => change(() => store.positionLockSet(nodeId, value, editor.nodePositionGet(nodeId))) },
 				], actionList: [] });
 			}
+			for (const session of featureList) sectionList.push(...(session.cardSectionListGet?.({ kind: 'node', nodeId }, editor) ?? []));
 			sectionList.push({ id: 'node-actions', label: '', propertyList: [], actionList: [
 				...(schema ? [rowInsertAction('row-add', `Add ${labelRowLower}`)] : []),
 				...(schema ? [columnInsertAction('column-add', `Add ${labelFieldLower}`)] : []),

@@ -9,12 +9,14 @@ import { SwitchSceneEditStore } from './SwitchSceneEditStore.js';
 // is edited in the visual editor of the framework, with its history; another can be chosen at any
 // time, what was done to the first kept as its draft; Save writes the whole document once, every
 // edited diagram in its place (SwitchSceneEditStore.js). The page is told the document, never the
-// diagram of one scene.
+// diagram of one scene. The feature layers the document names (featureList: the parametric canvas)
+// are offered for every scene, as a diagram's viewport.featureList offers them for its own.
 export const SwitchSceneEdit = observer(function SwitchSceneEdit({ data, config, onEvent, registry, isInPopup }) {
 	const [store] = useState(() => new SwitchSceneEditStore(data.source || data.raw || ''));
 	if (store.message) return <div className="doc-er-diagram-message is-error" role="alert"><strong>The scenes cannot be edited visually.</strong><span>{store.message}</span></div>;
 	const { target } = store;
 	const raw = store.textOf(target);
+	const configScene = store.featureList?.length ? { ...config, featureList: [...(config.featureList ?? []), ...store.featureList] } : config;
 	// a report of the editor is of one diagram: the page gets the document written from the drafts
 	const onEventScene = (type, payload) => {
 		if (type === 'editDraftChange' || type === 'editSubmitRequest') {
@@ -30,8 +32,8 @@ export const SwitchSceneEdit = observer(function SwitchSceneEdit({ data, config,
 				<ValueMenu label="Scene to edit" value={store.targetKey} values={store.targetList.map((item) => item.key)} valueLabels={Object.fromEntries(store.targetList.map((item) => [item.key, item.label]))} onChange={store.targetSet} />
 				<span className="doc-switch-scene-edit-note">{store.isDirty ? 'Edited scenes are kept while another is chosen; Save writes them all.' : 'Choose a scene; its diagram opens in the editor.'}</span>
 			</div>
-			<DiagramVisualEdit key={target.key} data={{ ...data, source: raw, raw }} config={config} onEvent={onEventScene} kind="diagram" registry={registry} isInPopup={isInPopup}
-				renderContent={(props) => <DiagramERView {...props} config={{ ...config, stateKey: config.stateKey ? `${config.stateKey}|scene:${target.key}` : undefined }} onEvent={onEvent} registry={registry} isInPopup={isInPopup} />} />
+			<DiagramVisualEdit key={target.key} data={{ ...data, source: raw, raw }} config={configScene} onEvent={onEventScene} kind="diagram" registry={registry} isInPopup={isInPopup}
+				renderContent={(props) => <DiagramERView {...props} config={{ ...configScene, stateKey: config.stateKey ? `${config.stateKey}|scene:${target.key}` : undefined }} onEvent={onEvent} registry={registry} isInPopup={isInPopup} />} />
 		</div>
 	);
 });

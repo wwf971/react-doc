@@ -17,6 +17,7 @@ export class SwitchSceneEditStore {
 	targetKey = '';
 	draftByKey = new Map();
 	message = '';
+	featureList = [];
 
 	constructor(source) {
 		makeAutoObservable(this, { sourceInitial: false, targetList: observable.ref }, { autoBind: true });
@@ -25,6 +26,8 @@ export class SwitchSceneEditStore {
 			const spec = switchDocNormalize(this.sourceInitial);
 			const value = yamlParse(this.sourceInitial);
 			this.defaults = value.defaults;
+			// the feature layers the document offers its scenes while they are edited
+			this.featureList = spec.featureList;
 			this.targetList = value.sceneList.flatMap((scene, sceneIndex) => {
 				const path = switchPathNormalize(scene.path);
 				const label = spec.sceneByPath.get(path)?.label ?? path;

@@ -2,8 +2,10 @@ import { useEffect } from 'react';
 import { observer } from 'mobx-react-lite';
 import {
   FileInput,
+  FilePen,
   FilePlus,
   FolderInput,
+  FolderOutput,
   FolderPlus,
   Move,
   Pencil,
@@ -23,6 +25,10 @@ import '../edit/DocEdit.css';
 // block. Its entries, in groups:
 //
 //   Rename, Move…, Refresh     the buttons of the label
+//   Rename document…, Move document…
+//                              the document the item shows: its file renamed or moved
+//                              (into a virtual root, out of one), its references
+//                              following (DocRelocateStore, doc_page_impl_nav_backlink.md#relocation)
 //   New folder ▸, New document ▸   above / below / inside the item
 //   Change document…, Bind document…, Bind folder…, Change folder…, Detach…
 //                              the binding changes the item offers
@@ -36,7 +42,7 @@ import '../edit/DocEdit.css';
 // going down elsewhere, or Escape, closes it; a right click on another row
 // opens that row's menu.
 export const SidePanelItemContextMenu = observer(function SidePanelItemContextMenu() {
-  const { componentConfig, editStore, eventRouter, onEvent: onEventPage, sidePanelStore } = useDocStores();
+  const { componentConfig, editStore, eventRouter, onEvent: onEventPage, sidePanelStore, relocateStore } = useDocStores();
   const Menu = componentConfig.Menu;
   const menu = sidePanelStore.contextMenu;
   const isOpen = Boolean(Menu && menu && (editStore.isEditMode || sidePanelStore.itemPlaygroundGet(menu.itemId)));
@@ -52,13 +58,18 @@ export const SidePanelItemContextMenu = observer(function SidePanelItemContextMe
 
   if (!isOpen) return null;
 
-  const items = menuItemListBuild(menu.itemId, { editStore, sidePanelStore });
+  const items = menuItemListBuild(menu.itemId, { editStore, sidePanelStore, relocateStore, point: menu.point });
   const actionById = actionByIdBuild(items);
 
   const itemChoose = (entryId) => {
     const action = actionById.get(entryId);
     sidePanelStore.contextMenuClose();
     if (!action) return;
+    // an entry of another layer than the side panel's (the move of a document)
+    if (action.run) {
+      action.run();
+      return;
+    }
     const event = eventRouter.eventBuild({
       type: action.eventType,
       data: action.data ?? {},
@@ -89,7 +100,7 @@ export const SidePanelItemContextMenu = observer(function SidePanelItemContextMe
 
 // the entries of the menu for one item, each { id, isDisabled, comp,
 // compProps, action: { eventType, data } } or a group separator
-function menuItemListBuild(itemId, { editStore, sidePanelStore }) {
+function menuItemListBuild(itemId, { editStore, sidePanelStore, relocateStore, point }) {
   const playgroundItemList = playgroundMenuItemListBuild(itemId, sidePanelStore);
   if (!sidePanelStore.isMoveAvailable) return playgroundItemList;
   const isBusy = sidePanelStore.isMoveSubmitting || sidePanelStore.isNodeChangeSubmitting;
@@ -105,6 +116,7 @@ function menuItemListBuild(itemId, { editStore, sidePanelStore }) {
       'Choose where to put the item in a tree', { eventType: 'sidePanelItemMovePickerOpenRequest' }),
     entryBuild('refresh', RotateCw, 'Refresh', isRefreshAvailable ? '' : 'this item is bound to no file or folder to read again',
       'Read the file or folder of this item again from disk', { eventType: 'sidePanelItemRefreshRequest' }),
+    ...documentMenuItemListBuild(itemId, { sidePanelStore, relocateStore, point }),
     separatorBuild('separator-insert'),
   ];
 
@@ -161,6 +173,28 @@ function playgroundMenuItemListBuild(itemId, sidePanelStore) {
   return [
     entryBuild('playground-reset', RotateCw, 'Reset playground…', '', 'Back to its template; what is there now is kept as a hidden backup', actionOf('reset')),
     entryBuild('playground-delete', Trash2, 'Delete playground…', '', 'As after a fresh clone: the item stays, the document is gone', actionOf('delete'), true),
+  ];
+}
+
+// what the item offers for the document it shows (a document item, written or mirrored from
+// a folder): its file renamed or moved with its references, a managed document as a file is
+function documentMenuItemListBuild(itemId, { sidePanelStore, relocateStore, point }) {
+  if (!relocateStore) return [];
+  const docPath = sidePanelStore.placeById.get(itemId)?.bindPath ?? '';
+  const entry = docPath ? sidePanelStore.sourceStore.entryByInternalPath.get(docPath) : undefined;
+  if (!entry || entry.owner || (entry.ext !== 'md' && entry.ext !== 'mdx')) return [];
+  const reason = relocateStore.unavailableReason || sidePanelStore.sourceStore.pathReadOnlyReasonGet(docPath);
+  const isManaged = Boolean(entry.managed);
+  return [
+    separatorBuild('separator-document'),
+    entryBuild('doc-rename', FilePen, 'Rename document…', reason, `Give ${entry.name} another name; the links and side panels naming it follow`, {
+      run: () => relocateStore.dialogOpen({ from: docPath, mode: 'rename', point }),
+    }),
+    entryBuild('doc-move', FolderOutput, 'Move document…', reason, isManaged
+      ? 'Move it in its virtual root, to another one, or out to a folder of files; the links and side panels naming it follow'
+      : 'Move it to another folder, or into a virtual root to make it managed; the links and side panels naming it follow', {
+      run: () => relocateStore.dialogOpen({ from: docPath, mode: 'move', point }),
+    }),
   ];
 }
 

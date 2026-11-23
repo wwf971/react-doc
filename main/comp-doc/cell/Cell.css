@@ -132,10 +132,13 @@ span.doc-cell-field[data-editable][data-empty] {
   border-radius: 2px;
 }
 
-/* inside a line: an inline box, so the line does not break around the surface */
+/* inside a line: an inline box, so the line does not break around the surface. Opening a field
+   changes no size: it keeps the width its value had as read (--doc-cell-width-read, measured when
+   it is clicked), never a minimum of its own; only typing may make it grow or shrink back to that.
+   A field opened where nothing was read (a new item) takes the width of an empty value */
 .doc-cell-field[data-open][data-inline] > .doc-cell-edit {
   display: inline-block;
-  min-width: 3rem;
+  min-width: var(--doc-cell-width-read, 2rem);
   vertical-align: top;
 }
 

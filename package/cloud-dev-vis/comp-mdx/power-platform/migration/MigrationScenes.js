@@ -4,6 +4,7 @@ import { switchPathLast, switchPathParent, switchRectRead, switchTabsApply } fro
 import { diagramArrangeApply } from '../../card-diagram/DiagramArrange.js';
 import { cardRowDisplayKeepBuild } from '../../card-diagram/TableCardData.js';
 import { cardMatrixWidthGet } from '../../card-diagram/CardMatrixData.js';
+import { cardIconTextBuild } from '../../card-diagram/CardIconTokenData.js';
 import { cardIndexHeightGet, cardIndexWidthGet } from '../../card-diagram/CardIndexData.js';
 import { CARD_GRAPH_LABEL_HEIGHT, CARD_GRAPH_SQUARE_SIZE, cardGraphLabelWidthEstimate, cardGraphSizeGet } from '../../card-diagram/CardGraphData.js';
 import { diagramScatterHubSetOf, diagramScatterLayout, diagramScatterSideOf } from '../../card-diagram/DiagramArrangeScatter.js';
@@ -1245,10 +1246,10 @@ function flowBlocksBuild(model, { xTarget, top, bottom }) {
 	const split = bottom - FLOW_BLOCK_ARTIFACTS_HEIGHT;
 	const blockOf = (id, x, y, width, height, tone, itemList) => ({ id: `flow-area:${id}`, renderer: { type: 'color-block' }, position: { x, y }, size: { width, height }, data: { tone, itemList }, handles: [] });
 	return [
-		blockOf('source', -20, top, 210, bottom - top, 'blue', [{ id: 'source', icon: 'database', text: `${labelOf(model, 'sourceDatabase')} (${model.system.source.name})` }]),
-		blockOf('server', 205, top, xTarget - 245, bottom - top, 'amber', [{ id: 'server', icon: 'server', text: labelOf(model, 'migrationServer') }]),
-		blockOf('target', xTarget - 20, top, FLOW_BLOCK_TARGET_WIDTH, split - top - 12, 'teal', [{ id: 'target', icon: 'database', text: `${labelOf(model, 'targetDatabase')} (${model.system.target.name})` }]),
-		blockOf('artifacts', xTarget - 20, split, FLOW_BLOCK_TARGET_WIDTH, FLOW_BLOCK_ARTIFACTS_HEIGHT, 'green', [{ id: 'artifacts', icon: 'file', text: labelOf(model, 'artifacts') }]),
+		blockOf('source', -20, top, 210, bottom - top, 'blue', [{ id: 'source', text: cardIconTextBuild('database', `${labelOf(model, 'sourceDatabase')} (${model.system.source.name})`) }]),
+		blockOf('server', 205, top, xTarget - 245, bottom - top, 'amber', [{ id: 'server', text: cardIconTextBuild('server', labelOf(model, 'migrationServer')) }]),
+		blockOf('target', xTarget - 20, top, FLOW_BLOCK_TARGET_WIDTH, split - top - 12, 'teal', [{ id: 'target', text: cardIconTextBuild('database', `${labelOf(model, 'targetDatabase')} (${model.system.target.name})`) }]),
+		blockOf('artifacts', xTarget - 20, split, FLOW_BLOCK_TARGET_WIDTH, FLOW_BLOCK_ARTIFACTS_HEIGHT, 'green', [{ id: 'artifacts', text: cardIconTextBuild('file', labelOf(model, 'artifacts')) }]),
 	];
 }
 
@@ -1475,10 +1476,10 @@ function matchLaneBuild(model, match, index, { y, isLinked }) {
 			id: idOf('lane'), renderer: { type: 'color-block' }, position: { x: MATCH_LANE_LEFT, y },
 			size: { width: MATCH_LANE_WIDTH, height }, handles: [],
 			data: { tone, labelSide: 'top', columnTop: MATCH_COLUMN_TOP, columnList: [
-				{ id: 'source', x: 0, width: MATCH_X_DIVIDER_SERVER - MATCH_LANE_LEFT, icon: 'database', text: `${labelOf(model, 'sourceDatabase')} (${source.name})` },
-				{ id: 'server', x: MATCH_X_DIVIDER_SERVER - MATCH_LANE_LEFT, width: MATCH_X_DIVIDER_TARGET - MATCH_X_DIVIDER_SERVER, icon: 'server', text: labelOf(model, 'migrationServer') },
-				{ id: 'target', x: MATCH_X_DIVIDER_TARGET - MATCH_LANE_LEFT, width: MATCH_LANE_WIDTH - (MATCH_X_DIVIDER_TARGET - MATCH_LANE_LEFT), icon: 'database', text: `${labelOf(model, 'targetDatabase')} (${target.name})` },
-			], itemList: [{ id: 'title', level: 2, icon: match.icon ?? 'key', text: `${labelOf(model, 'matchName')} ${index + 1}: ${match.title ?? match.id}` }, ...(nameList.length > 0 ? [{ id: 'table', text: `${labelOf(model, 'matchTable')}: ${nameList.join(', ')}` }] : [])] },
+				{ id: 'source', x: 0, width: MATCH_X_DIVIDER_SERVER - MATCH_LANE_LEFT, text: cardIconTextBuild('database', `${labelOf(model, 'sourceDatabase')} (${source.name})`) },
+				{ id: 'server', x: MATCH_X_DIVIDER_SERVER - MATCH_LANE_LEFT, width: MATCH_X_DIVIDER_TARGET - MATCH_X_DIVIDER_SERVER, text: cardIconTextBuild('server', labelOf(model, 'migrationServer')) },
+				{ id: 'target', x: MATCH_X_DIVIDER_TARGET - MATCH_LANE_LEFT, width: MATCH_LANE_WIDTH - (MATCH_X_DIVIDER_TARGET - MATCH_LANE_LEFT), text: cardIconTextBuild('database', `${labelOf(model, 'targetDatabase')} (${target.name})`) },
+			], itemList: [{ id: 'title', level: 2, text: cardIconTextBuild(match.icon ?? 'key', `${labelOf(model, 'matchName')} ${index + 1}: ${match.title ?? match.id}`) }, ...(nameList.length > 0 ? [{ id: 'table', text: `${labelOf(model, 'matchTable')}: ${nameList.join(', ')}` }] : [])] },
 		},
 		matchTableNodeBuild(model, match, 'source', tone, { x: 0, y: yTop, handleList: handleSourceList }),
 		...stepList.map((step, indexStep) => noteNodeBuild({
@@ -1545,10 +1546,10 @@ function postBlockBuild(model, id, { title, text, width, height, columnList, col
 
 const postColumnOf = (model, role) => {
 	const { source, target } = model.system;
-	if (role === 'source') return { icon: 'database', text: `${labelOf(model, 'sourceDatabase')} (${source.name})` };
-	if (role === 'target') return { icon: 'database', text: `${labelOf(model, 'targetDatabase')} (${target.name})` };
-	if (role === 'server') return { icon: 'server', text: labelOf(model, 'migrationServer') };
-	return { icon: 'server', text: labelOf(model, 'postServer') };
+	if (role === 'source') return { text: cardIconTextBuild('database', `${labelOf(model, 'sourceDatabase')} (${source.name})`) };
+	if (role === 'target') return { text: cardIconTextBuild('database', `${labelOf(model, 'targetDatabase')} (${target.name})`) };
+	if (role === 'server') return { text: cardIconTextBuild('server', labelOf(model, 'migrationServer')) };
+	return { text: cardIconTextBuild('server', labelOf(model, 'postServer')) };
 };
 
 const postKeyColumnOf = (spec) => spec?.rowList?.find((row) => row.isKey)?.column;
@@ -1715,7 +1716,8 @@ function artifactsFrameBuild(model, nodeIdList) {
 	return {
 		id: 'area:artifacts', renderer: { type: 'color-block' },
 		around: { nodeIdList, padding: { top: OVERVIEW_ARTIFACTS_PAD + OVERVIEW_ARTIFACTS_LABEL, right: OVERVIEW_ARTIFACTS_PAD, bottom: OVERVIEW_ARTIFACTS_PAD, left: OVERVIEW_ARTIFACTS_PAD } },
-		data: { tone: 'slate', fill: 'none', labelSide: 'top', itemList: [{ id: 'artifacts', icon: 'archive', text: labelOf(model, 'artifacts') }] },
+		style: { fill: 'none' },
+		data: { tone: 'slate', labelSide: 'top', itemList: [{ id: 'artifacts', text: cardIconTextBuild('archive', labelOf(model, 'artifacts')) }] },
 		handles: [],
 	};
 }

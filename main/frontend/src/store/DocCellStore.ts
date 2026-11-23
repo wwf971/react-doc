@@ -29,10 +29,12 @@ import { cellTokenSlashActionGet } from '../../../comp-doc/cell/cell-define.js';
 //                   a token whose kind has a card is selected by a click in a cell
 //                   that can be edited, and its card stands beside it
 //   field           the one field open on the page (CellField), or undefined:
-//                   { key, draft, textBase, status, message, point }
+//                   { key, draft, textBase, status, message, point, widthRead }
 //                     key        the field, unique on the page while it is drawn
 //                     textBase   the text it was opened on
 //                     point      where it was clicked: the caret goes there
+//                     widthRead  the width of the value as it was read (layout pixels): the
+//                                field opens at least that wide, so opening it moves nothing
 //                     status     idle | submitting; message: why a save was refused
 //
 // A cell (cellBuild) is what the components and the kinds are handed:
@@ -63,6 +65,8 @@ export type CellField = {
   key: string; draft: string; textBase: string; status: 'idle' | 'submitting'; message: string;
   // where the field was clicked (viewport coordinates): the caret goes to the text nearest to it
   point?: { clientX: number; clientY: number };
+  // the width of the value as read, which the open field keeps as its least (no jitter on opening)
+  widthRead?: number;
 };
 
 export type CellSpec = {
@@ -209,9 +213,9 @@ export class DocCellStore {
     return this.field !== undefined && this.field.key === key;
   }
 
-  fieldOpen(key: string, text: string, point?: { clientX: number; clientY: number }) {
+  fieldOpen(key: string, text: string, point?: { clientX: number; clientY: number }, { widthRead }: { widthRead?: number } = {}) {
     this.token = undefined;
-    this.field = { key, draft: String(text ?? ''), textBase: String(text ?? ''), status: 'idle', message: '', point };
+    this.field = { key, draft: String(text ?? ''), textBase: String(text ?? ''), status: 'idle', message: '', point, ...(widthRead ? { widthRead } : {}) };
   }
 
   fieldDraftSet(key: string, draft: string) {

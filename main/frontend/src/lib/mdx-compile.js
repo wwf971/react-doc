@@ -10,7 +10,10 @@ import { remarkStructure } from 'fumadocs-core/mdx-plugins/remark-structure';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
-import { parse as parseYaml } from 'yaml';
+import { splitFrontmatter } from './doc-frontmatter.js';
+
+// the frontmatter is split by its own module (doc-frontmatter.js); kept here for the importers of the compile
+export { splitFrontmatter };
 import { remarkDocLink } from './remark-doc-link.js';
 import { remarkCommentComp } from './remark-comment-comp.js';
 import { remarkAnchor } from './remark-anchor.js';
@@ -155,17 +158,3 @@ function multiLangTocTransform(itemList, headingVariantsById) {
   });
 }
 
-// the runtime preset has no frontmatter plugin, so strip and parse it here.
-// exported for the edit layer, which maps positions of the parsed content
-// back to lines of the complete file.
-export function splitFrontmatter(source) {
-  const match = /^---\r?\n([\s\S]*?)\r?\n---\r?\n/.exec(source);
-  if (!match) return { frontmatter: null, content: source };
-  let frontmatter = null;
-  try {
-    frontmatter = parseYaml(match[1]);
-  } catch {
-    // malformed frontmatter: keep it out of the rendered body anyway
-  }
-  return { frontmatter, content: source.slice(match[0].length) };
-}

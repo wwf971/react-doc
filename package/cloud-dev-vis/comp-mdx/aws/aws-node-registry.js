@@ -1,6 +1,6 @@
 import { Archive, Braces, Database, KeyRound, Route, ScrollText, SquareFunction, Users } from '../../../../main/frontend/UICommon.js';
 import { nodeRegistryBuild } from '../card-diagram/node-registry.js';
-import { cardDiagramNodeKindList } from '../card-diagram/card-diagram-node-registry.js';
+import { cardDiagramFeatureList, cardDiagramNodeKindList } from '../card-diagram/card-diagram-node-registry.js';
 import { resourceCardSchemaBuild } from '../card-diagram/TableCardSchema.js';
 import { diagramArrangerLanesAcross, diagramArrangerLanesDown, diagramArrangerLayers } from '../card-diagram/DiagramArrangeLayers.js';
 import { awsHandleOf } from './AwsCardData.js';
@@ -131,7 +131,8 @@ export const awsArrangerList = [diagramArrangerLayers, diagramArrangerLanesDown,
 
 // DiagramAws, DiagramAwsSwitch: the AWS kinds with the generic ones, so a diagram mixes a
 // browser drawn as a note with the resources it talks to
-export const awsNodeRegistry = nodeRegistryBuild({ id: 'aws', label: 'AWS', kindList: [...cardDiagramNodeKindList, ...awsNodeKindList], arrangerList: awsArrangerList });
+// the features of the base series too (the parametric canvas): offered where a viewport names them
+export const awsNodeRegistry = nodeRegistryBuild({ id: 'aws', label: 'AWS', kindList: [...cardDiagramNodeKindList, ...awsNodeKindList], arrangerList: awsArrangerList, featureList: cardDiagramFeatureList });
 
 // DiagramAwsResource: one card of a resource outside a canvas, the kinds that are cards
 export const awsResourceNodeRegistry = nodeRegistryBuild({ id: 'aws-resource', label: 'AWS resource', kindList: awsNodeKindList.filter((kind) => kind.schema) });

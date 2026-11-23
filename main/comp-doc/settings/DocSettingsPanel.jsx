@@ -9,6 +9,7 @@ import { ServiceSettings } from './ServiceSettings.jsx';
 import { WorkspaceSettings } from './WorkspaceSettings.jsx';
 import { ApiSettings } from './ApiSettings.jsx';
 import { ObjectFrontendSettings } from './ObjectFrontendSettings.jsx';
+import { DocManagedSettings } from './DocManagedSettings.jsx';
 import { SourcePathInput } from '../source/SourcePathInput.jsx';
 import { EditValueInline } from '../edit/EditValueInline.jsx';
 import { usePanelLayout } from '../popup/use-panel-layout.js';
@@ -34,6 +35,11 @@ import './DocSettings.css';
 //                doc_page_impl_obj_frontend.md#the-settings-tab): the objects of
 //                the doc pages, their assets, the types the doc pages declare;
 //                creating, renaming and deleting an object, its assets.
+//   Managed documents
+//                the virtual roots of the doc pages and the documents the page
+//                keeps in them (DocManagedSettings, doc_page_impl_doc_managed.md):
+//                a root made, its name, mode and form; a document's mode, its
+//                blocks; a document made managed or moved (the move dialog)
 //   Services     the services of the page (ServiceSettings): system
 //                services, then the instances of the service backend as
 //                cards, the config dashboard of the one chosen, and the
@@ -137,6 +143,12 @@ const DocSettingsPanelOpen = observer(function DocSettingsPanelOpen() {
       type: 'subtab',
       name: 'Frontend objects',
       children: [{ id: 'objectFrontendList', type: 'custom', comp: ObjectFrontendSettings, isFullWidth: true }],
+    },
+    {
+      id: 'docManaged',
+      type: 'subtab',
+      name: 'Managed documents',
+      children: [{ id: 'docManagedList', type: 'custom', comp: DocManagedSettings, isFullWidth: true }],
     },
     {
       id: 'service',

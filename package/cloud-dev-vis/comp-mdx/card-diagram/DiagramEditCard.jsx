@@ -5,6 +5,7 @@ import { ArrowDown, ArrowUp, Trash2, X } from '../../../../main/frontend/UICommo
 import { useDocStores } from '../../../../main/frontend/src/store/context.js';
 import { cardModelBuild } from './DiagramEditCardModel.js';
 import { CheckValue, TextValue, ValueMenu } from './DiagramValueControls.jsx';
+import { DiagramColorValue } from './DiagramColorValue.jsx';
 
 // The edit card of the visual editor: the settings of the principal of the
 // path (a card, or a line by itself), beside it, as a popup of the edit
@@ -22,15 +23,20 @@ import { CheckValue, TextValue, ValueMenu } from './DiagramValueControls.jsx';
 // moves while the author works in it (../power-platform/comp-diagram-er.md#diagram-er-edit).
 // A card of values alone (a draft whose structure is given: DiagramEditCardModel.js) has no
 // tabs and no path: its title, a rule, then what may be changed.
-export const DiagramEditCard = observer(function DiagramEditCard({ editor, onKeyDown }) {
-	const { componentConfig } = useDocStores();
-	const { store } = editor;
+//
+// card: a card of a focus that is not of the path (a feature of the editor: node-registry.js), as
+// { model, anchorRectGet(), close() }: the same component beside another principal.
+// headActionList: buttons of its head before the close button, [{ id, label, Icon, act }] (a
+// feature of the editor offering to dock the card in a place of its own)
+export const DiagramEditCard = observer(function DiagramEditCard({ editor, onKeyDown, card, headActionList }) {
 	const panelRef = useRef(null);
 	const [position, positionSet] = useState(null);
+	const cardRef = useRef(card);
+	cardRef.current = card;
 	useEffect(() => {
 		let frame;
 		const update = () => {
-			const rect = editor.anchorRectGet();
+			const rect = cardRef.current ? cardRef.current.anchorRectGet() : editor.anchorRectGet();
 			const panel = panelRef.current;
 			if (rect && panel) {
 				const width = panel.offsetWidth;
@@ -50,15 +56,25 @@ export const DiagramEditCard = observer(function DiagramEditCard({ editor, onKey
 		update();
 		return () => cancelAnimationFrame(frame);
 	}, [editor]);
-	const model = cardModelBuild(editor);
+	const model = card ? card.model : cardModelBuild(editor);
 	if (!model) return null;
-	const PathBar = componentConfig?.PathBar;
-	const PropEditor = componentConfig?.PropEditor;
 	return createPortal(<section ref={panelRef} className={`doc-edit-popup doc-edit-panel doc-vis-card-panel not-prose${model.tabList.length ? '' : ' is-values'}`} style={{ ...position, visibility: position ? 'visible' : 'hidden' }} aria-label="Edit card" onKeyDown={onKeyDown}>
+		<DiagramEditCardContent editor={editor} model={model} onClose={card?.close ?? editor.clearSelection} headActionList={headActionList} />
+	</section>, document.body);
+});
+
+// what an edit card holds, wherever it stands: beside its principal (the popup above), or docked
+// in a panel of a feature that shows the card of what is selected in a place of its own
+export const DiagramEditCardContent = observer(function DiagramEditCardContent({ editor, model, onClose, headActionList = [] }) {
+	const { componentConfig } = useDocStores();
+	const { store } = editor;
+	const PathBar = componentConfig?.PathBar;
+	return <>
 		<div className="doc-edit-panel-row doc-vis-card-head">
 			<strong>{model.title}</strong>
 			<span className="doc-vis-card-kind">{model.kindLabel}</span>
-			<button type="button" className="doc-button-icon" aria-label="Close" title="Close (Esc)" onClick={editor.clearSelection}><X size={13} /></button>
+			{headActionList.map(({ id, label, Icon, act }) => <button key={id} type="button" className="doc-button-icon" aria-label={label} title={label} onClick={act}><Icon size={13} /></button>)}
+			{onClose ? <button type="button" className="doc-button-icon" aria-label="Close" title="Close (Esc)" onClick={onClose}><X size={13} /></button> : null}
 		</div>
 		{model.tabList.length ? <div className="doc-vis-card-tabs" role="tablist">
 			{model.tabList.map(tab => <button key={tab.id} type="button" role="tab" aria-selected={tab.id === model.tabId} className="doc-vis-card-tab" disabled={tab.isDisabled} title={tab.isDisabled ? tab.disabledReason : undefined} onClick={() => editor.navigate(tab.path)}>{tab.label}</button>)}
@@ -69,12 +85,20 @@ export const DiagramEditCard = observer(function DiagramEditCard({ editor, onKey
 				: <span className="doc-vis-card-path-plain">{model.segmentList.map((segment, index) => <span key={index}>{index > 0 ? <span className="doc-vis-card-path-separator">›</span> : null}<button type="button" className="doc-vis-card-path-segment" onClick={() => editor.navigate(segment.path)}>{segment.name}</button></span>)}</span>}
 		</div> : <div className="doc-vis-card-rule" />}
 		<div className="doc-vis-card-body">
-			{PropEditor
-				? <PropEditorView PropEditor={PropEditor} model={model} store={store} editor={editor} />
-				: <PlainView model={model} store={store} editor={editor} />}
+			<DiagramEditCardBody model={model} editor={editor} />
 		</div>
 		{store.message ? <span role="alert" className="doc-error doc-vis-card-message">{store.message}</span> : null}
-	</section>, document.body);
+	</>;
+});
+
+// the view of a model of the edit card (DiagramEditCardModel.js), wherever it is drawn: in the
+// card, or in a panel of a feature showing the same properties
+export const DiagramEditCardBody = observer(function DiagramEditCardBody({ model, editor }) {
+	const { componentConfig } = useDocStores();
+	const PropEditor = componentConfig?.PropEditor;
+	return PropEditor
+		? <PropEditorView PropEditor={PropEditor} model={model} store={editor.store} editor={editor} />
+		: <PlainView model={model} store={editor.store} editor={editor} />;
 });
 
 // ---------- the host's PropEditor ----------
@@ -128,7 +152,8 @@ function propertyMetaBuild(id, property) {
 	switch (property.kind) {
 		case 'bool': return { ...meta, valueType: 'bool', displayType: 'checkbox' };
 		case 'number': return { ...meta, valueType: 'number', min: property.min, max: property.max, step: property.step };
-		case 'color': return { ...meta, valueType: 'color', valueConfig: { modeCommit: 'apply' } };
+		// a color: the swatches of the framework and a picker (DiagramColorValue.jsx), one look for every color of the card
+		case 'color': return { ...meta, valueType: 'custom', valueCompName: 'color', valueConfig: { label: property.label, swatchList: property.swatchList, isDefaultOffered: property.isDefaultOffered, defaultLabel: property.defaultLabel, isNoneOffered: property.isNoneOffered, set: property.set } };
 		case 'enum': {
 			const optionList = property.values.map(value => ({ id: value, label: property.valueLabels?.[value] ?? (value || 'None') }));
 			const isShort = optionList.length <= 3 && optionList.every(option => option.label.length <= 10);
@@ -143,14 +168,13 @@ function propertyMetaBuild(id, property) {
 	}
 }
 
-// a hex color with a full alpha channel is kept as the 6-digit form
-function colorNormalize(value) {
-	const text = String(value ?? '').trim();
-	return /^#[0-9a-f]{6}ff$/i.test(text) ? text.slice(0, 7) : text;
-}
-
 const MenuValueComp = observer(function MenuValueComp({ data, config, itemRef }) {
 	return <ValueMenu label={config.label} value={data ?? ''} values={config.values} valueLabels={config.valueLabels} isSearchable={config.isSearchable} isLocked={config.isReadOnly} className="doc-vis-card-menu" onChange={value => itemRef.onValueChangeAttempt?.(value)} />;
+});
+
+// set by the property itself: a color picked by dragging passes the groupKey of its picking
+const ColorValueComp = observer(function ColorValueComp({ data, config }) {
+	return <DiagramColorValue label={config.label} value={data ?? ''} swatchList={config.swatchList} isDefaultOffered={config.isDefaultOffered} defaultLabel={config.defaultLabel} isNoneOffered={config.isNoneOffered} isLocked={config.isReadOnly} onChange={(value, option) => config.set(value, option)} />;
 });
 
 const TextMultilineComp = observer(function TextMultilineComp({ data, config, itemRef }) {
@@ -190,7 +214,7 @@ const PropEditorView = observer(function PropEditorView({ PropEditor, model, sto
 		return map;
 	}, [view]);
 	const compByName = useMemo(() => ({
-		menu: MenuValueComp, textMultiline: TextMultilineComp, actions: ActionsComp, note: NoteComp,
+		menu: MenuValueComp, textMultiline: TextMultilineComp, color: ColorValueComp, actions: ActionsComp, note: NoteComp,
 		listItem: props => <ListItemComp {...props} editor={editor} />,
 	}), [editor]);
 	return <PropEditor
@@ -200,8 +224,7 @@ const PropEditorView = observer(function PropEditorView({ PropEditor, model, sto
 			if (type === 'propertyChangeAttempt') {
 				const property = propertyByPath.get(eventData.propertyPath);
 				if (!property) return { code: -1, message: 'Unknown property.' };
-				const value = property.kind === 'color' ? colorNormalize(eventData.valueNext) : eventData.valueNext;
-				const isChanged = property.set(value);
+				const isChanged = property.set(eventData.valueNext);
 				return isChanged ? { code: 0 } : { code: -1, message: store.message || 'The change was not applied.' };
 			}
 			if (view.type !== 'list') return { code: 0 };
@@ -257,7 +280,7 @@ function PlainProperty({ property, isLocked }) {
 	if (property.kind === 'bool') control = <CheckValue label="" isChecked={Boolean(property.value)} isLocked={isLocked} onChange={property.set} />;
 	else if (property.kind === 'enum') control = <ValueMenu label={property.label} value={property.value} values={property.values} valueLabels={property.valueLabels} isSearchable={property.isSearchable} isLocked={isLocked} onChange={property.set} />;
 	else if (property.kind === 'number') control = <input type="number" className="doc-vis-card-number" value={property.value} min={property.min} max={property.max} step={property.step} disabled={isLocked} onChange={event => property.set(Number(event.target.value))} />;
-	else if (property.kind === 'color') control = <input type="color" className="doc-vis-card-color" value={String(property.value).slice(0, 7)} disabled={isLocked} onChange={event => property.set(event.target.value)} />;
+	else if (property.kind === 'color') control = <DiagramColorValue label={property.label} value={property.value} swatchList={property.swatchList} isDefaultOffered={property.isDefaultOffered} defaultLabel={property.defaultLabel} isNoneOffered={property.isNoneOffered} isLocked={isLocked} onChange={property.set} />;
 	else control = <TextValue key={`${property.id}:${property.isReadOnly}`} label={property.label} value={String(property.value ?? '')} isLocked={isLocked} isMultiline={property.isMultiline} placeholder={property.placeholder} onChange={property.set} />;
 	return <label className="doc-vis-field"><span className="doc-vis-field-label">{property.label}</span>{control}</label>;
 }

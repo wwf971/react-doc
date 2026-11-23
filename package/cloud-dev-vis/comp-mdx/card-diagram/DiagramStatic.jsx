@@ -1,7 +1,8 @@
 import { useCallback, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { observer } from 'mobx-react-lite';
 import { DiagramNodeContent, connectionPathBuild, handlePointMeasure, useDiagramSearchMark } from './DiagramRender.jsx';
-import { diagramNormalize, diagramPlacesGet, endpointIsDangling, handleAnchorDrawnOf } from './DiagramERData.js';
+import { nodeStyleVarsOf } from './DiagramNodeStyle.js';
+import { diagramNormalize, diagramPlacesGet, endpointIsDangling, handleAnchorDrawnOf, nodeSizePlacedOf } from './DiagramERData.js';
 import { routePathPolylineGet } from './DiagramRoute.js';
 import { DiagramPinLayer } from './DiagramPinLayer.jsx';
 
@@ -64,7 +65,7 @@ export const DiagramStaticNode = observer(function DiagramStaticNode({ id, node,
 	const width = node.isWidthFit ? 'max-content' : node.size.width === 'auto' ? node.sizeDefault.width : node.size.width;
 	return (
 		<div ref={root} className={className} data-id={id} data-link={node.link ? '' : undefined} data-search={searchMark.state ?? undefined} style={{ left: position.x, top: position.y, width, height: node.size.height === 'auto' ? undefined : node.size.height, zIndex: node.isBackground ? -1 : undefined, pointerEvents: node.isBackground ? 'none' : undefined }}>
-			<div className="doc-vis-node-content not-prose">
+			<div className="doc-vis-node-content not-prose" style={nodeStyleVarsOf(node)}>
 				<DiagramNodeContent id={id} node={node} config={config} registry={registry} anchorRef={anchorRef} visualization={visualization} />
 			</div>
 		</div>
@@ -148,7 +149,7 @@ export const DiagramStatic = observer(function DiagramStatic({ diagram, registry
 		const pointList = [];
 		for (const node of graph.nodes) {
 			const position = place.positions.get(node.id) ?? { x: 0, y: 0 };
-			const size = place.sizeById.get(node.id) ?? geometry.sizeById[node.id] ?? { width: node.size.width === 'auto' ? node.sizeDefault.width : node.size.width, height: node.size.height === 'auto' ? node.sizeDefault.height : node.size.height };
+			const size = nodeSizePlacedOf(geometry.sizeById[node.id] ?? { width: node.size.width === 'auto' ? node.sizeDefault.width : node.size.width, height: node.size.height === 'auto' ? node.sizeDefault.height : node.size.height }, place.sizeById.get(node.id));
 			pointList.push(position, { x: position.x + size.width, y: position.y + size.height });
 		}
 		for (const { connection, source, target } of lineList) pointList.push(...routePathPolylineGet(connectionPathBuild(connection, diagramStaticEndsOf(source, target))));
@@ -176,7 +177,7 @@ export const DiagramStatic = observer(function DiagramStatic({ diagram, registry
 					{lineList.map(({ connection, source, target }) => <DiagramStaticLine key={connection.id} connection={connection} source={source} target={target} markerId={markerId} />)}
 				</svg>
 				{graph.nodes.filter((node) => node.renderer.type !== 'scene-box').map((node) => (
-					<DiagramStaticNode key={node.id} id={node.id} node={node.around ? { ...node, size: place.sizeById.get(node.id) ?? node.size } : node} position={place.positions.get(node.id) ?? { x: 0, y: 0 }} config={config} registry={registry} onGeometry={onGeometry} />
+					<DiagramStaticNode key={node.id} id={node.id} node={place.sizeById.has(node.id) ? { ...node, size: nodeSizePlacedOf(node.size, place.sizeById.get(node.id)) } : node} position={place.positions.get(node.id) ?? { x: 0, y: 0 }} config={config} registry={registry} onGeometry={onGeometry} />
 				))}
 				{lineList.filter(({ connection }) => connection.label.text).map(({ connection, source, target }) => <DiagramStaticLabel key={connection.id} connection={connection} source={source} target={target} />)}
 			</div>
