@@ -15,6 +15,7 @@ import { cardFooterIsShown } from './TableCardData.js';
 import { nodeStyleVarsOf } from './DiagramNodeStyle.js';
 import { DiagramResizeHandles } from './DiagramResizeHandles.jsx';
 import { nodeResizeAxisListOf } from './DiagramNodeResize.js';
+import { useNodeOverflowWatch } from './DiagramNodeOverflow.js';
 
 // what every node and edge of a canvas shares: the component config, the
 // node registry of the component (registry, node-registry.js: the card of
@@ -57,6 +58,9 @@ export const DiagramNode = observer(function DiagramNode({ id, data }) {
 	const { node } = data;
 	const { config = {}, registry, measurementSet, editor } = useContext(DiagramRenderContext);
 	const root = useRef(null);
+	// the box scrolls only what its card really holds beyond it (DiagramNodeOverflow.js)
+	const contentRef = useRef(null);
+	useNodeOverflowWatch(contentRef);
 	const searchMark = useDiagramSearchMark(id);
 	const anchors = useRef(new Map());
 	const refs = useRef(new Map());
@@ -130,7 +134,7 @@ export const DiagramNode = observer(function DiagramNode({ id, data }) {
 	const resizeAxisList = isSelectedWhole && !editor.isLocked && !editor.store.isStructureFixed ? nodeResizeAxisListOf(node, contract) : [];
 	return (
 		<div ref={root} className={`doc-vis-node${node.isBackground && !editor ? ' is-background' : ''}${node.size.height === 'auto' ? ' is-height-auto' : ''}${node.isDerived ? ' is-derived' : ''}`} data-search={searchMark.state ?? undefined} data-selected={isSelectedWhole ? '' : undefined} style={{ height: node.size.height === 'auto' ? 'auto' : '100%' }}>
-			<div className="doc-vis-node-content not-prose" style={nodeStyleVarsOf(node)}>
+			<div ref={contentRef} className="doc-vis-node-content not-prose" style={nodeStyleVarsOf(node)}>
 				<DiagramNodeContent id={id} node={node} config={config} registry={registry} editor={editorContent} anchorRef={anchorRef} visualization={visualization} />
 			</div>
 			{geometry.missing.length ? <div className="doc-vis-node-error" role="alert">Missing anchors: {geometry.missing.join(', ')}</div> : null}
@@ -194,7 +198,7 @@ export const DiagramCreateNode = observer(function DiagramCreateNode({ data }) {
 	const target = editor.store.create?.target;
 	const isOfThing = Boolean(target) && target.kind !== 'canvas';
 	return <div ref={rootRef} className="doc-vis-create nodrag nopan nowheel" style={{ transform: `scale(${1 / zoom}) translate(${offset.x}px, ${offset.y}px)`, transformOrigin: 'top left' }}>
-		<DiagramCreatePanel position={data.position} editor={editor} objectService={config?.object} sessionKey={`diagram-create:${config?.instanceId ?? 'diagram'}`} sourceList={isOfThing ? undefined : config?.createSourceList} actionList={editor.createActionListGet?.(target) ?? config?.createActionList} actionIdInitial={editor.store.create?.actionId}
+		<DiagramCreatePanel position={data.position} editor={editor} objectService={config?.object} sessionKey={`diagram-create:${config?.instanceId ?? 'diagram'}`} sourceList={isOfThing ? undefined : config?.createSourceList} actionList={editor.createActionListGet?.(target) ?? config?.createActionList} actionIdInitial={editor.store.create?.actionId} actionParam={editor.store.create?.param}
 			textTake={isOfThing ? undefined : editor.createTextGet?.(target)}
 			isActionOnly={isOfThing} {...(isOfThing ? { heading: target.label ?? 'Actions', placeholder: 'What to do with it', ariaLabel: 'Actions' } : {})} />
 	</div>;

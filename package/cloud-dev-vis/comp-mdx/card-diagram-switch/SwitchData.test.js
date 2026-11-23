@@ -892,3 +892,12 @@ test('a label is a pill as wide as its words, carrying the settings its data dec
 	// the title of a scene can be typed where the editor says so: its words are a property of its kind
 	assert.deepEqual(registry.kindByType['scene-title'].contract.propertyList.map((property) => property.id), ['text']);
 });
+
+test('a view edited in place has an edit of its own, else the edit of its scene holds', async () => {
+	const { switchViewDescGet } = await import('./SwitchData.js');
+	const editScene = { label: 'scene' };
+	const editView = { label: 'view' };
+	const desc = { path: '/a', label: 'A', edit: editScene, viewList: [{ id: 'one', diagram: { nodes: [] } }, { id: 'two', diagram: { nodes: [] }, edit: editView }] };
+	assert.equal(switchViewDescGet(desc, 'two').edit, editView);
+	assert.equal(switchViewDescGet(desc, 'one').edit, undefined);
+});

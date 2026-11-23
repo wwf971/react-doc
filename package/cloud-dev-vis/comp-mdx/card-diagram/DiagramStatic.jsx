@@ -5,6 +5,7 @@ import { nodeStyleVarsOf } from './DiagramNodeStyle.js';
 import { diagramNormalize, diagramPlacesGet, endpointIsDangling, handleAnchorDrawnOf, nodeSizePlacedOf } from './DiagramERData.js';
 import { routePathPolylineGet } from './DiagramRoute.js';
 import { DiagramPinLayer } from './DiagramPinLayer.jsx';
+import { useNodeOverflowWatch } from './DiagramNodeOverflow.js';
 
 // A diagram drawn without a canvas (card-diagram-impl.md#a-diagram-without-a-canvas): the same
 // cards, placed absolutely, their lines in one svg. Nothing pans or zooms; the block is as large
@@ -29,6 +30,9 @@ export function pathPointAt(d, part) {
 
 export const DiagramStaticNode = observer(function DiagramStaticNode({ id, node, position, config, registry, onGeometry, className = 'doc-diagram-static-node' }) {
 	const root = useRef(null);
+	// the box scrolls only what its card really holds beyond it (DiagramNodeOverflow.js)
+	const contentRef = useRef(null);
+	useNodeOverflowWatch(contentRef);
 	const searchMark = useDiagramSearchMark(id);
 	const anchors = useRef(new Map());
 	const refs = useRef(new Map());
@@ -65,7 +69,7 @@ export const DiagramStaticNode = observer(function DiagramStaticNode({ id, node,
 	const width = node.isWidthFit ? 'max-content' : node.size.width === 'auto' ? node.sizeDefault.width : node.size.width;
 	return (
 		<div ref={root} className={className} data-id={id} data-link={node.link ? '' : undefined} data-search={searchMark.state ?? undefined} style={{ left: position.x, top: position.y, width, height: node.size.height === 'auto' ? undefined : node.size.height, zIndex: node.isBackground ? -1 : undefined, pointerEvents: node.isBackground ? 'none' : undefined }}>
-			<div className="doc-vis-node-content not-prose" style={nodeStyleVarsOf(node)}>
+			<div ref={contentRef} className="doc-vis-node-content not-prose" style={nodeStyleVarsOf(node)}>
 				<DiagramNodeContent id={id} node={node} config={config} registry={registry} anchorRef={anchorRef} visualization={visualization} />
 			</div>
 		</div>

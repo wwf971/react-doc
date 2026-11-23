@@ -58,7 +58,9 @@ export const DiagramEditCard = observer(function DiagramEditCard({ editor, onKey
 	}, [editor]);
 	const model = card ? card.model : cardModelBuild(editor);
 	if (!model) return null;
-	return createPortal(<section ref={panelRef} className={`doc-edit-popup doc-edit-panel doc-vis-card-panel not-prose${model.tabList.length ? '' : ' is-values'}`} style={{ ...position, visibility: position ? 'visible' : 'hidden' }} aria-label="Edit card" onKeyDown={onKeyDown}>
+	// a card the host draws may ask for more room than the fields of the editor take (view.width)
+	const width = model.view?.type === 'host' && model.view.width ? { width: model.view.width } : {};
+	return createPortal(<section ref={panelRef} className={`doc-edit-popup doc-edit-panel doc-vis-card-panel not-prose${model.tabList.length ? '' : ' is-values'}`} style={{ ...position, ...width, visibility: position ? 'visible' : 'hidden' }} aria-label="Edit card" onKeyDown={onKeyDown}>
 		<DiagramEditCardContent editor={editor} model={model} onClose={card?.close ?? editor.clearSelection} headActionList={headActionList} />
 	</section>, document.body);
 });
@@ -96,6 +98,8 @@ export const DiagramEditCardContent = observer(function DiagramEditCardContent({
 export const DiagramEditCardBody = observer(function DiagramEditCardBody({ model, editor }) {
 	const { componentConfig } = useDocStores();
 	const PropEditor = componentConfig?.PropEditor;
+	// what the host draws itself (a line of a draft whose structure is given: config.lineCardGet)
+	if (model.view?.type === 'host') return model.view.render();
 	return PropEditor
 		? <PropEditorView PropEditor={PropEditor} model={model} store={editor.store} editor={editor} />
 		: <PlainView model={model} store={editor.store} editor={editor} />;

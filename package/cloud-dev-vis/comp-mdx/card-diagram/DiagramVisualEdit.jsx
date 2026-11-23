@@ -47,6 +47,11 @@ const dropOf = (connection, from) => connection.source === from.nodeId && (conne
 //                 when the editor opens (the thing clicked to start it); isCell: its value typed
 //   onEditRest(report)   the author stepped out of everything: nothing is focused any more
 //   createSourceList, createActionList, createRequest   of the panel of a double-click
+//   lineCardGet(connection, editor)   the edit card of a line, drawn by the host: { title, kindLabel?,
+//                 width?, render() } or null (a draft whose structure is given: card-diagram-impl.md#the-card-of-a-line-drawn-by-the-host)
+//   connectEmpty({ from, position, connectionId?, role? }, editor)   a line let go where no handle
+//                 takes it: true when the host took it (opened a search of what to join it to); else
+//                 a new line is dropped, a line moved keeps a free end (card-diagram-impl.md#a-line-let-go-where-nothing-takes-it)
 //   featureList   ids of features of the registry offered here, beside those the viewport of the
 //                 draft names (viewport.featureList)
 //   panel         the panel under the canvas (DiagramPanelStore), kept by a host that opens several
@@ -233,6 +238,8 @@ export const DiagramVisualEdit = observer(function DiagramVisualEdit({ data, con
 		const position = canvas.current?.screenToFlow?.({ x: event.clientX, y: event.clientY }) ?? canvas.current?.centerGet?.() ?? { x: 0, y: 0 };
 		session.drop(event.dataTransfer, position, editorRef.current, { isAlt: event.altKey });
 	};
+	// what the host offers in the panel of a double-click: an action isHidden is opened by the host alone
+	const hasCreateOffer = Boolean(config.createActionList?.some(action => !action.isHidden) || config.createSourceList?.length);
 	const editor = store && isAllowed ? {
 		store, isLocked, change, canvas, kind,
 		// ---- the features this viewport offers (their sessions) ----
@@ -240,6 +247,8 @@ export const DiagramVisualEdit = observer(function DiagramVisualEdit({ data, con
 		paneClick: position => featureList.some(item => item.paneClick?.(position, editor)),
 		createActionListGet: target => [...(config.createActionList ?? []), ...featureList.flatMap(item => item.createActionListGet?.(target ?? { kind: 'canvas' }, editor) ?? [])],
 		createTextGet: target => featureList.map(item => item.createTextGet?.(target ?? { kind: 'canvas' }, editor)).find(Boolean),
+		// the edit card of a line, when the host draws it (config.lineCardGet)
+		lineCardGet: connection => (connection && config.lineCardGet ? config.lineCardGet(connection, editor) ?? null : null),
 		// a node resized by its corners: its new box, as one step; a feature placing it writes it its way
 		nodeResize: (nodeId, rect) => change(() => featureList.some(item => item.nodeResize?.(nodeId, rect, editor)) || store.nodeResize(nodeId, rect)),
 		// a right-click: the panel of a double-click with what can be done there, when a feature or
@@ -338,6 +347,14 @@ export const DiagramVisualEdit = observer(function DiagramVisualEdit({ data, con
 		connectEnd: state => {
 			const interaction = store.interaction;
 			if (!interaction || interaction.type === 'reconnect') return;
+			// let go where nothing takes it (no handle under the pointer): the host may take it, a search of
+			// what to join it to at that place (config.connectEmpty, card-diagram-impl.md#a-line-let-go-where-nothing-takes-it)
+			const isLetGo = state?.to && !state.toHandle && !(interaction.type === 'detach' && interaction.isDone);
+			if (isLetGo && config.connectEmpty && !isLocked) {
+				const from = { nodeId: interaction.fromNodeId, handleId: interaction.fromHandleId };
+				const isTaken = config.connectEmpty({ from, position: state.to, ...(interaction.type === 'detach' ? { connectionId: interaction.connectionId, role: interaction.role } : {}) }, editor);
+				if (isTaken) { store.interactionSet(null); return; }
+			}
 			if (interaction.type === 'detach' && !interaction.isDone && state?.to) endFreeSet(interaction.connectionId, interaction.role, state.to);
 			store.interactionSet(null);
 		},
@@ -389,7 +406,8 @@ export const DiagramVisualEdit = observer(function DiagramVisualEdit({ data, con
 			});
 		},
 		// a draft whose structure is given has a panel only for what its host offers there
-		createOpen: (position, option) => { if (position && (!isFixed || config.createActionList?.length || config.createSourceList?.length)) { store.selectionClear(); store.createOpen(position, option); } },
+		// (an action asked for by name is opened whatever is listed: a host opening it for something, below)
+		createOpen: (position, option) => { if (position && (!isFixed || option?.actionId || hasCreateOffer)) { store.selectionClear(); store.createOpen(position, option); } },
 		createClose: () => { store.createClose(); focusRoot(); },
 		createChoose: (entry, position) => {
 			store.createClose();
@@ -479,7 +497,7 @@ export const DiagramVisualEdit = observer(function DiagramVisualEdit({ data, con
 		{editor && panelOwn ? <DiagramPanel panel={panelOwn} isInPopup={isInPopup} /> : null}
 		<EditFloatingPanel label={config.editLabel ?? (kind === 'diagram' ? 'Diagram' : 'Table')} head={store ? <>
 			<DiagramEditStatus store={store} editor={editor} isLocked={isLocked} />
-			{kind === 'diagram' && editor && (!isFixed || config.createActionList?.length || config.createSourceList?.length) ? <button type="button" className="doc-button-icon" title={isFixed ? 'What can be added here (or double-click the canvas)' : 'Add a node or a connection (or double-click the canvas)'} aria-label="Add" disabled={isLocked} onClick={() => editor.createOpen(canvas.current?.centerGet())}><Plus size={14} /></button> : null}
+			{kind === 'diagram' && editor && (!isFixed || hasCreateOffer) ? <button type="button" className="doc-button-icon" title={isFixed ? 'What can be added here (or double-click the canvas)' : 'Add a node or a connection (or double-click the canvas)'} aria-label="Add" disabled={isLocked} onClick={() => editor.createOpen(canvas.current?.centerGet())}><Plus size={14} /></button> : null}
 			{kind === 'diagram' && editor && !isFixed && registry?.arrangerList?.length ? <ActionMenu label="Arrange: replaces the anchors of the lines" isLocked={isLocked} actionList={registry.arrangerList.map(arranger => ({ id: arranger.id, label: arranger.label, title: arranger.description, isDisabled: store.arrangerUnavailableIdList.includes(arranger.id) }))} onAction={arrangerId => change(() => {
 				const arranger = registry.arrangerList.find(item => item.id === arrangerId);
 				const geometry = diagramCanvasListGet().find(item => item.editorGet()?.store === store)?.geometryGet?.();

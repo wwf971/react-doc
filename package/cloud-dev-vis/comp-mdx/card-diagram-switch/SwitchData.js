@@ -169,7 +169,9 @@ export function switchPathLast(path) {
 // A scene has one or more views and shows one at a time, as a table card does. A scene
 // without a viewList has one view, its diagram, and nothing here applies to it.
 //
-//   viewList      [{ id, label?, description?, diagram, box?, isAvailableEmbedded?, isAvailableFocused?, isFrameHiddenEmbedded? }]
+//   viewList      [{ id, label?, description?, diagram, box?, edit?, isAvailableEmbedded?, isAvailableFocused?, isFrameHiddenEmbedded? }]
+//                 edit: the view edited in place (card-diagram-flexible-switch.md#a-scene-edited-in-place),
+//                 else the edit of the scene
 //                 diagram may be a getter: a view costly to draw is made when it is first shown
 //                 isFrameHiddenEmbedded: a card showing this view is this view alone: no frame, no
 //                 title line, no margin, the view filling the whole card
@@ -298,7 +300,8 @@ export function switchViewDescGet(desc, viewId) {
 	if (!desc.viewList) return viewId ? null : desc;
 	const view = desc.viewList.find((item) => item.id === viewId);
 	if (!view) return null;
-	return { path: switchPathViewBuild(desc.path, viewId), label: desc.label, description: view.description ?? desc.description, diagram: view.diagram, box: view.box };
+	// a view edited in place has an edit of its own (its draft is its diagram); without one, the scene's holds
+	return { path: switchPathViewBuild(desc.path, viewId), label: desc.label, description: view.description ?? desc.description, diagram: view.diagram, box: view.box, ...(view.edit ? { edit: view.edit } : {}) };
 }
 
 // ---------- the document of a block ----------

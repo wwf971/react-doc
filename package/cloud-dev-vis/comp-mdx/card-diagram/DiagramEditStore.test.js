@@ -736,3 +736,37 @@ test('a draft whose structure is given: values and lines alone, what follows fro
 	free.select('source');
 	assert.ok(cardModelBuild({ store: free, change: operation => operation(), handlePositionGet: positionGet }).tabList.length > 0);
 });
+
+test('a line of a draft whose structure is given keeps data of its own, its card drawn by the host; the create panel opened for something', () => {
+	const store = new DiagramEditStore(scopedSourceCreate(), 'diagram', undefined, registry, { isStructureFixed: true, fieldIsEditable: () => false });
+	const id = store.connections[0].id;
+	// a value of the line: kept in its data, one step, taken back as one, taken away with undefined
+	assert.equal(store.connectionDataSet(id, 'rule', { compare: 'pipeline', stepList: [{ op: 'trim' }] }), true);
+	assert.deepEqual(store.connectionGet(id).data.rule, { compare: 'pipeline', stepList: [{ op: 'trim' }] });
+	assert.equal(store.undo(), true);
+	assert.equal(store.connectionGet(id).data?.rule, undefined);
+	assert.equal(store.redo(), true);
+	assert.equal(store.connectionDataSet(id, 'rule', undefined), true);
+	assert.equal(store.connectionGet(id).data?.rule, undefined);
+	assert.equal(store.connectionDataSet('none', 'rule', 1), false);
+	// the card of the line: the host's, beside it, when the host draws one; else the editor's
+	store.selectConnection(id);
+	const render = () => 'the host card';
+	const hosted = cardModelBuild({ store, change: operation => operation(), handlePositionGet: positionGet, lineCardGet: connection => (connection.id === id ? { title: 'Rule', width: 420, render } : null) });
+	assert.deepEqual([hosted.title, hosted.view.type, hosted.view.width, hosted.view.render()], ['Rule', 'host', 420, 'the host card']);
+	assert.equal(cardModelBuild({ store, change: operation => operation(), handlePositionGet: positionGet, lineCardGet: () => null }).view.type, 'detail');
+	// the create panel opened in the state of an action, for something: what it was opened for reaches it
+	store.createOpen({ x: 10, y: 20 }, { actionId: 'pick', param: { from: { nodeId: 'source', handleId: 'c-a' } } });
+	assert.deepEqual(store.create, { position: { x: 10, y: 20 }, actionId: 'pick', param: { from: { nodeId: 'source', handleId: 'c-a' } } });
+});
+
+test('the box of a node scrolls only what its card holds beyond it by more than a few pixels', async () => {
+	const { NODE_OVERFLOW_SCROLL_MIN, nodeOverflowIsScroll } = await import('./DiagramNodeOverflow.js');
+	const box = (scrollWidth, clientWidth, scrollHeight = 48, clientHeight = 48) => ({ scrollWidth, clientWidth, scrollHeight, clientHeight });
+	// the hover room of a cell reaching past its words, an outline: cut, no scrollbar
+	assert.equal(nodeOverflowIsScroll(box(204, 200)), false);
+	assert.equal(nodeOverflowIsScroll(box(200 + NODE_OVERFLOW_SCROLL_MIN, 200)), false);
+	// what a card really holds beyond its box: scrolled, either way
+	assert.equal(nodeOverflowIsScroll(box(200 + NODE_OVERFLOW_SCROLL_MIN + 1, 200)), true);
+	assert.equal(nodeOverflowIsScroll(box(200, 200, 300, 48)), true);
+});

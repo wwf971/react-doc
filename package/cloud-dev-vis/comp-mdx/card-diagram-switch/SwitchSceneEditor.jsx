@@ -63,6 +63,8 @@ export const SwitchSceneEditor = observer(function SwitchSceneEditor({ store, co
 		onEditRest: () => store.sceneEditRest(),
 		viewInitial: session?.camera ?? undefined, onViewChange: (view) => store.sceneEditCameraSet(view),
 		createSourceList: edit?.createSourceList, createActionList: edit?.createActionList, sourcePath: key, blockIndex: 0, instanceId: key, height: store.box?.height ?? 600,
+		// the card of a line drawn by the scene's host, and a line let go where nothing takes it (card-diagram-impl.md)
+		lineCardGet: edit?.lineCardGet, connectEmpty: edit?.connectEmpty,
 		// the feature layers the scene offers while it is edited (edit.featureList: a scene only partly
 		// made from data may offer the parametric canvas; one made again from data at each change does not)
 		featureList: edit?.featureList ?? [],

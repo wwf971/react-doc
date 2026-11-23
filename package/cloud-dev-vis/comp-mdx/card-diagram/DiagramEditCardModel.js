@@ -613,6 +613,10 @@ function cardModelFixedBuild(editor) {
 	// a card only where something can be done: a value changed, an action taken
 	const modelOf = (title, kindLabel, sectionList) => (sectionList.some(section => section.propertyList.some(property => !property.isReadOnly) || section.actionList.length) ? { title, kindLabel, tabList: [], tabId: null, segmentList: [], view: { type: 'detail', sectionList } } : null);
 	if (connection && !display.rowId) {
+		// a line whose card the host draws: its words and its fields are the host's, beside the line
+		// (card-diagram-impl.md#the-card-of-a-line-drawn-by-the-host)
+		const host = editor.lineCardGet?.(connection);
+		if (host) return { title: String(host.title ?? connection.label?.text ?? connection.id), kindLabel: host.kindLabel ?? 'Line', tabList: [], tabId: null, segmentList: [], view: { type: 'host', width: host.width, render: host.render } };
 		const endText = endpoint => {
 			if (endpointIsDangling(endpoint)) return 'free';
 			const endNode = store.nodeGet(endpoint.nodeId);

@@ -342,6 +342,9 @@ edit
   label?                 the word of the editor's bar (the kind of thing edited)
   registry?              the kinds the draft may hold, else the viewport's
   createSourceList?, createActionList?     of the panel of a double-click, while editing
+  lineCardGet?(connection, editor)         the card of a line, drawn by the provider (card-diagram-impl.md#the-card-of-a-line-drawn-by-the-host)
+  connectEmpty?({ from, position, connectionId?, role? }, editor)   a line let go where no handle takes it:
+                         true when the provider took it (card-diagram-impl.md#a-line-let-go-where-nothing-takes-it)
   featureList?           the feature layers offered while editing (parametric-canvas: the tool bar and the
                          panel of card-diagram-parametric-canvas.md). A scene made again from data at every
                          change offers none; one only partly made from data may

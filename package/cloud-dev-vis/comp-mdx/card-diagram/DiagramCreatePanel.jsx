@@ -60,12 +60,17 @@ import { nodeRegistrySearch } from './node-registry.js';
 //     isMulti?,                       entries are ticked, and committed together
 //     commitLabel?(count),            what the button committing them says
 //     isText?,                        the text typed is the value: Enter takes it (no list)
+//     queryInitial?,                  the words the field starts with, chosen: what is offered
+//                                     for them is listed at once, and typing replaces them
 //     choose?(entry | { text }, api)  an entry taken (not isMulti), or the text
 //     commit?(entryList, api) }       the ticked entries taken (isMulti)
 //   choose and commit answer, at once or as a promise: another state (the next thing to ask),
 //   'back' (the state before), or nothing (done: the panel closes). api: { position, editor }.
 //   What they throw is said in the panel, which stays as it is.
-// A host opens the panel in the state of an action with editor.createOpen(position, { actionId }).
+// A host opens the panel in the state of an action with editor.createOpen(position, { actionId,
+// param? }): param reaches its start ({ position, editor, param }), what the action was opened for (a
+// line let go on the empty canvas: card-diagram-impl.md#a-line-let-go-where-nothing-takes-it). An
+// action isHidden is only opened so, never listed.
 //
 // The field is a text of the page (EditSourceSurface, plain) with the **slash mode** of the page
 // (doc_page_impl_edit_slash.md#beyond-the-document-editors): `/` lists what the panel offers by name
@@ -84,7 +89,7 @@ import { nodeRegistrySearch } from './node-registry.js';
 const SOURCE_LIST_NONE = [];
 const ACTION_LIST_NONE = [];
 
-export const DiagramCreatePanel = observer(function DiagramCreatePanel({ position, editor, objectService, sessionKey, sourceList = SOURCE_LIST_NONE, actionList = ACTION_LIST_NONE, actionIdInitial, heading = 'Actions', placeholder: placeholderGiven, ariaLabel = 'Add to the diagram', isActionOnly = false, textTake }) {
+export const DiagramCreatePanel = observer(function DiagramCreatePanel({ position, editor, objectService, sessionKey, sourceList = SOURCE_LIST_NONE, actionList = ACTION_LIST_NONE, actionIdInitial, actionParam, heading = 'Actions', placeholder: placeholderGiven, ariaLabel = 'Add to the diagram', isActionOnly = false, textTake }) {
 	const [query, querySet] = useState('');
 	const slashStore = useDocStores()?.slashStore;
 	// the states entered, the last the one the panel is in; opened in the state of an action when asked to
@@ -93,7 +98,7 @@ export const DiagramCreatePanel = observer(function DiagramCreatePanel({ positio
 	const [stateStack, stateStackSet] = useState(() => {
 		const action = actionIdInitial ? actionList.find(one => one.id === actionIdInitial && !one.isDisabled) : null;
 		if (!action) return [];
-		const state = action.start({ position, editor });
+		const state = action.start({ position, editor, param: actionParam });
 		if (!state) isStartedAtOnce.current = true;
 		return state ? [state] : [];
 	});
@@ -123,7 +128,7 @@ export const DiagramCreatePanel = observer(function DiagramCreatePanel({ positio
 		nodeComponent: { compName: 'ObjectView', data: { object: hit.descriptor.ref }, idPrefix: 'object' },
 	}));
 	const wordListAction = queryWords.toLowerCase().split(/\s+/).filter(Boolean);
-	const actionEntryList = actionList.filter(action => wordListAction.every(word => [action.label, action.description ?? '', ...(action.keywordList ?? [])].join(' ').toLowerCase().includes(word)))
+	const actionEntryList = actionList.filter(action => !action.isHidden && wordListAction.every(word => [action.label, action.description ?? '', ...(action.keywordList ?? [])].join(' ').toLowerCase().includes(word)))
 		.map(action => ({ ...action, id: `action:${action.id}`, action }));
 	const sourceBeforeList = [...actionEntryList, ...sourceEntryListOf(true)];
 	const sourceAfterList = sourceEntryListOf(false);
@@ -290,7 +295,7 @@ export const DiagramCreatePanel = observer(function DiagramCreatePanel({ positio
 // a state of several the button taking what is ticked. The host runs the machine: this draws it
 const DiagramCreateState = observer(function DiagramCreateState({ stateStack, api, onLeave, onResult }) {
 	const state = stateStack[stateStack.length - 1];
-	const [query, querySet] = useState('');
+	const [query, querySet] = useState(() => state.queryInitial ?? '');
 	const [indexActive, indexActiveSet] = useState(0);
 	const [tickedById, tickedByIdSet] = useState(() => new Map());
 	const [run, runSet] = useState({ status: 'idle', message: '' });
@@ -346,7 +351,8 @@ const DiagramCreateState = observer(function DiagramCreateState({ stateStack, ap
 			</div>
 			<div className="doc-vis-create-search">
 				<Search size={12} aria-hidden="true" />
-				<input type="text" value={query} placeholder={state.placeholder ?? ''} aria-label={state.label} autoFocus spellCheck={false} onChange={(event) => { querySet(event.target.value); indexActiveSet(0); }} />
+				<input type="text" value={query} placeholder={state.placeholder ?? ''} aria-label={state.label} autoFocus spellCheck={false} onChange={(event) => { querySet(event.target.value); indexActiveSet(0); }}
+					onFocus={(event) => { if (state.queryInitial && event.target.value === state.queryInitial) event.target.select(); }} />
 				{group?.status === 'searching' || isBusy ? <LoaderCircle size={12} className="doc-spin" aria-label="working" /> : null}
 			</div>
 			{state.isText ? null : (

@@ -407,7 +407,7 @@ export class DiagramEditStore {
 	interactionSet(interaction) { this.interaction = interaction; }
 	// option.actionId: the panel opens in the state of that action of the host (DiagramCreatePanel.jsx)
 	// target: what the panel is of, when it is of a thing ({ kind: node | line | canvas, ... }: a right-click)
-	createOpen(position, { actionId, target } = {}) { this.create = { position, actionId, ...(target ? { target } : {}) }; this.cell = null; }
+	createOpen(position, { actionId, target, param } = {}) { this.create = { position, actionId, ...(target ? { target } : {}), ...(param !== undefined ? { param } : {}) }; this.cell = null; }
 	createClose() { this.create = null; }
 
 	// ---------- cells ----------
@@ -1122,6 +1122,19 @@ export class DiagramEditStore {
 				default: throw new Error(`Unknown connection field "${field}".`);
 			}
 		}, { groupKey, isShownLater });
+	}
+
+	// a value in the data of a line (connection.data.{key}): what a host keeps on a line beside how it is
+	// drawn (db-migration-tool: the rule of a column a line of a check action stands for). value
+	// undefined takes it away. One step, or one group while it is typed (groupKey). A draft whose
+	// structure is given takes it too: its lines are its own (card-diagram-impl.md#a-draft-whose-structure-is-given)
+	connectionDataSet(connectionId, key, value, { groupKey = null } = {}) {
+		const index = this.connections.findIndex(connection => connection.id === connectionId);
+		if (index < 0 || !key) return false;
+		return this.changeApply(documentNext => {
+			const path = ['connections', index, 'data', key];
+			if (value === undefined) { if (documentNext.hasIn(path)) documentNext.deleteIn(path); } else documentNext.setIn(path, documentNext.createNode(value));
+		}, { groupKey });
 	}
 
 	connectionRemove(connectionId) {

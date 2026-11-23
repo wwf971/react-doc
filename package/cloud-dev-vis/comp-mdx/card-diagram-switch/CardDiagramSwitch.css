@@ -363,6 +363,12 @@ button.doc-switch-edge-label:hover, button.doc-switch-edge-label.is-line-hovered
 .doc-switch.is-title-editable .doc-switch-flow .react-flow__node:has(> .doc-vis-node .doc-switch-scene-title) { pointer-events: all; cursor: text; }
 .doc-switch.is-title-editable .doc-switch-scene-editor .react-flow__node:has(> .doc-vis-node .doc-switch-scene-title) { pointer-events: all; }
 .doc-switch.is-title-editable .doc-switch-flow .doc-switch-scene-title:hover { text-decoration: underline dotted color-mix(in srgb, var(--color-fd-foreground) 35%, transparent); text-underline-offset: 0.2em; }
+/* typed where it stands, it keeps the box it has when read: one line, as wide as its words (its node
+   fits them), so the value of its cell does not reach past it for the room of its hover, as a cell
+   of a table does, and what is typed does not wrap */
+.doc-switch-scene-title .doc-vis-cell-value { width: 100%; margin: 0; padding: 0; white-space: nowrap; overflow-wrap: normal; }
+.doc-switch-scene-title .doc-vis-text-plain,
+.doc-switch-scene-title .doc-vis-text .editable-value-container .value-text-viewport .editable-value-text { white-space: nowrap; overflow-wrap: normal; }
 
 /* the visual edit mode of a block of scenes (SwitchSceneEdit.jsx): the path of what is edited above
    the canvas, the panel under it (DiagramPanel.css: the host is its frame) */

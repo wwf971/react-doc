@@ -319,10 +319,18 @@
    SwitchStatic), whatever shell a node is drawn in, so the margins, font sizes and line heights
    the page gives its headings, paragraphs and lists cannot make a card larger than its node.
    a page that styles its prose with rules of its own must keep them off .not-prose, as the
-   typography rules of the doc page do (frontend/src/style.css) */
+   typography rules of the doc page do (frontend/src/style.css).
+   an overflow of a few pixels (a cell's hover room, an outline, a rounded size) is cut, never a
+   scrollbar: the box scrolls once what it holds exceeds it by more than NODE_OVERFLOW_SCROLL_MIN,
+   which DiagramNodeOverflow.js measures and says as data-overflow. A kind that must draw beyond its
+   box says overflow: visible for itself, as before (:where keeps this rule weaker than theirs) */
 .doc-vis-node-content {
 	width: 100%;
 	height: 100%;
+	overflow: hidden;
+}
+
+.doc-vis-node-content:where([data-overflow='scroll']) {
 	overflow: auto;
 }
 
