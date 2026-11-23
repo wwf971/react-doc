@@ -15,6 +15,8 @@ docPageList:
     dir: ../{{pageAlias}}
 
 # optional:
+# homeItem: {{pageAlias}} / Install   # what "/" opens: an item by its path in the side panel
+#                         # (main/doc_page_impl_side_panel.md#the-home-of-the-page)
 # packageList:            # packages of components and service templates
 #   - dir: ../../my-package
 # config:                 # the workspace config layer, over the main doc page's

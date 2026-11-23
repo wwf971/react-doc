@@ -1745,8 +1745,17 @@ export function loadConfigDoc(configFile: string, options: DocSourcePluginOption
     config.siteTitle = entryLoaded.entry.title;
     config.siteTitleShort = entryLoaded.entry.titleShort;
   }
-  config.homeDoc = config.homeDoc === undefined ? entryLoaded.entry.homeDoc : sourcePathFullGet(config.homeDoc, config.docEntry.alias);
-  config.homeItem ??= entryLoaded.entry.homeItem;
+  // the home comes from one place: config.yaml when it names one (homeDoc, homeItem), else
+  // the workspace or its first doc page (doc_page_impl_side_panel.md#the-home-of-the-page)
+  if (config.homeItem !== undefined && typeof config.homeItem !== 'string') {
+    throw new Error(`[doc-source] config "homeItem" is the path of a side panel item, a text: ${configFile}`);
+  }
+  if (config.homeDoc === undefined && config.homeItem === undefined) {
+    config.homeDoc = entryLoaded.entry.homeDoc;
+    config.homeItem = entryLoaded.entry.homeItem;
+  } else if (config.homeDoc !== undefined) {
+    config.homeDoc = sourcePathFullGet(config.homeDoc, config.docEntry.alias);
+  }
 
   // tag definitions: the entry's (its own over what it includes), then the
   // tag file of config, then entries written in config itself

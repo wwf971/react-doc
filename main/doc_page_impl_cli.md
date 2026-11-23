@@ -166,7 +166,7 @@ launch { kind, target, mode, command,          what was launched; configDoc.work
          backendConfigFile?, configFile? }     the backend, in place of "service" of the files; another config
 ```
 
-The package defaults of `config.yaml` (components, config defaults, keyboard map) stay in force; its workspace, its page values (`siteTitle`, `homeDoc`, `homeItem`) and its backend belong to the demonstration, and do not: what is launched brings its own title and home document. The development server of the project, `pnpm -C main dev`, has no launch layer and serves what `config.yaml` (or its local layer `config.0.yaml`) names, as before.
+The package defaults of `config.yaml` (components, config defaults, keyboard map) stay in force; its workspace, its page values (`siteTitle`, `homeDoc`, `homeItem`) and its backend belong to the demonstration, and do not: what is launched brings its own title and home: a doc page or a package launched or built alone opens the item of its entry's `homeItem`, a path in its own side panel, else its `homeDoc` ([The home of the page](doc_page_impl_side_panel.md#the-home-of-the-page)). The development server of the project, `pnpm -C main dev`, has no launch layer and serves what `config.yaml` (or its local layer `config.0.yaml`) names, as before.
 
 ## Building
 

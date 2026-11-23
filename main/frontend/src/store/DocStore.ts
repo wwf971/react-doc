@@ -1,6 +1,7 @@
 import { makeAutoObservable, runInAction, untracked } from 'mobx';
 import type { DocSourceStore } from './DocSourceStore.js';
 import { buildPageTreeModel } from '../lib/page-tree.js';
+import { sidePanelItemPathRouteGet } from '../lib/side-panel-item-path.js';
 import { textLocalizedGet } from '../lib/text-localized.js';
 import { compDefinitionNormalize, compIdResolve, compInputNormalize } from '../../../comp-doc/registry/comp-registry.js';
 import { compDefinitionGet } from '../../../comp-doc/registry/comp-definition.js';
@@ -304,10 +305,15 @@ export class DocStore {
     return languageList[0];
   }
 
+  // what "/" opens: the item homeItem names by its path in the side panel,
+  // else the item of homeDoc, else the first item
+  // (doc_page_impl_side_panel.md#the-home-of-the-page)
   get routeHome(): string {
     const homeItem = this.sourceStore.configDoc.homeItem;
-    if (homeItem && this.treeModel.itemById.has(homeItem)) {
-      return this.treeModel.itemById.get(homeItem).route;
+    if (typeof homeItem === 'string' && homeItem.trim() !== '') {
+      const { route, message } = sidePanelItemPathRouteGet(this.treeModel, homeItem);
+      if (route) return route;
+      homeItemProblemWarn(homeItem, message);
     }
     const homeDoc = this.sourceStore.configDoc.homeDoc;
     const routeHomeDoc = homeDoc ? this.routeForDoc(homeDoc) : '';
@@ -911,6 +917,16 @@ export class DocStore {
     if (!isNavigated) this.navigationHistoryIndex = indexPrevious;
     return isNavigated;
   }
+}
+
+// a homeItem naming no item: said once per path and reason (routeHome is read often),
+// and the page opens homeDoc or the first item instead
+const homeItemProblemSaidSet = new Set<string>();
+function homeItemProblemWarn(homeItem: string, message: string) {
+  const key = `${homeItem}\n${message}`;
+  if (homeItemProblemSaidSet.has(key)) return;
+  homeItemProblemSaidSet.add(key);
+  console.warn(`[doc-nav] homeItem "${homeItem}" opens nothing: ${message}; the page opens homeDoc or the first item instead`);
 }
 
 function splitTarget(target: string): { path: string; hash: string } {

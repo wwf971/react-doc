@@ -8,6 +8,7 @@ docEntry:
   title: {{title}}
   # titleShort: ...   the title in a few words, when it is long: the tab of the browser shows it
   homeDoc: ~{{name}}/doc/README.md
+  # homeItem: Guide / Install   what "/" opens served alone: an item by its path in the side panel
 source:
   file: ./source.yaml
 sidePanelById:

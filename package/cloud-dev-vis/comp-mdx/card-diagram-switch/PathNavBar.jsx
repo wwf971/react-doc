@@ -19,8 +19,10 @@ import './PathNavBar.css';
 //   pathEnd        after the last segment, before the menu of what is below (the views of a scene)
 //   trailing       at the right: the buttons of the host
 //   itemRender     how an item of a menu is drawn (item) => node; its label by default
+//   rootIcon       an icon component drawn for the root segment instead of its words (a house for the
+//                  top of a tree of folders, which has no name of its own); its words stay its title
 //   className      added to the bar's own (doc-switch-bar)
-export const PathNavBar = observer(function PathNavBar({ nav, noun, isHeld = false, pathEnd, trailing, itemRender, className = '', label = 'Path' }) {
+export const PathNavBar = observer(function PathNavBar({ nav, noun, isHeld = false, pathEnd, trailing, itemRender, rootIcon: RootIcon, className = '', label = 'Path' }) {
 	const word = pathNavWordBuild(noun);
 	const current = nav.pathCurrent;
 	const childList = nav.childListGet(current);
@@ -47,14 +49,17 @@ export const PathNavBar = observer(function PathNavBar({ nav, noun, isHeld = fal
 				<ArrowUp size={16} aria-hidden="true" />
 			</button>
 			<ScrollHorizontal store={scroll} className="doc-switch-path" innerClassName="doc-switch-path-list" innerRef={stripRef} innerProps={{ role: 'navigation', 'aria-label': label }}>
-				{nav.pathChain.map((path, index) => (
-					<span key={path} className="doc-switch-path-item">
-						{index > 0 ? <PathNavSibling nav={nav} path={path} word={word} itemRender={itemRender} /> : null}
-						<button type="button" className="doc-switch-path-segment" aria-current={path === current ? 'page' : undefined} title={nav.labelGet(path)} onClick={() => void nav.pathSet(path)}>
-							{nav.labelGet(path)}
-						</button>
-					</span>
-				))}
+				{nav.pathChain.map((path, index) => {
+					const isIcon = Boolean(RootIcon) && index === 0 && path === nav.root;
+					return (
+						<span key={path} className="doc-switch-path-item">
+							{index > 0 ? <PathNavSibling nav={nav} path={path} word={word} itemRender={itemRender} /> : null}
+							<button type="button" className={`doc-switch-path-segment${isIcon ? ' is-icon' : ''}`} aria-current={path === current ? 'page' : undefined} aria-label={isIcon ? nav.labelGet(path) : undefined} title={nav.labelGet(path)} onClick={() => void nav.pathSet(path)}>
+								{isIcon ? <RootIcon size={15} aria-hidden="true" /> : nav.labelGet(path)}
+							</button>
+						</span>
+					);
+				})}
 				{pathEnd}
 				{childList.length > 0 ? <PathNavChildren nav={nav} childList={childList} word={word} itemRender={itemRender} /> : null}
 			</ScrollHorizontal>

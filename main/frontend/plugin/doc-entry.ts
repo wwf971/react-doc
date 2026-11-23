@@ -25,7 +25,8 @@ import { docManagedFolderListGet, docManagedRootListRead } from './doc-managed-s
 //     title: ...             #   true, or a mapping with optional page values
 //     titleShort: ...        #   used when config.yaml does not set them (titleShort
 //     homeDoc: ...           #   goes with the title of the same place: the tab title)
-//     homeItem: ...
+//     homeItem: ...          #   the item "/" opens, by its path in the side panel
+//                            #   (Japanese areas); read only when the doc page is served alone
 //   source:                  # optional: rules | { rules } | { file }
 //   tag:                     # optional: { defineById } | { file }
 //   config:                  # optional: the doc page config layer
@@ -488,7 +489,8 @@ export function docWorkspaceFileFind(dirPath: string): string {
 //   title: ...               # optional page values, over those of the first doc page
 //   titleShort: ...          #   (titleShort only beside title)
 //   homeDoc: ~page:root/a.md
-//   homeItem: ...
+//   homeItem: guide / Install  # the item "/" opens, by its path in the side panel (labels or ids;
+//                              #   doc_page_impl_side_panel.md#naming-an-item-by-its-path)
 //   docPageList:             # the root-level doc pages, in side-panel order
 //     - alias: guide         # unique in the workspace; the folder name when absent
 //       dir: ../guide        # the doc page folder, or "file": its entry file
@@ -789,14 +791,18 @@ export function docWorkspaceLoad(spec: DocWorkspaceSpec, configDir: string): Doc
 
   const docPageList = context.entryFileList.map((entryFile) => context.docPageByEntryFile.get(entryFile)!);
   const docPageFirst = docPageList[0];
-  // the short title goes with the title it shortens: the workspace's with its own title
+  // the short title goes with the title it shortens: the workspace's with its own title.
+  // the home (what "/" opens) comes from one place: the workspace file when it names one
+  // (homeDoc, homeItem), else the first doc page's entry, whose homeItem (a path in its own
+  // side panel) counts only when the doc page is served alone, in a virtual workspace
+  // (doc_page_impl_side_panel.md#the-home-of-the-page)
+  const isHomeOfWorkspace = spec.homeDoc !== undefined || spec.homeItem !== undefined;
+  const homeDocWritten = isHomeOfWorkspace ? spec.homeDoc : fileFirst.entry.homeDoc;
   const entry: DocEntryInfo = {
     title: spec.title ?? fileFirst.entry.title,
     titleShort: spec.title !== undefined ? spec.titleShort : fileFirst.entry.titleShort,
-    homeDoc: spec.homeDoc !== undefined
-      ? sourcePathFullGet(spec.homeDoc, docPageFirst.alias)
-      : fileFirst.entry.homeDoc === undefined ? undefined : sourcePathFullGet(fileFirst.entry.homeDoc, docPageFirst.alias),
-    homeItem: spec.homeItem ?? fileFirst.entry.homeItem,
+    homeDoc: homeDocWritten === undefined ? undefined : sourcePathFullGet(homeDocWritten, docPageFirst.alias),
+    homeItem: isHomeOfWorkspace ? spec.homeItem : spec.isVirtual ? fileFirst.entry.homeItem : undefined,
   };
   for (const warning of context.warningList) console.warn(`[doc-source] ${warning}`);
   for (const docPage of docPageList) docPageFolderFormerWarn(docPage);

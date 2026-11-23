@@ -33,7 +33,7 @@ Every successful request increments `navigationRequestVersion`, including a requ
 
 Two route modes share this boundary:
 
-- **Query mode** stores the selected route in the `doc` query parameter and the place in the browser hash. Browser Back and Forward restore document navigation.
+- **Query mode** stores the selected route in the `doc` query parameter and the place in the browser hash. Browser Back and Forward restore document navigation. An address without `doc` (the page opened at `/`) opens the **home** (`DocStore.routeHome`): the item `homeItem` names by its path in the side panel, else the item of `homeDoc`, else the first item ([The home of the page](doc_page_impl_side_panel.md#the-home-of-the-page)); an address whose `doc` names nothing opens the home too, with the navigation warning.
 - **Memory mode** keeps location and history inside `DocStore`, allowing the document page to be embedded without changing the host URL.
 
 ## Link recognition and target resolution

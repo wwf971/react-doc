@@ -288,7 +288,9 @@ PathNav.js       the tree is a provider: { root, labelGet(path), childListGet(pa
                                    history, the strip of the bar, how far each place was scrolled
                  pathNavBuild(store, provider) -> nav: what the bar reads, from the data as it is now
 PathNavBar.jsx   the bar: back, forward, up, the segments, the menus beside and below; slots for the
-                 host (pathEnd after the path, trailing at the right), the noun of its titles
+                 host (pathEnd after the path, trailing at the right), the noun of its titles, and an
+                 icon for a root that has no name of its own (rootIcon: a house for the top of folders,
+                 its words kept as its title)
 ```
 
 - **The store knows no provider.** What a place is comes from the provider when the view is drawn (`pathNavBuild`), so the store may be kept across mounts ([stores kept across mounts](../../../main/doc_page_impl_mdx_comp_state.md#stores-kept-across-mounts)) while the data changes under it. A place that is gone (a paper removed) shows the nearest place above it that is one, else the root.

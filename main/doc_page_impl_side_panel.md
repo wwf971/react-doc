@@ -36,7 +36,8 @@ The entry and every YAML file it reaches share one grammar, the document yaml fi
 docEntry:                      # marks the file as the entry of a document: true, or a mapping
   title: Guide                 #   siteTitle, when config.yaml sets none
   titleShort: Guide            #   optional: the title in a few words, the tab of the browser (doc_page_impl.md#the-tab-title)
-  homeDoc: ~guide/overview.md  #   homeDoc / homeItem, when config.yaml and the workspace set none
+  homeDoc: ~guide/overview.md  #   the home ("/"), when config.yaml and the workspace set none
+  homeItem: Setup / Install    #   the same, an item by its path in this side panel; only served alone (#the-home-of-the-page)
 source:                        # optional: a rule list, { rules: [...] }, or { file: ./source.yaml }
   - action: addFolder
     alias: guide               # the root, ~guide/... (doc_page_impl_source.md#source-paths)
@@ -573,6 +574,65 @@ The default folder gesture (an inactive label navigates, the active label toggle
 
 **A folder bound to a document looks different from one that is not.** This is a requirement of the default renderer: the two answer a click on their label differently (the first navigates, the second only folds), so the reader must be able to tell them apart before clicking, at rest, without hovering. `DocSidebarFolder` draws the chevron of a bound folder as a small framed button of its own (`doc-sidebar-folder-toggle`), and the chevron of an unbound folder plain, as part of a row that only folds. The difference keeps the row height, so a folder never shifts when its document is bound or unbound. A renderer supplied through `config.sidePanel.components.Folder` is the consumer's and is not held to this.
 
+## The home of the page
+
+The **home** is the item the page opens at `/` (no `?doc=` in the address), and the one `nav/home` goes to. It is named by one of two keys, read in this order:
+
+- `homeItem`: an item of the side panel, by its **path** ([below](#naming-an-item-by-its-path)): `Japanese areas`, `map-styles / Japanese areas`. Its route (`?doc=/__doc-item/shikuchoson`) is never written by hand.
+- `homeDoc`: a document, by its source path (`~guide/overview.md`); the first item bound to it.
+
+Without either, or when neither names anything shown, the home is the first item of the side panel. A `homeItem` naming nothing is said once in the console of the browser (`[doc-nav] homeItem "…" opens nothing: …`), and the page goes on to `homeDoc`.
+
+**The home belongs to the workspace.** It comes from **one place**, the first of these that names a home (either key), and both keys are taken from there:
+
+| Place | Read when |
+| --- | --- |
+| `config.yaml` (`homeItem`, `homeDoc`) | the development server of the project serves what `config.yaml` names; a launch from the command line (`react-doc dev` / `build`) leaves these out ([the launch layer](doc_page_impl_cli.md#the-launch-layer)) |
+| the workspace file (`homeItem`, `homeDoc` at its top) | always, for a workspace with a file |
+| the entry of the first doc page (`docEntry.homeItem`, `docEntry.homeDoc`) | `homeItem`: **only when the doc page is served alone**, a virtual workspace (`react-doc dev <doc page \| package>`, `react-doc build <doc page \| package>`, `docEntry` of `config.yaml`); `homeDoc`: also as the home of a workspace that names none, as before |
+
+So a doc page or a package says which of its own items a reader of it alone lands on, and listing it in a workspace never takes the home of that workspace: the workspace names one (a path starting with the alias of the doc page, if it wants that item), or gets the first item.
+
+```yaml
+# .doc-page/entry.yaml of the package map-styles: built alone, the page opens Japanese areas
+docEntry:
+  title: map-styles
+  homeDoc: ~map-styles/doc/README.md   # what "/" opens in a workspace naming no home
+  homeItem: Japanese areas             # served or built alone: this item
+```
+
+```yaml
+# .doc-workspace/workspace.yaml: the home of a workspace of several doc pages
+homeItem: map-styles / Japanese areas  # the section of the doc page, then the item
+docPageList:
+  - dir: ../example_doc
+  - dir: ../map-styles
+```
+
+### Naming an item by its path
+
+An item is named by the items from the top of the side panel down to it, **as the reader finds it**: segments separated by `/`, each naming one item among those under the previous one (the top of the side panel first). The grammar is one module, `lib/side-panel-item-path.js` (`sidePanelItemPathResolve`, `sidePanelItemPathRouteGet`), resolved on the page against the tree it shows, where the labels and the titles of the documents are known.
+
+- **A segment** is the item's `id`, or its **label**: the `text` in any of its languages, or, for a document item without a `text`, the title of its document. Case and runs of spaces do not count, and the spaces around a `/` are left out. A `/` inside a label is written `\/`; a label too long or too changeable to repeat is better named by its `id`.
+- **Several items matching** at one level: an id wins over a label, then the first in tree order.
+- **The levels a reader does not see may be left out, or named**: a **section** (a doc page of a workspace of several) by its alias, and a **sole root unfolded** ([below](#the-sole-root-unfolded)), drawn among its children, by its label or id. `Japanese areas`, `map-styles / Japanese areas` and `map-styles / map-styles / shikuchoson` name the same item of map-styles in a workspace where its section is `map-styles` and its root item is `map-styles`. Left out, a section's items are looked for in every section, in order; a path that must hold when another doc page is added names the section.
+- **A separator** is never named.
+- **What the path opens**: a document, a component panel or an inline item opens itself; a folder its own document, else the first document below it (as `@first/{itemId}`, [routes](doc_page_impl_nav.md#side-panel-routes-and-folder-navigation)); a section its first document.
+- **One segment naming nothing at the top** names the item of that **id** wherever it is: what `homeItem` meant before it took a path, and still the shortest form for an item with an id.
+
+```text
+the side panel, served alone      homeItem                                   opens
+⌂ map-styles                      Japanese areas                             Japanese areas
+  Block maps              ⌄       shikuchoson                                Japanese areas (its id)
+    Block maps: design            map-styles / Japanese areas                Japanese areas
+    Block maps: the format        Japanese areas / Japanese areas: design    its design document
+  Japanese areas          ⌄       Block maps / Block maps: the format        that document
+    Japanese areas: design        map-styles                                 the root row (README)
+  Playground
+```
+
+A path is checked when the page starts, not when the side panel is edited: renaming a label in place, or moving an item, does not rewrite a `homeItem` naming it, which then opens `homeDoc` or the first item, with the warning above ([TODO](doc_page_impl_TODO.md#side-panel-home-item-path-rewritten)).
+
 ## A workspace of several doc pages
 
 A workspace with one root doc page shows that doc page's side panel, as if it were served alone. With several (written in the workspace file or [mounted for now](doc_page_impl_source.md#temporary-doc-pages)), the side panel shows them one after the other, each as a **section**: the alias of the doc page as a muted heading, then its own side panel at the depth of the tree's root, so its items look as they do alone. The workspace only arranges the side panels; a doc page's tree stays in its entry.
@@ -700,8 +760,10 @@ frontend/src/lib/side-panel-move.js      place index, what a move is allowed to 
 frontend/src/lib/side-panel-node.js      what a structure change is allowed to do and writes
 frontend/src/lib/side-panel-item.js      renderer choice and item data
 frontend/src/lib/side-panel-search.js    the items searched (stopping at a source folder), matching
+frontend/src/lib/side-panel-item-path.js an item named by its path (homeItem), resolved to a route
 frontend/src/lib/text-localized.js       localized label parsing and selection, shared with indexes
 frontend/src/store/DocEditStore.ts       sidePanelText: the label being edited, the write
+frontend/src/store/DocStore.ts           routeHome: the home (homeItem, homeDoc, the first item)
 frontend/src/store/DocSidePanelStore.ts  folder open state, drag, picker, context menu, the move, the
                                          structure changes and their dialog, refresh (sidePanel route),
                                          the search (query, results, the item chosen and revealed)

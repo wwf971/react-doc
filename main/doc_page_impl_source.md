@@ -211,8 +211,8 @@ docEntry:
 # .doc-workspace/workspace.yaml: paths relative to this file, so the workspace folder is ..
 title: My Site                      # optional page values, over those of the first doc page's entry
 titleShort: Site                    # the title in a few words, beside title only (doc_page_impl.md#the-tab-title)
-homeDoc: ~guide:guide/overview.md   # a full source path, or a local path of the first doc page
-homeItem: ...
+homeDoc: ~guide:guide/overview.md   # what "/" opens: a full source path, or a local path of the first doc page
+homeItem: guide / Install           # or an item by its path in the side panel, read first (doc_page_impl_side_panel.md#the-home-of-the-page)
 docPageList:                        # the root-level doc pages, in side-panel order; at least one
   - alias: guide                    # unique in the workspace; the folder name when absent
     dir: ../guide                   # the doc page folder, or file: its entry file (exactly one)

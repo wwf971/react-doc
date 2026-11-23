@@ -452,3 +452,27 @@ test('the short title goes with the title of its place (doc_page_impl.md#the-tab
   fs.writeFileSync(entryFile, text.replace('  title: Guide\n', '  titleShort: Guide\n'));
   assert.throws(() => docWorkspaceLoad(spec, dir), /"titleShort" shortens "title" of the same place/);
 });
+
+test('the home comes from one place; an entry\'s homeItem counts only when its doc page is served alone (doc_page_impl_side_panel.md#the-home-of-the-page)', (context) => {
+  context.mock.method(console, 'warn', () => {});
+  const dir = fixtureCreate();
+  const entryFile = path.join(dir, 'guide/.doc-page/entry.yaml');
+  const text = fs.readFileSync(entryFile, 'utf-8');
+  fs.writeFileSync(entryFile, text.replace('  title: Guide\n', '  title: Guide\n  homeDoc: ~guide/a.md\n  homeItem: Sub / B\n'));
+  // served alone (a virtual workspace): the entry's pair
+  const loadedAlone = docEntryLoad(path.join(dir, 'guide'), dir);
+  assert.equal(loadedAlone.entry.homeItem, 'Sub / B');
+  assert.equal(loadedAlone.entry.homeDoc, '~guide:guide/a.md');
+  // in a workspace that names no home: the entry's homeDoc as before, its homeItem not
+  const spec = workspaceSpecGet(dir, [{ alias: 'guide', dir: 'guide' }, { alias: 'sub', dir: 'sub' }]);
+  const loadedWorkspace = docWorkspaceLoad(spec, dir);
+  assert.equal(loadedWorkspace.entry.homeItem, undefined);
+  assert.equal(loadedWorkspace.entry.homeDoc, '~guide:guide/a.md');
+  // a workspace naming a home: both keys are its own, nothing of the entry under them
+  const loadedHomed = docWorkspaceLoad({ ...spec, homeItem: 'sub / B' }, dir);
+  assert.equal(loadedHomed.entry.homeItem, 'sub / B');
+  assert.equal(loadedHomed.entry.homeDoc, undefined);
+  // a home written in a workspace file is read from it
+  fs.writeFileSync(path.join(dir, 'workspace.yaml'), 'homeItem: guide / A\ndocPageList:\n  - dir: ./guide\n');
+  assert.equal(docWorkspaceLoad(docWorkspaceSpecRead({ file: './workspace.yaml' }, dir, 'config.yaml'), dir).entry.homeItem, 'guide / A');
+});
