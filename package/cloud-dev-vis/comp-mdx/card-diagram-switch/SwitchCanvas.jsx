@@ -1,6 +1,6 @@
 import { useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { observer } from 'mobx-react-lite';
-import { Background, Controls, EdgeLabelRenderer, ReactFlow, ReactFlowProvider, useNodesInitialized, useReactFlow } from '@xyflow/react';
+import { Background, Controls, EdgeLabelRenderer, ReactFlow, ReactFlowProvider, useNodesInitialized, useReactFlow, useStoreApi } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { Check, CircleAlert, LoaderCircle } from '../../../../main/frontend/UICommon.js';
 import { DiagramEdge, DiagramNode, DiagramPointNode, DiagramRenderContext, DiagramSearchPathContext, connectionPathBuild, useDiagramSearchMark } from '../card-diagram/DiagramRender.jsx';
@@ -122,15 +122,22 @@ const CAMERA_START = { x: 0, y: 0, zoom: 1 };
 
 const SwitchFlow = observer(function SwitchFlow({ store, children }) {
 	const rf = useReactFlow();
+	const flowStore = useStoreApi();
 	const isInitialized = useNodesInitialized();
 	const { flowVersion } = store;
 	useEffect(() => {
-		store.viewportApiSet({ viewportSet: (camera) => { void rf.setViewport(camera); }, viewportGet: () => rf.getViewport() });
+		// originGet: where the canvas stands on the screen, for a camera handed to another canvas taking
+		// its place (config.viewInitial with origin: the editor of the block)
+		store.viewportApiSet({
+			viewportSet: (camera) => { void rf.setViewport(camera); },
+			viewportGet: () => rf.getViewport(),
+			originGet: () => { const rect = flowStore.getState().domNode?.getBoundingClientRect(); return rect ? { x: rect.left, y: rect.top } : null; },
+		});
 		return () => {
 			store.cameraLive = { ...rf.getViewport() };
 			store.viewportApiSet(null);
 		};
-	}, [store, rf]);
+	}, [store, rf, flowStore]);
 	useEffect(() => { store.flowInitializedSet(isInitialized); }, [store, isInitialized, flowVersion]);
 	useEffect(() => {
 		if (!isInitialized || store.isCameraReady || !store.box) return undefined;

@@ -209,10 +209,13 @@ const DiagramERCanvas = observer(function DiagramERCanvas({ store, viewState, is
 	});
 	const signature = JSON.stringify(viewport);
 	// a camera the host hands over as the canvas mounts (config.viewInitial: a canvas taking the
-	// place of another, at the place the reader was): it is what the diagram remembers from then on
+	// place of another, at the place the reader was): it is what the diagram remembers from then on.
+	// With origin ({ x, y }: where the other canvas stood on the screen), it is taken as that canvas
+	// showed it, so what was on the screen stays where it was whatever stands around this canvas
 	const viewInitial = useRef(config?.viewInitial);
 	if (viewInitial.current && viewState) {
-		Object.assign(viewState, { signature, view: { ...viewInitial.current } });
+		const { origin, ...view } = viewInitial.current;
+		Object.assign(viewState, { signature, view, origin: origin ?? null });
 		viewInitial.current = null;
 	}
 	const viewRemembered = viewState?.signature === signature ? viewState.view : undefined;
@@ -288,7 +291,13 @@ const DiagramERCanvas = observer(function DiagramERCanvas({ store, viewState, is
 		let frameIdInner;
 		const frameId = requestAnimationFrame(() => {
 			frameIdInner = requestAnimationFrame(() => {
-				const view = viewState?.signature === signature ? viewState.view : viewport.view;
+				let view = viewState?.signature === signature ? viewState.view : viewport.view;
+				// a camera handed over from another canvas: moved by how far this one stands from it
+				const rect = viewState?.origin && view && view !== 'auto' ? wrapper.current?.getBoundingClientRect() : null;
+				if (rect) {
+					view = { ...view, x: view.x + viewState.origin.x - rect.left, y: view.y + viewState.origin.y - rect.top };
+					Object.assign(viewState, { view, origin: null });
+				}
 				const operation = !view || view === 'auto' ? fitView({ padding: 0.12, duration: 0, minZoom: viewport.zoom.min, maxZoom: viewport.zoom.max }) : setViewport(view);
 				void operation.then(() => { rangeApply(getViewport()); isReadySet(true); });
 			});
@@ -333,7 +342,11 @@ const DiagramERCanvas = observer(function DiagramERCanvas({ store, viewState, is
 			fitViewOptions={{ padding: 0.12 }}
 			minZoom={viewport.zoom.min}
 			maxZoom={viewport.zoom.max}
-			onMove={(_event, view) => { if (viewState) Object.assign(viewState, { signature, view: { ...view } }); config?.onViewChange?.(view); }}
+			onMove={(_event, view) => {
+				if (viewState) Object.assign(viewState, { signature, view: { ...view } });
+				// with where the canvas stands on the screen, for a host handing the camera to another canvas
+				if (config?.onViewChange) { const rect = wrapper.current?.getBoundingClientRect(); config.onViewChange(view, rect ? { x: rect.left, y: rect.top } : null); }
+			}}
 			onMoveEnd={(_event, view) => rangeApply(view)}
 			proOptions={{ hideAttribution: true }}
 			nodesDraggable={isEditing && !isLocked}

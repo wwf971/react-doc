@@ -21,8 +21,21 @@ import { SwitchSceneFloatingCard, switchSceneCardSourceBuild, switchScenePanelTa
 // the panel, for the whole visual session: the editor of the canvas opens again for another scene
 // (editToken) and finds the panel as it left it. The page is told the document, never the diagram
 // of one scene. The feature layers the document names (featureList) are offered for every scene.
+//
+// Where the session opens (config.edit.at { path, camera }: where the reader was, given by a host whose
+// reading viewport is replaced by the editor): on that scene, or that view, at that camera, so entering
+// moves nothing; a scene shown from a mount is not edited here, and the session opens on the first.
+// Where the reader is in the session is told back (config.edit.onAt { path, camera }), so the viewport
+// drawn again when it ends opens there (config.at of the block).
 export const SwitchSceneEdit = observer(function SwitchSceneEdit({ data, config, onEvent, registry, isInPopup, mounted }) {
+	const at = config.edit?.at;
 	const [store] = useState(() => new SwitchSceneEditStore(data.source || data.raw || ''));
+	// the camera handed over is the first editor's alone: another scene opened later is fitted as before
+	const [cameraAt] = useState(() => (at?.path && store.targetAtSet(at.path) && at.camera ? { token: store.editToken, camera: at.camera } : null));
+	const onAt = config.edit?.onAt;
+	useEffect(() => {
+		if (store.target) onAt?.({ path: store.target.key, camera: cameraAt && cameraAt.token === store.editToken ? cameraAt.camera : null });
+	}, [onAt, store.target?.key]); // eslint-disable-line react-hooks/exhaustive-deps
 	// the page is told the document after every command of the block
 	store.onReport = () => { void onEvent?.('editDraftChange', store.reportOf()); };
 	useEffect(() => { store.mountedSet(mounted); }, [store, mounted]);
@@ -41,6 +54,8 @@ export const SwitchSceneEdit = observer(function SwitchSceneEdit({ data, config,
 		// the panel is the block's, drawn here under the editor; the editor knows the block session
 		panel: store.panel,
 		sceneEdit: store,
+		viewInitial: cameraAt && cameraAt.token === store.editToken ? cameraAt.camera : config.viewInitial,
+		onViewChange: (view, origin) => { config.onViewChange?.(view, origin); onAt?.({ path: target.key, camera: { ...view, ...(origin ? { origin } : {}) } }); },
 	};
 	// a report of the editor is of one diagram: the page gets the document written from the drafts
 	const onEventScene = (type, payload) => {

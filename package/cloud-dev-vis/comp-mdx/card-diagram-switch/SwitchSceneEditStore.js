@@ -4,7 +4,7 @@ import { EditHistory } from '../card-diagram/DiagramEditHistory.js';
 import { DiagramPanelStore } from '../card-diagram/DiagramPanelStore.js';
 import { DiagramPanelTreeStore } from '../card-diagram/DiagramPanelTreeStore.js';
 import { GRAPH_CAMERA_REST, panelGraphZoomClamp } from '../card-diagram/DiagramPanelGraph.jsx';
-import { switchDocNormalize, switchPathIsWithin, switchPathLast, switchPathNormalize, switchPathParent, switchPresentationBuild, switchViewResolve } from './SwitchData.js';
+import { switchDocNormalize, switchPathIsWithin, switchPathLast, switchPathNormalize, switchPathParent, switchPathViewRead, switchPresentationBuild, switchViewResolve } from './SwitchData.js';
 import { switchPathPrefixMove } from './SwitchRef.js';
 import { SCENE_TREE_BLOCK_KEY, sceneKeyOf, sceneTreeKeyRead, switchDocPathMove, switchDocViewIdMove, switchSceneRefIndexBuild, switchSceneTreeIndexBuild, switchSceneTreeModelBuild, viewKeyOf } from './SwitchSceneEditTree.js';
 
@@ -102,6 +102,17 @@ export class SwitchSceneEditStore {
 		if (this.draftByKey.has(target.key)) return this.draftByKey.get(target.key);
 		const { diagram } = target;
 		return yamlStringify({ version: 1, ...(this.defaults && !diagram.defaults ? { defaults: this.defaults } : {}), ...diagram });
+	}
+
+	// the target a path names, as the session opens on it (where the reader was: config.edit.at): the
+	// scene, or the view the path names, or the first view of the scene; false when it names none
+	// (a scene shown from a mount is edited where it is held)
+	targetAtSet(path) {
+		const key = String(path ?? '');
+		const found = this.targetList.find((item) => item.key === key) ?? this.targetList.find((item) => item.path === switchPathViewRead(key).path);
+		if (!found) return false;
+		this.targetKey = found.key;
+		return true;
 	}
 
 	// a target chosen by its key: what was done to the one on the canvas is committed first

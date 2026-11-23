@@ -82,7 +82,11 @@ export class SwitchStore {
 	// message, isDirty, select (what is focused as it opens), token (one per session) }
 	sceneEdit = null;
 
-	constructor({ provider, registry, resolve, pathInitial = '', scope = '' }) {
+	// cameraInitial: the camera of the scene it opens on (pathInitial), where a host had it last (the
+	// block drawn again after its editor: card-diagram-flexible-switch.md#editing-a-block-of-scenes);
+	// with origin ({ x, y }: where the canvas it was taken from stood on the screen), it is moved by how
+	// far this canvas stands from that one once its place is known (cameraOriginSettle)
+	constructor({ provider, registry, resolve, pathInitial = '', scope = '', cameraInitial = null }) {
 		this.registry = registry;
 		this.resolve = resolve;
 		this.scope = scope;
@@ -132,6 +136,13 @@ export class SwitchStore {
 			measurePathList: observable.ref, captureHint: observable.ref, command: observable.ref, sceneEdit: observable.ref,
 		}, { autoBind: true });
 		this.providerSet(provider, pathInitial);
+		// the camera handed over is the reader's own of the scene it opens on, painted from the first frame
+		if (cameraInitial && !this.message) {
+			const { origin, ...camera } = cameraInitial;
+			this.cameraByPath.set(this.pathCurrent, camera);
+			this.cameraLive = { ...camera };
+			this.cameraOrigin = origin ?? null;
+		}
 	}
 
 	// ---------- the scenes ----------
@@ -1026,11 +1037,26 @@ export class SwitchStore {
 		return { id: SWITCH_TITLE_ID, type: 'visualizationNode', position: { x: rect.x, y: rect.y }, style: { width: 'max-content', height: rect.height }, draggable: false, selectable: false, focusable: false, connectable: false, data: { node } };
 	}
 
+	// the size of the canvas: a size changed fits every scene again; the first size known keeps the
+	// camera the store was opened with (cameraInitial), the only one there can be before it
 	boxSet(box) {
 		if (this.box && this.box.width === box.width && this.box.height === box.height) return;
+		const isFirst = !this.box;
 		this.box = box;
-		this.cameraByPath.clear();
-		if (!this.plan) this.cameraApply(this.cameraDefaultGet(this.pathCurrent));
+		if (!isFirst) this.cameraByPath.clear();
+		else this.cameraOriginSettle();
+		if (!this.plan) this.cameraApply(this.cameraOf(this.pathCurrent));
+	}
+
+	// the camera handed over with where its canvas stood, moved by how far this canvas stands from
+	// it: what was on the screen stays where it was. Once, as soon as the canvas has its place
+	cameraOriginSettle() {
+		const origin = this.cameraOrigin;
+		const here = origin ? this.viewportApi?.originGet?.() : null;
+		if (!here) return;
+		this.cameraOrigin = null;
+		const camera = this.cameraByPath.get(this.pathCurrent);
+		if (camera) this.cameraByPath.set(this.pathCurrent, { ...camera, x: camera.x + origin.x - here.x, y: camera.y + origin.y - here.y });
 	}
 
 	cameraApply(camera) {
@@ -1046,6 +1072,7 @@ export class SwitchStore {
 	// the first paint: the nodes are measured, the camera can fit them
 	flowFirstReady() {
 		if (this.isCameraReady) return;
+		this.cameraOriginSettle();
 		this.cameraApply(this.cameraOf(this.pathCurrent));
 		this.isCameraReady = true;
 		if (this.itemInitial) {

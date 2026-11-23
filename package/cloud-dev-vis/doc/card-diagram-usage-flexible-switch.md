@@ -614,4 +614,6 @@ mountList:
     sourcePath: /                                         # the part of it shown; all of it by default
 ```
 
+The item may also hold a single diagram (the usual format, without `sceneList`): it is one scene at `path`, labelled by `label`. `versionId` (beside `itemId`) shows that version of the item instead of its head.
+
 An own scene may not stand inside a mount, nor two mounts inside each other. A mount that cannot be read is a scene at its path saying why ([Sources of scenes](card-diagram-flexible-switch.md#sources-of-scenes)).

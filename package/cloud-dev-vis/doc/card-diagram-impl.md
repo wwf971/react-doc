@@ -580,7 +580,7 @@ scope
 | the bar | undo, redo, Save, Cancel; **+** only where the host offers something (`createSourceList`, `createActionList`), and the panel of a double-click offers nothing else |
 | Escape | lets go of what is focused at once (there is no path to step along) |
 
-What a host may also say in `config`: `editLabel` (the word of the bar), `editSelect` (`{ nodeId, rowId?, fieldId?, propId?, connectionId?, isCell? }`: what is focused as the editor opens, its value typed or its menu open with `isCell`), `onEditRest(report)` (nothing is focused any more), `viewInitial` and `onViewChange` (the camera handed over, and told of: a canvas taking the place of another).
+What a host may also say in `config`: `editLabel` (the word of the bar), `editSelect` (`{ nodeId, rowId?, fieldId?, propId?, connectionId?, isCell? }`: what is focused as the editor opens, its value typed or its menu open with `isCell`), `onEditRest(report)` (nothing is focused any more), `viewInitial` and `onViewChange` (the camera handed over, and told of: a canvas taking the place of another). A camera handed over may say where its canvas stood on the screen (`viewInitial.origin`, `{ x, y }`), and `onViewChange(view, origin)` says it of this one: the canvas taking it moves it by how far it stands from the other once its place is known, so what was on the screen stays where it was whatever bar or border stands around either. The camera of a canvas is remembered under its block (`sourcePath`, `blockIndex`) for a viewport of the same size: a host drawing one diagram read and edited in one place gives both the same height.
 
 ### History
 

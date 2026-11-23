@@ -1,4 +1,5 @@
 import { switchDocNormalize, switchPathIsWithin, switchPathLast, switchPathNormalize, switchPathParent, switchProviderFromDoc } from './SwitchData.js';
+import { yamlParse } from '../../../../main/frontend/src/lib/yaml.js';
 import { switchRefMap, switchRefSplit } from './SwitchRef.js';
 
 // Sources of scenes (card-diagram-flexible-switch.md#sources-of-scenes): a viewport shows one
@@ -36,10 +37,22 @@ export function switchMountFromText(mount) {
 	return asset ? `${asset.store} / ${asset.name || asset.itemId}${asset.versionId && asset.versionId !== 'head' ? ` @${asset.versionId}` : ''}` : '';
 }
 
-// a document of scenes held elsewhere (the text of an asset item), as the source of a mount
+// what an asset item mounted holds: a document of scenes, or one diagram of the card diagram format
+// (nodes, connections, defaults; no sceneList), read as a document of that one scene at the root of
+// the source, labelled by the mount (card-diagram-flexible-switch.md#sources-of-scenes)
+export function switchMountDocOf(mount, text) {
+	const value = typeof text === 'string' ? yamlParse(text) : text;
+	if (!value || typeof value !== 'object' || Array.isArray(value) || value.sceneList !== undefined || !Array.isArray(value.nodes)) return value;
+	// version: 1 of a diagram standing alone is the block's, not the scene's
+	const { defaults, version, ...diagram } = value;
+	return { version: 1, defaults, sceneList: [{ path: '/', label: mount.label || switchPathLast(mount.path), diagram }] };
+}
+
+// a document of scenes held elsewhere (the text of an asset item), as the source of a mount; a
+// single diagram is a document of one scene (switchMountDocOf)
 export function switchMountProviderBuild(mount, text) {
 	try {
-		const spec = switchDocNormalize(text);
+		const spec = switchDocNormalize(switchMountDocOf(mount, text));
 		if (spec.mountList.length) throw new Error('A document mounted here mounts other documents itself: that is not read (one level of mounts).');
 		return { provider: switchProviderFromDoc(spec), spec, message: '' };
 	} catch (error) {

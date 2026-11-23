@@ -118,3 +118,36 @@ test('a mount that cannot be read is a scene at its path saying why; a box in a 
 	assert.equal((await read.boxSave('/shop/overview', { x: 0, y: 0, width: 1, height: 1 })).code, -1);
 	assert.equal((await read.boxSave('/overview', { x: 0, y: 0, width: 1, height: 1 })).code, 0);
 });
+
+test('a mount may read one diagram: a document of that one scene at the root of its source, labelled by the mount', () => {
+	const viewport = switchDocNormalize(`version: 1
+sceneList:
+  - path: /overview
+    diagram: { nodes: [{ id: go, renderer: { type: scene-link }, link: /flow, data: { title: Flow } }] }
+mountList:
+  - path: /flow
+    label: Order flow
+    from: { asset: { store: local, itemId: w5j7pmxa7fw, versionId: w5j7pmy0gul } }
+`);
+	const mount = viewport.mountList[0];
+	assert.equal(mount.from.asset.versionId, 'w5j7pmy0gul');
+	const diagram = `version: 1
+defaults:
+  connection: { renderer: { type: smoothstep } }
+nodes:
+  - { id: a, renderer: { type: card-note }, data: { title: A }, link: / }
+connections: []
+`;
+	const mounted = switchMountProviderBuild(mount, diagram);
+	assert.equal(mounted.message, '');
+	const provider = switchProviderCompose({ own: switchProviderFromDoc(viewport), mountList: [{ mount, provider: mounted.provider }] });
+	const scene = provider.sceneGet('/flow');
+	assert.equal(scene.label, 'Order flow');
+	assert.equal(scene.diagram.nodes[0].data.title, 'A');
+	assert.equal(scene.diagram.version, undefined);
+	// a reference inside it names its root, which the mount shows at its own path
+	assert.equal(scene.diagram.nodes[0].link, '/flow');
+	assert.deepEqual(provider.childListGet('/overview').map(one => one.path), []);
+	// what is neither a document of scenes nor a diagram is refused as before
+	assert.match(switchMountProviderBuild(mount, 'nodes: 3').message, /cannot be read/);
+});

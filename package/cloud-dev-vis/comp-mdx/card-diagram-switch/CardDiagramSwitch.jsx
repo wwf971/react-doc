@@ -37,9 +37,11 @@ export function useSwitchResolve() {
 // made again with the same signature is taken without reading the scenes again
 // depthMax: how deep scenes inside cards are drawn in this block (the presentation's depthMax).
 // the component's config (switchConfigDefineList) is read from config.compConfig
-export function useSwitchStore({ provider, registry, pathInitial, scope, config, depthMax }) {
+// cameraInitial: the camera of the scene it opens on, for a store made now (a block drawn again where
+// its host had it last); a store kept across mounts keeps its own
+export function useSwitchStore({ provider, registry, pathInitial, scope, config, depthMax, cameraInitial }) {
 	const resolve = useSwitchResolve();
-	const store = useCompStateStore(config, 'switch', () => new SwitchStore({ provider, registry, resolve, pathInitial, scope }));
+	const store = useCompStateStore(config, 'switch', () => new SwitchStore({ provider, registry, resolve, pathInitial, scope, cameraInitial }));
 	useEffect(() => { if (depthMax !== undefined) store.depthRenderMaxSet(depthMax); }, [store, depthMax]);
 	const titleAlign = config?.compConfig?.SceneTitleAlign;
 	useEffect(() => { store.titleAlignSet(titleAlign); }, [store, titleAlign]);
@@ -200,8 +202,14 @@ const CardDiagramSwitchBase = observer(function CardDiagramSwitchBase({ data = {
 	);
 });
 
+// config.at { path, camera }: where the block opens (the scene, and its camera), for a host drawing it
+// again where the reader was (its editor ended: card-diagram-flexible-switch.md#editing-a-block-of-scenes);
+// config.onSwitchStore(store): the store of the viewport, for a host asking where the reader is
+// (pathCurrent, viewportApi.viewportGet()) as the editor opens
 const CardDiagramSwitchBody = observer(function CardDiagramSwitchBody({ load, data, config, registry, scope, isInPopup, rootRef, title, copyStore, source, onEvent }) {
-	const store = useSwitchStore({ provider: load.provider, registry, pathInitial: data.path ?? load.spec.root, scope, config, depthMax: data.depthMax ?? load.spec.depthMax });
+	const store = useSwitchStore({ provider: load.provider, registry, pathInitial: data.path ?? config.at?.path ?? load.spec.root, scope, config, depthMax: data.depthMax ?? load.spec.depthMax, cameraInitial: config.at?.camera });
+	const onSwitchStore = config.onSwitchStore;
+	useEffect(() => { onSwitchStore?.(store); }, [onSwitchStore, store]);
 	const capture = switchCaptureActionBuild({ store, rootRef, titleGet: () => title });
 	const heightWritten = Number(data.height ?? config.height ?? load.spec.height);
 	const height = Number.isFinite(heightWritten) ? Math.max(240, Math.min(1400, heightWritten)) : 620;
