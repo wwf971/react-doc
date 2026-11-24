@@ -4,12 +4,10 @@ import { BaseEdge, Handle, Position, ViewportPortal, getBezierPath, getSmoothSte
 import { RegisteredComp } from '../../../../main/comp-doc/registry/RegisteredComp.jsx';
 import { DiagramCreatePanel } from './DiagramCreatePanel.jsx';
 import { cardSchemaGet } from './TableCardSchema.js';
-import { endpointIsDangling, handleAnchorDrawnOf } from './DiagramERData.js';
+import { anchorPointOnOutline, endpointIsDangling, handleAnchorDrawnOf } from './DiagramERData.js';
 import { labelLengthOf, routeIsEmpty, routeResolve, routeTypeHasAnchors } from './DiagramRoute.js';
 import { DiagramRouteControls } from './DiagramRouteControls.jsx';
 import { AnchoredPopover } from '../../../../main/comp-doc/popup/AnchoredPopover.jsx';
-import { CardSimple } from './CardSimple.jsx';
-import { anchorPointOnOutline } from './CardSimpleData.js';
 import { CARD_FOOTER_ANCHOR } from './TableCardSchema.js';
 import { cardFooterIsShown } from './TableCardData.js';
 import { nodeStyleVarsOf } from './DiagramNodeStyle.js';
@@ -87,9 +85,8 @@ export const DiagramNode = observer(function DiagramNode({ id, data }) {
 				// a row left out by rowDisplay has no anchor drawn, which matters only if a handle is on it
 				// a card of many views draws other rows in each: a handle on a row not drawn now stands on the side of the card
 				const isViewed = Boolean(node.data?.viewList?.length);
-				// a node drawn simple draws its mark alone: every handle stands on it (handleAnchorDrawnOf)
 				// the footer of a card is drawn only while it is shown (cardFooterIsShown)
-				const isAnchorNeeded = anchor => node.display !== 'simple' && !isViewed && (anchor.id !== CARD_FOOTER_ANCHOR || cardFooterIsShown(node)) && (!node.data?.rowDisplay || node.handles.some(handle => handle.anchor.target === anchor.id));
+				const isAnchorNeeded = anchor => !isViewed && (anchor.id !== CARD_FOOTER_ANCHOR || cardFooterIsShown(node)) && (!node.data?.rowDisplay || node.handles.some(handle => handle.anchor.target === anchor.id));
 				const missing = node.anchors.filter(anchor => anchor.id !== 'body' && !anchors.current.has(anchor.id) && isAnchorNeeded(anchor)).map(anchor => anchor.id);
 				const handles = node.handles.flatMap(handle => {
 					const anchorDrawn = handleAnchorDrawnOf(node, handle);
@@ -154,19 +151,17 @@ export const DiagramNode = observer(function DiagramNode({ id, data }) {
 
 // where a handle is drawn on the element of its anchor, in the coordinates of the page: on its
 // side at its offset, on the outline the element declares (data-anchor-outline: ellipse,
-// cylinder), so a line ends where it touches a round mark (CardSimpleData.js)
+// cylinder), so a line ends where it touches a round mark (CardMark.jsx)
 export function handlePointMeasure(element, anchor) {
 	const rect = element.getBoundingClientRect();
 	return anchorPointOnOutline({ left: rect.left, top: rect.top, width: rect.width, height: rect.height }, anchor.side, anchor.offset, element.dataset?.anchorOutline);
 }
 
 // the content of a node: a registered component (renderer.component), or the
-// card of its kind in the node registry of the component; drawn simple, the mark every kind
-// with a simple display shares (CardSimple.jsx)
+// card of its kind in the node registry of the component
 export const DiagramNodeContent = observer(function DiagramNodeContent({ id, node, config, registry, editor, anchorRef, visualization }) {
 	if (node.renderer.component) return <RegisteredComp compName={node.renderer.component} placement="visualizationNode" input={{ data: node.data }} configRuntime={{ ...config, instanceId: `${config.instanceId ?? 'diagram'}:node:${id}`, isEdit: false, visualization }} />;
 	const kind = registry?.kindByType[node.renderer.type];
-	if (node.display === 'simple' && kind?.contract.simple) return <CardSimple node={node} contract={kind.contract} anchorRef={anchorRef} nodeId={id} editor={editor} />;
 	const Card = kind?.Card;
 	if (!Card) return <div className="doc-vis-node-error" role="alert">No card draws a {node.renderer.type} node.</div>;
 	return <Card node={node} schema={cardSchemaGet(node, registry)} anchorRef={anchorRef} editor={editor} nodeId={id} />;

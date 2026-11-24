@@ -1,6 +1,5 @@
 import { diagramGeometryMovedBuild } from './DiagramArrange.js';
-import { diagramGeometryEstimateBuild, nodeIsSimple } from './DiagramArrangeOutline.js';
-import { anchorPointOnOutline, cardSimpleHandlePointOf, cardSimpleShapeOf } from './CardSimpleData.js';
+import { anchorPointEstimate, diagramGeometryEstimateBuild } from './DiagramArrangeOutline.js';
 import { CARD_FOOTER_HEIGHT, cardFooterIsShown } from './TableCardData.js';
 import { diagramLabelsPlace, diagramLaneCountByGapGet, diagramLineSceneGet, diagramLinesRoute, LANE_SPACING_MIN } from './DiagramArrangeRouter.js';
 import { labelBandWidthOf } from './DiagramLabelPlace.js';
@@ -122,8 +121,8 @@ function anchorSideListOf(contract, data, target) {
 	}
 }
 
-// the side a handle is turned to: one on a card as a whole (body) or on a node drawn simple, for
-// every line at it, the side most of them want; one on a part of a card (a row, the title line)
+// the side a handle is turned to: one on a card as a whole (body, which on a mark is drawn on
+// its shape), for every line at it, the side most of them want; one on a part of a card (a row, the title line)
 // keeps its side, and so does one whose anchor does not offer the side wanted. answers
 // [{ nodeId, handleId, side }] of the handles that may move, with the side they stand on then
 function handleSideListGet(diagram, registry, layerOf, rectById) {
@@ -154,7 +153,7 @@ function handleSideListGet(diagram, registry, layerOf, rectById) {
 		if (!handle) continue;
 		const contract = registry?.kindByType?.[node.renderer?.type]?.contract;
 		const target = handle.anchor?.target ?? 'body';
-		if (target !== 'body' && !nodeIsSimple(diagram, node, contract)) continue;
+		if (target !== 'body') continue;
 		const sideWanted = Object.entries(entry.countBySide).sort((a, b) => b[1] - a[1] || (a[0] === entry.sideFirst ? -1 : b[0] === entry.sideFirst ? 1 : 0))[0][0];
 		const side = anchorSideListOf(contract, node.data, target).includes(sideWanted) ? sideWanted : handle.anchor?.side;
 		list.push({ nodeId: entry.nodeId, handleId: entry.handleId, side, sideBefore: handle.anchor?.side, offsetBefore: handle.anchor?.offset ?? 0.5 });
@@ -196,8 +195,8 @@ function handleSpread(diagram, sideList, positionById, rectById) {
 	return changeList;
 }
 
-// where the end of a line is once its handle turned: on the side of its card, or of the mark of a
-// node drawn simple, at its offset
+// where the end of a line is once its handle turned: on the side of its card, or of the shape of
+// a mark, at its offset (anchorPointEstimate)
 function endChangedOfBuild(diagram, registry) {
 	const nodeById = new Map((diagram.nodes ?? []).map((node) => [node.id, node]));
 	return (connection, role, rect, change) => {
@@ -206,9 +205,7 @@ function endChangedOfBuild(diagram, registry) {
 		if (!handle) return null;
 		const contract = registry?.kindByType?.[node.renderer?.type]?.contract;
 		const offset = change.offset ?? handle.anchor?.offset ?? 0.5;
-		const point = nodeIsSimple(diagram, node, contract)
-			? cardSimpleHandlePointOf(rect, node.size, change.side, offset, cardSimpleShapeOf(contract))
-			: anchorPointOnOutline({ left: rect.x, top: rect.y, width: rect.width, height: rect.height }, change.side, offset);
+		const point = anchorPointEstimate(node, contract, rect, { target: 'body', side: change.side, offset });
 		return { ...point, side: change.side };
 	};
 }
@@ -237,7 +234,7 @@ export const diagramArrangerLayers = {
 		const nodeById = new Map((diagram.nodes ?? []).map((node) => [node.id, node]));
 		for (const item of sideList) {
 			const node = nodeById.get(item.nodeId);
-			const isCard = Boolean(options.registry?.kindByType?.[node?.renderer?.type]?.schema) && !nodeIsSimple(diagram, node, options.registry?.kindByType?.[node?.renderer?.type]?.contract);
+			const isCard = Boolean(options.registry?.kindByType?.[node?.renderer?.type]?.schema);
 			if (item.side !== 'bottom' || !isCard || cardFooterIsShown(node) || rectById.get(item.nodeId)?.isFooted) continue;
 			rectById.set(item.nodeId, { ...rectById.get(item.nodeId), height: rectById.get(item.nodeId).height + CARD_FOOTER_HEIGHT, isFooted: true });
 		}

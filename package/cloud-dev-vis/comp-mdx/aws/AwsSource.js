@@ -2,7 +2,7 @@ import { yamlStringify } from '../../../../main/frontend/src/lib/yaml.js';
 import { diagramArrangeApply } from '../card-diagram/DiagramArrange.js';
 import { diagramArrangerLayers } from '../card-diagram/DiagramArrangeLayers.js';
 import { awsHandleOf } from './AwsCardData.js';
-import { awsNodeRegistry } from './aws-node-registry.js';
+import { AWS_RESOURCE_LOOK_BY_TYPE, awsNodeRegistry } from './aws-node-registry.js';
 
 // The starting text of the blocks of the AWS series (doc/aws.md): a small system read downward,
 // laid out by the layer arranger when the block is made, so its first layout is the arranger's
@@ -26,12 +26,14 @@ export function awsSourceDefaultCreate() {
 	return { lang: 'yaml', raw: yamlStringify({ ...arranged(systemBuild()), viewport: { size: { height: 720 } } }) };
 }
 
-// two views of one system: an overview, every node drawn simple, and the resources as cards. the
-// same ids in both, so switching moves each card into its mark
+// two views of one system: an overview, every resource as its mark (aws-mark), and the resources as
+// cards. the same ids in both, so switching moves each card into its mark
 export function awsSwitchSourceDefaultCreate() {
 	const system = systemBuild();
-	// the marks without the widths of the cards: as wide as a mark and its words
-	const overview = arranged({ ...system, nodes: system.nodes.map(({ size: _size, ...node }) => node), defaults: { node: { display: 'simple' } } });
+	// a resource as its mark, what is no resource (the page) as its card; without the widths of the
+	// cards: a mark is as wide as it and its words
+	const markOf = (node) => (AWS_RESOURCE_LOOK_BY_TYPE[node.renderer.type] ? { id: node.id, renderer: { type: 'aws-mark' }, data: { name: node.data.name, resourceType: node.renderer.type }, handles: node.handles } : node);
+	const overview = arranged({ ...system, nodes: system.nodes.map(({ size: _size, ...node }) => markOf(node)) });
 	const resources = arranged(system);
 	// the two views share the objects of their lines: written out in each, without yaml aliases
 	return { lang: 'yaml', raw: yamlStringify({ version: 1, height: 620, sceneList: [{

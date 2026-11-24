@@ -8,7 +8,7 @@ The storage service that answers [the storage contract](storage-contract.md), an
 /system                         the two backends as frames, each showing what it holds; the page beside
                                 them; what passes between them
 /system/storage                 the storage service
-   @resources @overview            its resources as cards, or as simple marks
+   @resources @overview            its resources as cards, or as marks
    @read @write @upload @deploy    one request (or the deployment) step by step, on the same cards
 /system/storage/api             its routes, in the groups of the contract
 /system/storage/function        the modules of backend/, and what imports what

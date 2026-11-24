@@ -54,7 +54,7 @@ The documents written for authors are the usage documents of the components, wit
 - **Node kind.** Everything the engine knows about one node type (`renderer: { type: ... }`): how to check its data, which anchors it offers, the rows and fields the editor works with, the card that draws it, and how the create panel makes a new one.
 - **Node registry.** The list of kinds one diagram component can draw and create. It is fixed per component type, in code.
 - **Series.** A folder of components sharing one registry. The **base series** (`card-diagram`) holds the engine and the generic kinds; every other series (Power Platform, AWS) is a list of kinds plus the components bound to them.
-- **Display.** A node is drawn **detailed**, as the card of its kind, or **simple**, as a mark with its name, for an overview; its handles and lines are the same in both ([The display of a node](card-diagram-impl.md#the-display-of-a-node)).
+- **Mark.** A node drawn as a shape with its name under it, for an overview: a kind of its own a series builds, never a look of another kind; a thing seen as a card and as a mark is two views of one scene under one id ([Marks](card-diagram-impl.md#marks)).
 - **Arranger.** A set of rules laying out a diagram, applied by a generator every time it builds a scene, or by an author whenever asked ([Arrangers](card-diagram-arrange.md)).
 - **Feature.** A layer over the diagrams of a registry, which the engine reaches only through hooks: it owns a section of the data, may place nodes, may bring kinds and apis, and may join the editor ([Features](card-diagram-impl.md#features)). The parametric canvas is one: groups whose members are placed by rules, shapes and text, with a tool bar and a panel of the structure ([card-diagram-parametric-canvas.md](card-diagram-parametric-canvas.md)); the base, Power Platform and AWS series list it.
 
@@ -88,7 +88,7 @@ More in [Node Registries](card-diagram-impl.md#node-registries) and [History](ca
 | understand the data format, the canvas, the editor, the history, or add a generic card | [card-diagram-impl.md](card-diagram-impl.md) |
 | change a Power Platform card or component | [power-platform.md](power-platform.md) |
 | draw a system on AWS, or change an AWS card | for authors [AWS diagrams](../comp-mdx/aws/comp-aws.md); the design [aws.md](aws.md) |
-| draw one thing at two levels of detail, and keep its lines attached | [Detailed and simple](card-diagram-usage.md#detailed-and-simple), [When a node changes its look](card-diagram-usage.md#when-a-node-changes-its-look-its-lines-stay-attached) |
+| draw one thing at two levels of detail, and keep its lines attached | [Cards and marks](card-diagram-usage.md#cards-and-marks), [When a node changes its look](card-diagram-usage.md#when-a-node-changes-its-look-its-lines-stay-attached) |
 | write diagrams in a document | [Data diagrams](../comp-mdx/power-platform/comp-diagram-er.md), [Power Platform diagrams](../comp-mdx/power-platform/comp-powerplatform.md) |
 | make a diagram move between named states | for authors [Card Diagram Animation](card-diagram-usage-animation.md); the design [card-diagram-animation.md](card-diagram-animation.md) |
 | show many diagrams in one viewport, by path, with smooth switching | for authors [Card Diagram Scenes](card-diagram-usage-flexible-switch.md); the design [card-diagram-flexible-switch.md](card-diagram-flexible-switch.md) |
@@ -112,7 +112,7 @@ More in [Node Registries](card-diagram-impl.md#node-registries) and [History](ca
 | `comp-mdx/card-diagram/DiagramRoute.js`, `DiagramRouteControls.jsx`, `DiagramApiList.js`, `DiagramCanvasRegistry.js` | the route of a line, its controls, and the apis of a diagram: [card-diagram-connection-line.md](card-diagram-connection-line.md#implementation) |
 | `comp-mdx/card-diagram/DiagramArrange.js`, `DiagramArrangeOutline.js`, `DiagramArrangeRows.js`, `DiagramArrangeLayers.js`, `DiagramArrangeRouter.js`, `comp-mdx/power-platform/er-arrange/` | the contract of an arranger, the arrangers of the base series, the lane router they share, and the arrangers of ER diagrams: [card-diagram-arrange.md](card-diagram-arrange.md) |
 | `comp-mdx/card-diagram/CardComp.jsx`, `CardCompData.js`, `CardCompEntry.js` | the kind `card-comp`: a component of the page in a card, its data, the components it may hold, its editing ([A component in a card](card-diagram-impl.md#a-component-in-a-card)) |
-| `comp-mdx/card-diagram/CardSimple.jsx`, `CardSimpleData.js` | the simple display of a node: the mark, its anchors, where a handle stands on its outline: [The display of a node](card-diagram-impl.md#the-display-of-a-node) |
+| `comp-mdx/card-diagram/CardMark.jsx`, `CardMarkData.js` | a mark: the kind a series builds (`cardMarkKindBuild`), its shape, its anchors, where a handle stands on its outline: [Marks](card-diagram-impl.md#marks) |
 | `comp-mdx/aws/` | the AWS series: [aws.md](aws.md#implementation) |
 | `comp-mdx/card-diagram/CardIconToken.jsx`, `CardIconTokenData.js` | an icon in a text of a card: a token kind of the cell editing kit, and its text for generators ([Icons in a text](card-diagram-impl.md#icons-in-a-text)) |
 | `comp-mdx/card-diagram/DiagramPopupPlace.js` | where a popup opened at a point stands: a corner of it on the point |

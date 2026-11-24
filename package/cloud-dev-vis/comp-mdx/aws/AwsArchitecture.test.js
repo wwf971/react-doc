@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { diagramNormalize, endpointKeyOf } from '../card-diagram/DiagramERData.js';
-import { diagramGeometryEstimateBuild, nodeIsSimple } from '../card-diagram/DiagramArrangeOutline.js';
+import { diagramGeometryEstimateBuild } from '../card-diagram/DiagramArrangeOutline.js';
 import { routeOverlapListGet, routeResolve } from '../card-diagram/DiagramRoute.js';
 import { switchRegistryBuild } from '../card-diagram-switch/SwitchNodeKinds.jsx';
 import { awsNodeRegistry } from './aws-node-registry.js';
@@ -13,8 +13,7 @@ const registry = switchRegistryBuild(awsNodeRegistry);
 // the lines of a diagram as the estimate places their ends, with sharp corners
 function overlapListOf(diagram) {
 	const geometry = diagramGeometryEstimateBuild(diagram, { registry });
-	const nodeById = new Map(diagram.nodes.map((node) => [node.id, node]));
-	const keyOf = (endpoint) => endpointKeyOf(endpoint, nodeById.get(endpoint.nodeId), nodeIsSimple(diagram, nodeById.get(endpoint.nodeId), registry.kindByType[nodeById.get(endpoint.nodeId).renderer.type]?.contract));
+	const keyOf = (endpoint) => endpointKeyOf(endpoint);
 	return routeOverlapListGet(diagram.connections.map((connection) => {
 		const a = geometry.endOf(connection, 'source');
 		const b = geometry.endOf(connection, 'target');
@@ -41,10 +40,15 @@ test('an architecture: every scene and view drawn from the description is a vali
 	assert.ok(idsOf(orders.viewList[0]).every((id) => idsOf(orders.viewList[3]).includes(id)));
 	// the frame of the group: its own resources alone
 	assert.ok(orders.viewList[2].diagram.nodes.every((node) => node.id.startsWith('orders.')));
-	// what another group holds stands at the edge, drawn simple, opening its group
+	// at a glance, every resource is its mark (aws-mark), standing for the kind of its card
+	const resourceNodeListOf = (view) => view.diagram.nodes.filter((node) => model.resourceByKey.has(node.id));
+	assert.ok(resourceNodeListOf(orders.viewList[1]).every((node) => node.renderer.type === 'aws-mark' && node.data.resourceType === model.resourceByKey.get(node.id).kind));
+	assert.ok(resourceNodeListOf(orders.viewList[2]).every((node) => node.renderer.type === 'aws-mark'));
+	// what another group holds stands at the edge, as its mark, opening its group
 	const external = orders.viewList[0].diagram.nodes.find((node) => node.id === 'auth.pool');
-	assert.equal(external.display, 'simple');
+	assert.deepEqual([external.renderer.type, external.data.resourceType], ['aws-mark', model.resourceByKey.get('auth.pool').kind]);
 	assert.equal(external.link, '/system/auth');
+	assert.notEqual(orders.viewList[0].diagram.nodes.find((node) => node.id === 'orders.api').renderer.type, 'aws-mark');
 	// the flow keeps the cards where they stand and draws its steps
 	assert.deepEqual(orders.viewList[3].diagram.nodes.find((node) => node.id === 'orders.api').position, orders.viewList[0].diagram.nodes.find((node) => node.id === 'orders.api').position);
 	assert.equal(orders.viewList[3].diagram.connections[0].label.text, '1 POST /order/place');

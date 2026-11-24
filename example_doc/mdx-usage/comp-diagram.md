@@ -128,9 +128,9 @@ sequenceDiagram
 
 <!--renderComp=MultiLang,type=paragraphs,languages=[en,jp]-->
 ```markdown
-`DiagramAws` draws the resources of a system on AWS (an http api, a function, a table, a bucket, a user pool, a role) as cards, or, as here, as simple marks for an overview: one line of the data, `defaults: { node: { display: simple } }`, and the lines stay where they were attached. The cards, the arrangers that lay them out, and a system at several scales are on their own page: [AWS diagrams](~cloud-dev-vis:cloud-dev-vis/comp-mdx/aws/comp-aws.md); the storage service of `aws-utils` is drawn with them: [Storage Service Architecture](~aws-utils:aws-utils/doc/storage-architecture.md).
+`DiagramAws` draws the resources of a system on AWS (an http api, a function, a table, a bucket, a user pool, a role) as cards, or, as here, as marks for an overview: `aws-mark`, a node standing for a resource of any kind, its lines attached as to its card. The cards, the arrangers that lay them out, and a system at several scales are on their own page: [AWS diagrams](~cloud-dev-vis:cloud-dev-vis/comp-mdx/aws/comp-aws.md); the storage service of `aws-utils` is drawn with them: [Storage Service Architecture](~aws-utils:aws-utils/doc/storage-architecture.md).
 
-`DiagramAws` は AWS 上のシステムのリソース（HTTP API、関数、テーブル、バケット、ユーザープール、ロール）をカードとして、またはここでのように概要用のシンプルな記号として描きます。データの一行 `defaults: { node: { display: simple } }` で切り替わり、接続線はつながったままです。カード、配置を決める arranger、複数の縮尺のシステムは専用のページにまとめています：[AWS 図](~cloud-dev-vis:cloud-dev-vis/comp-mdx/aws/comp-aws.md)。`aws-utils` のストレージサービスもこれで描いています：[Storage Service Architecture](~aws-utils:aws-utils/doc/storage-architecture.md)。
+`DiagramAws` は AWS 上のシステムのリソース（HTTP API、関数、テーブル、バケット、ユーザープール、ロール）をカードとして、またはここでのように概要用の記号として描きます。記号は `aws-mark` という種類のノードで、どの種類のリソースも表せ、接続線はカードと同じように付けます。カード、配置を決める arranger、複数の縮尺のシステムは専用のページにまとめています：[AWS 図](~cloud-dev-vis:cloud-dev-vis/comp-mdx/aws/comp-aws.md)。`aws-utils` のストレージサービスもこれで描いています：[Storage Service Architecture](~aws-utils:aws-utils/doc/storage-architecture.md)。
 ```
 
 <!--renderComp=DiagramAws,title=A small system at a glance-->
@@ -145,51 +145,28 @@ nodes:
     handles: [ { id: out, direction: out, anchor: { target: body, side: bottom } } ]
     position: { x: 75, y: 0 }
   - id: api
-    renderer: { type: aws-http-api }
-    data:
-      name: "{prefix}--api"
-      authorizer: "jwt: the user pool"
-      cors: any origin
-      throttle: 20 / s
-      properties: [ { id: items, name: items, value: "create, get, update" } ]
+    renderer: { type: aws-mark }
+    data: { name: "{prefix}--api", resourceType: aws-http-api }
     handles:
       - { id: in, direction: in, anchor: { target: body, side: top } }
       - { id: out, direction: out, anchor: { target: body, side: bottom } }
     position: { x: 94, y: 102 }
   - id: function
-    renderer: { type: aws-lambda }
-    data:
-      name: "{prefix}--api"
-      runtime: python3.12
-      memory: 512 MB
-      timeout: 29 s
-      role: "{prefix}--api-role"
-      properties: [ { id: table, name: TABLE_DATA, value: the table } ]
+    renderer: { type: aws-mark }
+    data: { name: "{prefix}--api", resourceType: aws-lambda }
     handles:
       - { id: in, direction: in, anchor: { target: body, side: top } }
       - { id: rows, direction: out, anchor: { target: body, side: bottom, offset: 0.333 } }
       - { id: objects, direction: out, anchor: { target: body, side: bottom, offset: 0.667 } }
     position: { x: 94, y: 264 }
   - id: table
-    renderer: { type: aws-dynamodb-table }
-    data:
-      name: items
-      nameLogical: "{prefix}--data"
-      pk: pk (S)
-      sk: sk (S)
-      description: billed per request
-      attributes:
-        - { id: pk, key: PK, name: pk, type: S, holds: the owner }
-        - { id: sk, key: SK, name: sk, type: S, holds: the item }
+    renderer: { type: aws-mark }
+    data: { name: items, resourceType: aws-dynamodb-table }
     handles: [ { id: in, direction: in, anchor: { target: body, side: top } } ]
     position: { x: 0, y: 426 }
   - id: bucket
-    renderer: { type: aws-s3-bucket }
-    data:
-      name: "{prefix}--data"
-      access: private
-      versioning: off
-      properties: [ { id: data, name: data/, value: large bytes } ]
+    renderer: { type: aws-mark }
+    data: { name: "{prefix}--data", resourceType: aws-s3-bucket }
     handles: [ { id: in, direction: in, anchor: { target: body, side: top } } ]
     position: { x: 188, y: 426 }
 connections:
@@ -213,8 +190,6 @@ connections:
     target: { nodeId: bucket, handleId: in }
     label: { text: objects, position: 0.5 }
     route: { anchorList: [ { id: a1, along: 1, x: 0, y: -21.3 } ] }
-defaults:
-  node: { display: simple }
 ```
 
 <!--renderComp=Anchor,id=proxy-connection-diagram-->

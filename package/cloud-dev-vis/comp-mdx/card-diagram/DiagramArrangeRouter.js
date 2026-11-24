@@ -2,7 +2,6 @@ import { routePathRead, routeOverlapPairGet, routeResolve, routeTypeIsRightAngle
 import { lineTypeOfConnection } from './DiagramArrange.js';
 import { labelPositionListPlace } from './DiagramLabelPlace.js';
 import { endpointKeyOf } from './DiagramERData.js';
-import { nodeIsSimple } from './DiagramArrangeOutline.js';
 
 // The routes of the right-angled lines of a diagram of cards standing in columns, from where
 // the cards and the ends of the lines are (card-diagram-arrange.md#the-lane-router). It knows
@@ -341,15 +340,9 @@ function lineFinished(line, d) {
 }
 
 // what the line router needs of a diagram: its cards and its right-angled, attached lines.
-// a line out of scope stays as it is and counts as something to keep off. registry: of the
-// component, to know a node drawn simple, whose handles on one place of its mark are one end
-export function diagramLineSceneGet(diagram, geometry, { connectionIdList, registry } = {}) {
+// a line out of scope stays as it is and counts as something to keep off
+export function diagramLineSceneGet(diagram, geometry, { connectionIdList } = {}) {
 	const idSet = connectionIdList ? new Set(connectionIdList) : null;
-	const nodeById = new Map((diagram.nodes ?? []).map((node) => [node.id, node]));
-	const keyOf = (endpoint) => {
-		const node = nodeById.get(endpoint.nodeId);
-		return endpointKeyOf(endpoint, node, Boolean(node) && nodeIsSimple(diagram, node, registry?.kindByType?.[node.renderer?.type]?.contract));
-	};
 	const rectList = (diagram.nodes ?? []).flatMap((node) => {
 		const rect = geometry.rectOf(node.id);
 		return rect ? [{ ...rect, id: node.id }] : [];
@@ -366,7 +359,7 @@ export function diagramLineSceneGet(diagram, geometry, { connectionIdList, regis
 			reportList.push({ kind: 'skipped', connectionId: connection.id, message: `${connection.id}: it has a free end, or is not drawn` });
 			continue;
 		}
-		const line = { id: connection.id, type, source, target, sourceNodeId: connection.source.nodeId, targetNodeId: connection.target.nodeId, sourceKey: keyOf(connection.source), targetKey: keyOf(connection.target) };
+		const line = { id: connection.id, type, source, target, sourceNodeId: connection.source.nodeId, targetNodeId: connection.target.nodeId, sourceKey: endpointKeyOf(connection.source), targetKey: endpointKeyOf(connection.target) };
 		if (idSet && !idSet.has(connection.id)) {
 			const ends = { sourceX: source.x, sourceY: source.y, sourcePosition: source.side, targetX: target.x, targetY: target.y, targetPosition: target.side };
 			placedList.push({ id: line.id, d: routeResolve(type, connection.route ?? null, ends).d, sourceKey: line.sourceKey, targetKey: line.targetKey });

@@ -1,10 +1,10 @@
-import { Boxes, Database, SquareDashedMousePointer, Table2 } from '../../../../main/frontend/UICommon.js';
+import { Boxes, SquareDashedMousePointer, Table2 } from '../../../../main/frontend/UICommon.js';
 import { nodeRegistryBuild } from './node-registry.js';
 import { cardNoteHeightEstimate, tableCardNormalize, tableCardAnchorListGet } from './TableCardData.js';
 import { tableCardSchema } from './TableCardSchema.js';
 import { TableCard } from './TableCard.jsx';
 import { OperatorCard } from './OperatorCard.jsx';
-import { CARD_ICON_BY_NAME, CardBrief, CardDatabase, CardLabel, CardNote, CardThreeDots } from './CompactCard.jsx';
+import { CardBrief, CardDatabase, CardLabel, CardNote, CardThreeDots } from './CompactCard.jsx';
 import { CardCaption, CardIcon } from './CardIcon.jsx';
 import { cardIconAnchorListGet, cardIconAnchorRectEstimate, cardIconNormalize, cardIconSearchMatch } from './CardIconData.js';
 import { diagramArrangerOutline } from './DiagramArrangeOutline.js';
@@ -37,8 +37,6 @@ export const tableNodeKind = {
 	label: 'Table',
 	contract: {
 		dataNormalize: tableCardNormalize, anchorListGet: tableCardAnchorListGet, anchorSideDrawn: 'header', sizeDefault: { width: 360, height: 240 },
-		// drawn simple (CardSimpleData.js): a rounded mark with its name
-		simple: { contentGet: data => ({ title: data.name, text: data.nameLogical, Icon: Table2, tone: data.tone }) },
 	},
 	schema: tableCardSchema,
 	Card: TableCard,
@@ -87,7 +85,7 @@ export const cardNoteNodeKind = {
 export const cardBriefNodeKind = {
 	type: 'card-brief',
 	label: 'Brief card',
-	contract: { ...compactContract({ width: 170, height: 40 }), propertyList: [{ id: 'title', label: 'Title', kind: 'text' }], simple: { contentGet: data => ({ title: data.title, text: data.statList?.[0], Icon: CARD_ICON_BY_NAME[data.icon] ?? Boxes, tone: data.tone || 'teal' }) } },
+	contract: { ...compactContract({ width: 170, height: 40 }), propertyList: [{ id: 'title', label: 'Title', kind: 'text' }] },
 	schema: null,
 	Card: CardBrief,
 	create: {
@@ -129,7 +127,7 @@ export const cardThreeDotsNodeKind = {
 export const cardDatabaseNodeKind = {
 	type: 'card-database',
 	label: 'Database',
-	contract: { ...compactContract({ width: 320, height: 260 }), simple: { shape: 'cylinder', contentGet: data => ({ title: data.title, text: data.text, Icon: Database, tone: data.tone }) } },
+	contract: compactContract({ width: 320, height: 260 }),
 	schema: null,
 	Card: CardDatabase,
 	create: {

@@ -1,14 +1,14 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { yamlParse } from '../../../../main/frontend/src/lib/yaml.js';
-import { diagramNormalize, cardStandaloneNormalize } from '../card-diagram/DiagramERData.js';
+import { diagramNormalize, cardStandaloneNormalize, endpointKeyOf, handleAnchorDrawnOf } from '../card-diagram/DiagramERData.js';
 import { DiagramEditStore } from '../card-diagram/DiagramEditStore.js';
 import { cardSchemaGet } from '../card-diagram/TableCardSchema.js';
 import { cardDiagramNodeRegistry } from '../card-diagram/card-diagram-node-registry.js';
 import { diagramGeometryEstimateBuild } from '../card-diagram/DiagramArrangeOutline.js';
 import { routeOverlapListGet, routeResolve } from '../card-diagram/DiagramRoute.js';
 import { switchDocNormalize } from '../card-diagram-switch/SwitchData.js';
-import { awsNodeKindList, awsNodeRegistry, awsResourceNodeRegistry } from './aws-node-registry.js';
+import { awsMarkNodeKind, awsNodeKindList, awsNodeRegistry, awsResourceNodeRegistry } from './aws-node-registry.js';
 import { awsResourceSourceDefaultCreate, awsSourceDefaultCreate, awsSwitchSourceDefaultCreate } from './AwsSource.js';
 import { AWS_ICON_LIST, awsIconUrlRegister } from './AwsIcon.js';
 
@@ -24,7 +24,6 @@ test('every AWS kind is complete, made valid by the create panel, and only in th
 	assert.equal(graph.nodes.length, awsNodeKindList.length);
 	for (const kind of awsNodeKindList) {
 		assert.ok(kind.contract.anchorListGet && kind.contract.sizeDefault && kind.Card && kind.create, kind.type);
-		assert.ok(kind.contract.simple, `${kind.type} has a simple display`);
 		assert.equal(cardDiagramNodeRegistry.kindByType[kind.type], undefined);
 		const node = graph.nodes.find((item) => item.renderer.type === kind.type);
 		// a fresh node is read downward: in on top of the card, out at its bottom
@@ -68,25 +67,21 @@ test('a DynamoDB table and a route group have rows of fixed fields, each an anch
 	assert.throws(() => diagramNormalize({ version: 1, nodes: [{ id: 'r', renderer: { type: 'aws-route-group' }, data: { name: 'r', routes: [{ id: 'a', method: 'FETCH', path: '/' }] } }] }, awsNodeRegistry), /not one of/);
 });
 
-test('a node is drawn simple and back as one step; the whole diagram too, its nodes following', () => {
-	const store = new DiagramEditStore(sourceCreate(), 'diagram', undefined, awsNodeRegistry);
-	assert.equal(store.nodeDisplayGet('s3-bucket-3'), 'detailed');
-	assert.ok(store.nodeDisplaySet('s3-bucket-3', 'simple'));
-	assert.equal(store.nodeGet('s3-bucket-3').display, 'simple');
+test('a resource as its mark: the look of its kind, its name, its service; the resource it stands for edited as one step', () => {
+	const node = awsMarkNodeKind.create.nodeCreate((prefix) => `${prefix}-1`);
+	const mark = diagramNormalize({ version: 1, nodes: [node], connections: [] }, awsNodeRegistry).nodes[0];
+	// its handles are on the node as a whole, drawn on the mark, under the words at the bottom
+	assert.deepEqual(mark.handles.map((handle) => [handle.anchor.target, handleAnchorDrawnOf(mark, handle)]), [['body', 'mark'], ['body', 'foot']]);
+	const contentOf = awsMarkNodeKind.contract.markContentGet;
+	assert.deepEqual((({ title, text, family }) => ({ title, text, family }))(contentOf({ name: 'orders', resourceType: 'aws-dynamodb-table' })), { title: 'orders', text: 'DynamoDB', family: 'aws-database' });
+	// a resource of no kind of the series is a mark with its name alone
+	assert.deepEqual((({ title, text, family }) => ({ title, text, family }))(contentOf({ name: 'x', resourceType: 'aws-unknown' })), { title: 'x', text: undefined, family: undefined });
+	assert.ok(awsMarkNodeKind.contract.propertyList.find((item) => item.id === 'resourceType').values.includes('aws-s3-bucket'));
+	const store = new DiagramEditStore(JSON.stringify({ version: 1, nodes: [node], connections: [] }), 'diagram', undefined, awsNodeRegistry);
+	assert.ok(store.fieldSet('mark-1', null, 'resourceType', 'aws-s3-bucket'));
+	assert.equal(store.nodeGet('mark-1').data.resourceType, 'aws-s3-bucket');
 	assert.ok(store.undo());
-	assert.equal(store.nodeGet('s3-bucket-3').display, undefined);
-	assert.ok(store.diagramDisplaySet('simple'));
-	assert.equal(store.value.defaults.node.display, 'simple');
-	assert.ok(diagramNormalize(store.value, awsNodeRegistry).nodes.every((node) => node.display === 'simple'));
-	// one card among simple marks: it says so, the others follow the diagram
-	assert.ok(store.nodeDisplaySet('s3-bucket-3', 'detailed'));
-	assert.equal(store.nodeGet('s3-bucket-3').display, 'detailed');
-	assert.ok(store.diagramDisplaySet('detailed'));
-	assert.equal(store.value.defaults, undefined);
-	assert.equal(store.nodeGet('s3-bucket-3').display, undefined);
-	// a kind without one cannot be drawn simple
-	const generic = new DiagramEditStore(JSON.stringify({ version: 1, nodes: [{ id: 'n', renderer: { type: 'card-note' }, data: { title: 'n' } }] }), 'diagram', undefined, awsNodeRegistry);
-	assert.equal(generic.nodeDisplaySet('n', 'simple'), false);
+	assert.equal(store.nodeGet('mark-1').data.resourceType, 'aws-lambda');
 });
 
 test('the starting texts are valid, laid out by the layer arranger, with no line on another', () => {
@@ -103,8 +98,15 @@ test('the starting texts are valid, laid out by the layer arranger, with no line
 	const scene = switchDocNormalize(awsSwitchSourceDefaultCreate().raw).sceneByPath.get('/system');
 	const [overview, resources] = scene.viewList;
 	assert.deepEqual(overview.diagram.nodes.map((node) => node.id), resources.diagram.nodes.map((node) => node.id));
-	assert.ok(diagramNormalize(overview.diagram, awsNodeRegistry).nodes.filter((node) => node.renderer.type.startsWith('aws-')).every((node) => node.display === 'simple'));
-	// simple marks stand closer than cards
+	// every resource of the overview is its mark; what is no resource (the page) keeps its card
+	assert.deepEqual(overview.diagram.nodes.map((node) => node.renderer.type), resources.diagram.nodes.map((node) => (node.renderer.type.startsWith('aws-') ? 'aws-mark' : node.renderer.type)));
+	const geometryOverview = diagramGeometryEstimateBuild(overview.diagram, { registry: awsNodeRegistry });
+	assert.deepEqual(routeOverlapListGet(overview.diagram.connections.map((connection) => {
+		const a = geometryOverview.endOf(connection, 'source');
+		const b = geometryOverview.endOf(connection, 'target');
+		return { id: connection.id, d: routeResolve('step', connection.route ?? null, { sourceX: a.x, sourceY: a.y, sourcePosition: a.side, targetX: b.x, targetY: b.y, targetPosition: b.side }).d, sourceKey: endpointKeyOf(connection.source), targetKey: endpointKeyOf(connection.target) };
+	})), []);
+	// marks stand closer than cards
 	const height = (diagramValue) => Math.max(...diagramValue.nodes.map((node) => node.position.y));
 	assert.ok(height(overview.diagram) < height(resources.diagram));
 });
@@ -114,7 +116,7 @@ test('the starting texts are valid, laid out by the layer arranger, with no line
 test('every AWS kind names its official icon, and is drawn with it once it is fetched', () => {
 	const typeList = awsNodeKindList.map((kind) => kind.type);
 	assert.deepEqual([...AWS_ICON_LIST.map((item) => item.type)].sort(), [...typeList].sort());
-	const contentOf = (type) => awsNodeRegistry.kindByType[type].contract.simple.contentGet({ name: 'a' });
+	const contentOf = (type) => awsMarkNodeKind.contract.markContentGet({ name: 'a', resourceType: type });
 	assert.equal(contentOf('aws-lambda').iconUrl, undefined);
 	awsIconUrlRegister({ './icon-official/aws-lambda.svg': '/lambda.svg', './icon-official/aws-iam-role.svg': '/role.svg', './icon-official/not-a-kind.svg': '/x.svg' });
 	assert.deepEqual([contentOf('aws-lambda').iconUrl, contentOf('aws-lambda').isIconFramed], ['/lambda.svg', false]);

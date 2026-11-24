@@ -2,12 +2,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { diagramArrangeApply } from './DiagramArrange.js';
 import { labelLengthOf, routeOverlapListGet, routePathPolylineGet, routePolylineLengthGet, routePolylinePointAt, routeResolve } from './DiagramRoute.js';
-import { diagramNormalize, endpointKeyOf } from './DiagramERData.js';
-import { cardDiagramNodeRegistry } from './card-diagram-node-registry.js';
-import { diagramGeometryEstimateBuild, nodeIsSimple } from './DiagramArrangeOutline.js';
+import { anchorPointOnOutline, diagramNormalize, endpointKeyOf, handleAnchorDrawnOf } from './DiagramERData.js';
+import { cardDiagramNodeKindList, cardDiagramNodeRegistry } from './card-diagram-node-registry.js';
+import { nodeRegistryBuild } from './node-registry.js';
+import { anchorPointEstimate, diagramGeometryEstimateBuild } from './DiagramArrangeOutline.js';
 import { labelBandWidthOf } from './DiagramLabelPlace.js';
 import { diagramArrangerLanesAcross, diagramArrangerLanesDown, diagramArrangerLayers, routeTurn } from './DiagramArrangeLayers.js';
-import { anchorPointOnOutline, cardSimpleHandlePointOf, cardSimpleMarkRectOf } from './CardSimpleData.js';
+import { cardMarkContractBuild, cardMarkRectOf } from './CardMarkData.js';
 
 const registry = cardDiagramNodeRegistry;
 const WIDTH = 160;
@@ -15,6 +16,8 @@ const HEIGHT = 60;
 // a card of a fixed size, handles on its body: [id, direction, side]
 const cardOf = (id, handleList, extra = {}) => ({ id, renderer: { type: 'card-brief' }, position: { x: 0, y: 0 }, size: { width: WIDTH, height: HEIGHT }, data: { title: id, icon: 'database' }, handles: handleList.map(([handleId, direction, side]) => ({ id: handleId, direction, anchor: { side } })), ...extra });
 const lineOf = (id, source, target, extra = {}) => ({ id, source: { nodeId: source[0], handleId: source[1] }, target: { nodeId: target[0], handleId: target[1] }, ...extra });
+// a kind drawn as a round mark, as a series builds one (CardMark.jsx: cardMarkKindBuild), beside the base kinds
+const markRegistry = nodeRegistryBuild({ id: 'mark-test', label: 'Mark test', kindList: [...cardDiagramNodeKindList, { type: 'mark', label: 'Mark', contract: cardMarkContractBuild({ shape: 'circle' }), schema: null }] });
 
 // a page, an api, a function, and below it a table, a bucket and a role; the page also reads the
 // bucket by itself, past the api and the function. The handles start on the sides the author left
@@ -35,10 +38,9 @@ function systemBuild(extra = {}) {
 	return { version: 1, nodes, connections, ...extra };
 }
 
-function lineListOf(diagram) {
-	const geometry = diagramGeometryEstimateBuild(diagram, { registry });
-	const nodeById = new Map(diagram.nodes.map((node) => [node.id, node]));
-	const keyOf = (endpoint) => endpointKeyOf(endpoint, nodeById.get(endpoint.nodeId), nodeIsSimple(diagram, nodeById.get(endpoint.nodeId), registry.kindByType[nodeById.get(endpoint.nodeId).renderer.type].contract));
+function lineListOf(diagram, registryUsed = registry) {
+	const geometry = diagramGeometryEstimateBuild(diagram, { registry: registryUsed });
+	const keyOf = (endpoint) => endpointKeyOf(endpoint);
 	return diagram.connections.map((connection) => {
 		const a = geometry.endOf(connection, 'source');
 		const b = geometry.endOf(connection, 'target');
@@ -109,35 +111,33 @@ test('layers: cards placed apart keep their order in a layer; a locked card stay
 	assert.deepEqual(diagramArrangeApply(locked, diagramArrangerLayers, { registry }).diagram.nodes.find((node) => node.id === 'page').position, { x: 900, y: 900 });
 });
 
-test('layers: a handle on a part of a card keeps its side; a handle on a node drawn simple is turned and drawn on its mark', () => {
+test('layers: a handle on a part of a card keeps its side; a handle on a mark is turned and drawn on its shape', () => {
 	const table = { id: 'rows', renderer: { type: 'table' }, position: { x: 0, y: 0 }, size: { width: 240, height: 'auto' }, data: { name: 'rows', fields: [{ id: 'name', label: 'Name' }], rows: [{ id: 'a', name: 'a' }] }, handles: [{ id: 'a', direction: 'out', anchor: { target: 'row/a', side: 'right' } }] };
-	const simple = cardOf('simple', [['in', 'in', 'left']], { display: 'simple', size: { width: WIDTH, height: 'auto' } });
-	const { diagram } = diagramArrangeApply({ version: 1, nodes: [table, simple], connections: [lineOf('a', ['rows', 'a'], ['simple', 'in'])] }, diagramArrangerLayers, { registry });
+	const mark = { id: 'mark', renderer: { type: 'mark' }, position: { x: 0, y: 0 }, size: { width: WIDTH, height: 'auto' }, data: {}, handles: [{ id: 'in', direction: 'in', anchor: { side: 'left' } }] };
+	const { diagram } = diagramArrangeApply({ version: 1, nodes: [table, mark], connections: [lineOf('a', ['rows', 'a'], ['mark', 'in'])] }, diagramArrangerLayers, { registry: markRegistry });
 	assert.equal(diagram.nodes[0].handles[0].anchor.side, 'right');
 	assert.equal(diagram.nodes[1].handles[0].anchor.side, 'top');
 	// the end of the line is the top of the round mark, in the middle of the node
-	const geometry = diagramGeometryEstimateBuild(diagram, { registry });
+	const geometry = diagramGeometryEstimateBuild(diagram, { registry: markRegistry });
 	const end = geometry.endOf(diagram.connections[0], 'target');
-	const rect = geometry.rectOf('simple');
+	const rect = geometry.rectOf('mark');
 	assert.deepEqual({ x: end.x, y: end.y }, { x: rect.x + WIDTH / 2, y: rect.y });
-	assert.deepEqual(diagramNormalize(diagram, registry).nodes[1].display, 'simple');
+	// drawn on the shape, and under the words for a handle at the bottom; written on the node as a whole
+	const node = diagramNormalize(diagram, markRegistry).nodes[1];
+	assert.equal(node.handles[0].anchor.target, 'body');
+	assert.equal(handleAnchorDrawnOf(node, node.handles[0]), 'mark');
+	assert.equal(handleAnchorDrawnOf(node, { anchor: { target: 'body', side: 'bottom', offset: 0.5 } }), 'foot');
 });
 
-test('a diagram drawn simple by default: its kinds with a simple display, every handle on the mark, one end per place', () => {
-	const diagram = systemBuild({ defaults: { node: { display: 'simple' } } });
-	const graph = diagramNormalize(diagram, registry);
-	assert.ok(graph.nodes.every((node) => node.display === 'simple'));
-	// handles of one side and offset of a node drawn simple are one end of lines
-	const page = diagram.nodes[0];
-	assert.equal(endpointKeyOf({ nodeId: 'page', handleId: 'out' }, page, true), endpointKeyOf({ nodeId: 'page', handleId: 'bytes' }, page, true));
-	assert.notEqual(endpointKeyOf({ nodeId: 'page', handleId: 'out' }, page, false), endpointKeyOf({ nodeId: 'page', handleId: 'bytes' }, page, false));
-	// a kind without one keeps its card, unless the node asks: then it says so
-	const withNote = { ...diagram, nodes: [...diagram.nodes, { id: 'note', renderer: { type: 'card-note' }, data: { title: 'n' } }] };
-	assert.equal(diagramNormalize(withNote, registry).nodes.at(-1).display, 'detailed');
-	assert.throws(() => diagramNormalize({ ...withNote, nodes: [...diagram.nodes, { id: 'note', renderer: { type: 'card-note' }, display: 'simple', data: { title: 'n' } }] }, registry), /note: a card-note node has no simple display/);
-	assert.throws(() => diagramNormalize({ ...diagram, defaults: { node: { display: 'round' } } }, registry), /defaults.node.display is detailed or simple/);
-	const { diagram: arranged } = diagramArrangeApply(diagram, diagramArrangerLayers, { registry });
-	assert.deepEqual(routeOverlapListGet(lineListOf(arranged)), []);
+test('a diagram of marks is arranged as one of cards, no line on another; a display written on a node is refused', () => {
+	const base = systemBuild();
+	const diagram = { ...base, nodes: base.nodes.map(({ size: _size, ...node }) => ({ ...node, renderer: { type: 'mark' }, data: { title: node.id } })) };
+	assert.ok(diagramNormalize(diagram, markRegistry).nodes.every((node) => node.sizeDefault.height === 98));
+	const { diagram: arranged } = diagramArrangeApply(diagram, diagramArrangerLayers, { registry: markRegistry });
+	assert.deepEqual(routeOverlapListGet(lineListOf(arranged, markRegistry)), []);
+	// a diagram written when a node had a display of its own (a mark now is a kind) is told so
+	assert.throws(() => diagramNormalize({ ...base, nodes: [{ ...base.nodes[0], display: 'simple' }, ...base.nodes.slice(1)] }, registry), /page\.display is not read/);
+	assert.throws(() => diagramNormalize({ ...base, defaults: { node: { display: 'simple' } } }, registry), /defaults\.node is not read/);
 });
 
 test('a handle on a round mark stands on its outline', () => {
@@ -150,10 +150,14 @@ test('a handle on a round mark stands on its outline', () => {
 	// a cylinder: its walls are straight, its caps elliptic
 	assert.deepEqual(anchorPointOnOutline(rect, 'left', 0.3, 'cylinder'), { x: 0, y: 30 });
 	assert.ok(anchorPointOnOutline(rect, 'top', 0.1, 'cylinder').y > 0);
-	assert.deepEqual(cardSimpleMarkRectOf({ x: 0, y: 0, width: 140, height: 98 }, { width: 140, height: 'auto' }), { x: 40, y: 0, width: 60, height: 60 });
-	// at the bottom of a node drawn simple: under its words, at the width of the mark
-	assert.deepEqual(cardSimpleHandlePointOf({ x: 0, y: 0, width: 140, height: 98 }, { width: 140, height: 'auto' }, 'bottom', 0.25, 'tile'), { x: 55, y: 98 });
-	assert.deepEqual(cardSimpleHandlePointOf({ x: 0, y: 0, width: 140, height: 98 }, { width: 140, height: 'auto' }, 'left', 0.5, 'circle'), { x: 40, y: 30 });
+	const node = { size: { width: 140, height: 'auto' } };
+	const rectNode = { x: 0, y: 0, width: 140, height: 98 };
+	assert.deepEqual(cardMarkRectOf(rectNode, node.size), { x: 40, y: 0, width: 60, height: 60 });
+	// at the bottom of a mark: under its words, at the width of its shape
+	assert.deepEqual(anchorPointEstimate(node, cardMarkContractBuild({ shape: 'tile' }), rectNode, { side: 'bottom', offset: 0.25 }), { x: 55, y: 98 });
+	assert.deepEqual(anchorPointEstimate(node, cardMarkContractBuild({ shape: 'circle' }), rectNode, { side: 'left', offset: 0.5 }), { x: 40, y: 30 });
+	// a card: the side of its rectangle, as ever
+	assert.deepEqual(anchorPointEstimate(node, cardDiagramNodeRegistry.kindByType['card-note'].contract, rectNode, { side: 'bottom', offset: 0.25 }), { x: 35, y: 98 });
 });
 
 test('the lanes arrangers keep the cards and route the lines, down the rows or across the columns', () => {

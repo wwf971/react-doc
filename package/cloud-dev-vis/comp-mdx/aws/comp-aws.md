@@ -1,6 +1,6 @@
 ---
 title: AWS Diagrams
-description: DiagramAws, DiagramAwsSwitch, DiagramAwsArchitecture and DiagramAwsResource draw the resources of a system on AWS as cards or simple marks, and the lines between them
+description: DiagramAws, DiagramAwsSwitch, DiagramAwsArchitecture and DiagramAwsResource draw the resources of a system on AWS as cards or marks, and the lines between them
 language: en
 ---
 
@@ -114,9 +114,9 @@ viewport:
 
 In the editor, **Arrange** (the bar's lines button) offers the arrangers of the series, at any time, each one step of the history: **Layers, top to bottom** places the cards in layers by their lines and routes every line; **Route the lines, cards in rows** keeps the cards where they are and only routes. Applied to a diagram drawn by hand, the result is the author's data, to be adjusted after. A scene generated from data applies the same arranger in code every time it is built ([card-diagram-arrange.md](../../doc/card-diagram-arrange.md#the-layer-arrangers)).
 
-## Detailed and simple
+## Cards and marks
 
-The same system at a glance: every card a **simple mark**, a tile with the icon of its service, its name and its service under it. The icons are the official ones of AWS where they were fetched on the machine ([The official icons](../../doc/aws.md#the-official-icons)), else the icons of the page in the accent of the family. One line of the data does it, `defaults: { node: { display: simple } }`; `display` on a node says it for that node alone. In the editor, **Drawn as** in the tab of a card switches one, the shapes button of the bar every one. The handles and the lines stay; a line leaving downward starts under the words of the mark ([When a node changes its look](../../doc/card-diagram-usage.md#when-a-node-changes-its-look-its-lines-stay-attached)). Marks are smaller than cards, so this one was laid out again by the arranger, from the same data without the widths of the cards:
+The same system at a glance: every resource a **mark**, a tile with the icon of its service, its name and its service under it. The icons are the official ones of AWS where they were fetched on the machine ([The official icons](../../doc/aws.md#the-official-icons)), else the icons of the page in the accent of the family. A mark is a node of its own kind, `aws-mark`, whose data is the name and the kind of the resource it stands for (`resourceType`, the type of its card); in the editor its tab edits both, and the create panel offers it as **Resource mark**. Its handles are written as those of the card, and a line leaving downward starts under its words ([When a node changes its look](../../doc/card-diagram-usage.md#when-a-node-changes-its-look-its-lines-stay-attached)). Marks are smaller than cards, so this one was laid out again by the arranger, from the same nodes as marks:
 
 <!--renderComp=DiagramAws,title=The same system at a glance-->
 ```yaml
@@ -130,51 +130,28 @@ nodes:
     handles: [ { id: out, direction: out, anchor: { target: body, side: bottom } } ]
     position: { x: 75, y: 0 }
   - id: api
-    renderer: { type: aws-http-api }
-    data:
-      name: "{prefix}--api"
-      authorizer: "jwt: the user pool"
-      cors: any origin
-      throttle: 20 / s
-      properties: [ { id: items, name: items, value: "create, get, update" } ]
+    renderer: { type: aws-mark }
+    data: { name: "{prefix}--api", resourceType: aws-http-api }
     handles:
       - { id: in, direction: in, anchor: { target: body, side: top } }
       - { id: out, direction: out, anchor: { target: body, side: bottom } }
     position: { x: 94, y: 102 }
   - id: function
-    renderer: { type: aws-lambda }
-    data:
-      name: "{prefix}--api"
-      runtime: python3.12
-      memory: 512 MB
-      timeout: 29 s
-      role: "{prefix}--api-role"
-      properties: [ { id: table, name: TABLE_DATA, value: the table } ]
+    renderer: { type: aws-mark }
+    data: { name: "{prefix}--api", resourceType: aws-lambda }
     handles:
       - { id: in, direction: in, anchor: { target: body, side: top } }
       - { id: rows, direction: out, anchor: { target: body, side: bottom, offset: 0.333 } }
       - { id: objects, direction: out, anchor: { target: body, side: bottom, offset: 0.667 } }
     position: { x: 94, y: 264 }
   - id: table
-    renderer: { type: aws-dynamodb-table }
-    data:
-      name: items
-      nameLogical: "{prefix}--data"
-      pk: pk (S)
-      sk: sk (S)
-      description: billed per request
-      attributes:
-        - { id: pk, key: PK, name: pk, type: S, holds: the owner }
-        - { id: sk, key: SK, name: sk, type: S, holds: the item }
+    renderer: { type: aws-mark }
+    data: { name: items, resourceType: aws-dynamodb-table }
     handles: [ { id: in, direction: in, anchor: { target: body, side: top } } ]
     position: { x: 0, y: 426 }
   - id: bucket
-    renderer: { type: aws-s3-bucket }
-    data:
-      name: "{prefix}--data"
-      access: private
-      versioning: off
-      properties: [ { id: data, name: data/, value: large bytes } ]
+    renderer: { type: aws-mark }
+    data: { name: "{prefix}--data", resourceType: aws-s3-bucket }
     handles: [ { id: in, direction: in, anchor: { target: body, side: top } } ]
     position: { x: 188, y: 426 }
 connections:
@@ -198,8 +175,6 @@ connections:
     target: { nodeId: bucket, handleId: in }
     label: { text: objects, position: 0.5 }
     route: { anchorList: [ { id: a1, along: 1, x: 0, y: -21.3 } ] }
-defaults:
-  node: { display: simple }
 ```
 
 ## Rows: a table, its kinds of rows, the routes of a group
@@ -259,7 +234,7 @@ viewport:
 
 ## Two levels in one viewport
 
-`DiagramAwsSwitch` takes a `sceneList` ([Card Diagram Scenes](../../doc/card-diagram-usage-flexible-switch.md)). Here one scene has two views with the same ids: the overview, drawn simple, and the resources as cards. Switch the view after the path: each card moves into its mark and back.
+`DiagramAwsSwitch` takes a `sceneList` ([Card Diagram Scenes](../../doc/card-diagram-usage-flexible-switch.md)). Here one scene has two views with the same ids: the overview, as marks, and the resources as cards. Switch the view after the path: each card moves into its mark and back.
 
 <!--renderComp=DiagramAwsSwitch,height=560,title=A system in two views-->
 ```yaml
@@ -281,51 +256,28 @@ sceneList:
               handles: [ { id: out, direction: out, anchor: { target: body, side: bottom } } ]
               position: { x: 75, y: 0 }
             - id: api
-              renderer: { type: aws-http-api }
-              data:
-                name: "{prefix}--api"
-                authorizer: "jwt: the user pool"
-                cors: any origin
-                throttle: 20 / s
-                properties: [ { id: items, name: items, value: "create, get, update" } ]
+              renderer: { type: aws-mark }
+              data: { name: "{prefix}--api", resourceType: aws-http-api }
               handles:
                 - { id: in, direction: in, anchor: { target: body, side: top } }
                 - { id: out, direction: out, anchor: { target: body, side: bottom } }
               position: { x: 94, y: 102 }
             - id: function
-              renderer: { type: aws-lambda }
-              data:
-                name: "{prefix}--api"
-                runtime: python3.12
-                memory: 512 MB
-                timeout: 29 s
-                role: "{prefix}--api-role"
-                properties: [ { id: table, name: TABLE_DATA, value: the table } ]
+              renderer: { type: aws-mark }
+              data: { name: "{prefix}--api", resourceType: aws-lambda }
               handles:
                 - { id: in, direction: in, anchor: { target: body, side: top } }
                 - { id: rows, direction: out, anchor: { target: body, side: bottom, offset: 0.333 } }
                 - { id: objects, direction: out, anchor: { target: body, side: bottom, offset: 0.667 } }
               position: { x: 94, y: 264 }
             - id: table
-              renderer: { type: aws-dynamodb-table }
-              data:
-                name: items
-                nameLogical: "{prefix}--data"
-                pk: pk (S)
-                sk: sk (S)
-                description: billed per request
-                attributes:
-                  - { id: pk, key: PK, name: pk, type: S, holds: the owner }
-                  - { id: sk, key: SK, name: sk, type: S, holds: the item }
+              renderer: { type: aws-mark }
+              data: { name: items, resourceType: aws-dynamodb-table }
               handles: [ { id: in, direction: in, anchor: { target: body, side: top } } ]
               position: { x: 0, y: 426 }
             - id: bucket
-              renderer: { type: aws-s3-bucket }
-              data:
-                name: "{prefix}--data"
-                access: private
-                versioning: off
-                properties: [ { id: data, name: data/, value: large bytes } ]
+              renderer: { type: aws-mark }
+              data: { name: "{prefix}--data", resourceType: aws-s3-bucket }
               handles: [ { id: in, direction: in, anchor: { target: body, side: top } } ]
               position: { x: 188, y: 426 }
           connections:
@@ -349,7 +301,6 @@ sceneList:
               target: { nodeId: bucket, handleId: in }
               label: { text: objects, position: 0.5 }
               route: { anchorList: [ { id: a1, along: 1, x: 0, y: -21.3 } ] }
-          defaults: { node: { display: simple } }
       - id: resources
         label: Resources
         diagram:
@@ -439,7 +390,7 @@ sceneList:
 
 ## A system of groups, from a description
 
-A larger system is read in its groups first: a frame per group (a service, a module of the system), each showing what it holds as simple marks, the lines between the frames being what passes between the groups. A click on a frame zooms into it: the group's resources as cards, the menu after the path switching to its overview or to one of its flows, the steps of one request on the same cards. A card with more inside (an api's routes, a table's kinds of rows) opens a scene of its own, and a mark of another group opens that group.
+A larger system is read in its groups first: a frame per group (a service, a module of the system), each showing what it holds as marks, the lines between the frames being what passes between the groups. A click on a frame zooms into it: the group's resources as cards, the menu after the path switching to its overview or to one of its flows, the steps of one request on the same cards. A card with more inside (an api's routes, a table's kinds of rows) opens a scene of its own, and a mark of another group opens that group.
 
 `DiagramAwsArchitecture` draws all of it from a **description** of the system, not from diagrams: every scene is generated from it and laid out by the layer arrangers, with the same ids everywhere, so nothing is placed by hand and a change of the system is a change of a few lines of data. A deployment script can write the description from the plan it makes the resources from, as the storage service of `aws-utils` does ([Storage Service Architecture](~aws-utils:aws-utils/doc/storage-architecture.md)).
 

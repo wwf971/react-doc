@@ -1,0 +1,83 @@
+/* a mark (CardMark.jsx): a shape with its name under it. the node's box draws nothing of its own; a
+   series colors the mark of a family with --doc-card-accent (.doc-card-mark.is-{family}), as the tones
+   below do */
+.doc-vis-node-content:has(> .doc-card-mark) { overflow: visible; border: 0; background: none; box-shadow: none; }
+.doc-card-mark {
+	--doc-card-accent: #64748b;
+	position: relative;
+	box-sizing: border-box;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 0.45rem;
+	width: 100%;
+	color: var(--color-fd-foreground);
+	text-align: center;
+}
+.doc-card-mark[data-tone='blue'] { --doc-card-accent: #2563eb; }
+.doc-card-mark[data-tone='teal'] { --doc-card-accent: #0d9488; }
+.doc-card-mark[data-tone='green'] { --doc-card-accent: #16a34a; }
+.doc-card-mark[data-tone='amber'] { --doc-card-accent: #d97706; }
+.doc-card-mark[data-tone='red'] { --doc-card-accent: #dc2626; }
+.doc-card-mark[data-tone='violet'] { --doc-card-accent: #7c3aed; }
+.doc-card-mark-shape {
+	box-sizing: border-box;
+	position: relative;
+	flex: none;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	border: 1px solid color-mix(in srgb, var(--color-fd-foreground) 16%, var(--color-fd-border));
+	border-radius: 20%;
+	background: var(--doc-node-fill, var(--doc-card-mark-tile, #fff));
+	box-shadow: 0 1px 2px rgb(15 23 42 / 6%);
+	color: var(--doc-card-accent);
+	transition: border-color 0.12s, box-shadow 0.12s;
+}
+.dark .doc-card-mark-shape { --doc-card-mark-tile: color-mix(in srgb, var(--color-fd-foreground) 6%, var(--color-fd-background)); }
+.doc-card-mark[data-shape='circle'] .doc-card-mark-shape { border-radius: 999px; }
+.doc-card-mark[data-shape='cylinder'] .doc-card-mark-shape { border: 0; border-radius: 0; background: none; box-shadow: none; }
+/* an image that is its own tile (an official service icon): drawn alone, at the size of the mark */
+.doc-card-mark-shape.is-image { border: 0; background: none; box-shadow: none; }
+.doc-card-mark-shape.is-image > img { width: 100%; height: 100%; border-radius: 12%; object-fit: contain; }
+.doc-card-mark-shape > svg:not(.doc-card-mark-cylinder), .doc-card-mark-glyph { position: relative; }
+.doc-card-mark-glyph { object-fit: contain; }
+.doc-card-mark[data-shape='cylinder'] .doc-card-mark-shape > svg:not(.doc-card-mark-cylinder) { top: 7%; }
+.doc-card-mark-cylinder { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.doc-card-mark-cylinder-body { fill: var(--doc-card-mark-tile, #fff); stroke: color-mix(in srgb, var(--doc-card-accent) 55%, var(--color-fd-border)); stroke-width: 1.5; }
+.doc-card-mark-cylinder-top { fill: color-mix(in srgb, var(--doc-card-accent) 10%, var(--doc-card-mark-tile, #fff)); stroke: color-mix(in srgb, var(--doc-card-accent) 55%, var(--color-fd-border)); stroke-width: 1.5; }
+.doc-card-mark.is-link { cursor: pointer; }
+/* a mark that leads somewhere: its shape outlined in its accent under the pointer */
+.doc-card-mark.is-link:hover .doc-card-mark-shape { border-color: var(--doc-card-accent); }
+.doc-diagram-static-node:has(> .doc-vis-node-content > .doc-card-mark.is-link) { cursor: pointer; }
+/* the anchor of a handle at the bottom: under the words, as wide as the mark */
+.doc-card-mark-foot { position: absolute; bottom: 0; left: 50%; height: 0; transform: translateX(-50%); pointer-events: none; }
+.doc-card-mark-text { display: grid; width: 100%; min-width: 0; gap: 0.05rem; }
+/* the words: a name, and a small line under it (sans-serif, as every label), each on a veil of the canvas so a line
+   passing under them does not cut them */
+.doc-card-mark-text { justify-items: center; }
+.doc-card-mark-title {
+	display: -webkit-box;
+	overflow: hidden;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 2;
+	padding: 0 4px;
+	border-radius: 3px;
+	background: color-mix(in srgb, var(--color-fd-background) 80%, transparent);
+	font-size: 0.8125rem;
+	font-weight: 600;
+	line-height: 1.25;
+	overflow-wrap: anywhere;
+}
+.doc-card-mark-note { max-width: 100%; min-width: 0; overflow: hidden; padding: 0 4px; border-radius: 3px; background: color-mix(in srgb, var(--color-fd-background) 80%, transparent); color: var(--color-fd-muted-foreground); font-family: ui-sans-serif, system-ui, sans-serif; font-size: 0.66rem; line-height: 1.35; white-space: nowrap; text-overflow: ellipsis; }
+
+/* found by a search, hovered as a link: outlined around the mark and the words, not the node */
+.doc-vis-node[data-search]:has(> .doc-vis-node-content > .doc-card-mark),
+.doc-switch-static-node[data-search] > .doc-vis-node-content:has(> .doc-card-mark) { outline: none; }
+.doc-vis-node[data-search] > .doc-vis-node-content > .doc-card-mark,
+.doc-switch-static-node[data-search] > .doc-vis-node-content > .doc-card-mark { border-radius: 8px; outline: 2px solid rgb(234 179 8 / 85%); outline-offset: 3px; }
+.doc-vis-node[data-search='current'] > .doc-vis-node-content > .doc-card-mark,
+.doc-switch-static-node[data-search='current'] > .doc-vis-node-content > .doc-card-mark { outline: 3px solid rgb(234 88 12); }
+.doc-switch-flow .react-flow__node.is-linked:hover > .doc-vis-node > .doc-vis-node-content > .doc-card-mark .doc-card-mark-shape {
+	box-shadow: 0 0 0 3px color-mix(in srgb, #2563eb 35%, transparent);
+}

@@ -1,6 +1,6 @@
 import { lineTypeOfConnection } from './DiagramArrange.js';
 import { routeTypeIsRightAngle } from './DiagramRoute.js';
-import { CARD_SIMPLE_HEIGHT, CARD_SIMPLE_WIDTH, cardSimpleHandlePointOf, cardSimpleShapeOf } from './CardSimpleData.js';
+import { anchorPointOnOutline } from './DiagramERData.js';
 
 // The outline arranger (card-diagram-arrange.md#the-outline-arranger): a graph read downward in a
 // narrow place. Its nodes stand one under another, each on a row of its own, indented by a level
@@ -30,16 +30,21 @@ const LANE_GAP = 10;
 const round = (value) => Math.round(value * 100) / 100;
 const isSide = (side) => side === 'left' || side === 'right';
 
-// whether a node of authored data is drawn simple (card-diagram-impl.md#the-display-of-a-node):
-// written on it, else the default of the diagram, for a kind that has a simple display
-export function nodeIsSimple(diagram, node, contract) {
-	if (!contract?.simple) return false;
-	return (node.display ?? diagram.defaults?.node?.display) === 'simple';
+// where a handle of a node of authored data is, in the rectangle of the node (rectNode), from what
+// its kind says alone: on the anchor it is drawn on (a handle on the node as a whole where the kind
+// draws it, contract.anchorBodyDrawn: a mark, on its shape), whose rectangle the kind estimates
+// (contract.anchorRectEstimate, else the node's), on the outline of that anchor
+// (contract.anchorOutlineOf: a round mark), at its side and offset
+export function anchorPointEstimate(node, contract, rectNode, { target = 'body', side = 'right', offset = 0.5 }) {
+	const drawn = target === 'body' ? contract?.anchorBodyDrawn?.[side] ?? target : target;
+	const rect = contract?.anchorRectEstimate?.(node, drawn, rectNode) ?? rectNode;
+	const outline = contract?.anchorOutlineOf?.(node, drawn) ?? 'rect';
+	return anchorPointOnOutline({ left: rect.x, top: rect.y, width: rect.width, height: rect.height }, side, offset, outline);
 }
 
 // where things are, from what the data says alone: the written size of a node (else what its
-// kind estimates for its content, contract.sizeEstimate, else its default), a handle on the side
-// of its anchor's rectangle. a node drawn simple has its size, and every handle on its mark
+// kind estimates for its content, contract.sizeEstimate, else its default), a handle on its anchor
+// (anchorPointEstimate)
 export function diagramGeometryEstimateBuild(diagram, { registry, positionFallback = { x: 0, y: 0 } } = {}) {
 	const nodeById = new Map((diagram.nodes ?? []).map((node) => [node.id, node]));
 	const contractOf = (node) => registry?.kindByType?.[node.renderer?.type]?.contract;
@@ -48,8 +53,7 @@ export function diagramGeometryEstimateBuild(diagram, { registry, positionFallba
 		if (!node) return null;
 		const contract = contractOf(node);
 		const position = node.position && node.position !== 'auto' ? node.position : positionFallback;
-		const isSimple = nodeIsSimple(diagram, node, contract);
-		const sizeDefault = isSimple ? { width: contract.simple.width ?? CARD_SIMPLE_WIDTH, height: CARD_SIMPLE_HEIGHT } : { width: 220, height: 100, ...contract?.sizeDefault, ...contract?.sizeEstimate?.(node) };
+		const sizeDefault = { width: 220, height: 100, ...contract?.sizeDefault, ...contract?.sizeEstimate?.(node) };
 		const width = typeof node.size?.width === 'number' ? node.size.width : sizeDefault.width;
 		const height = typeof node.size?.height === 'number' ? node.size.height : sizeDefault.height;
 		return { x: position.x, y: position.y, width, height, isBackground: contract?.isBackground === true };
@@ -61,11 +65,7 @@ export function diagramGeometryEstimateBuild(diagram, { registry, positionFallba
 		const rectNode = node ? rectOf(node.id) : null;
 		if (!handle || !rectNode) return null;
 		const { side = 'right', target = 'body', offset = 0.5 } = handle.anchor ?? {};
-		const contract = contractOf(node);
-		if (nodeIsSimple(diagram, node, contract)) return { ...cardSimpleHandlePointOf(rectNode, node.size, side, offset, cardSimpleShapeOf(contract)), side };
-		const rect = contract?.anchorRectEstimate?.(node, target, rectNode) ?? rectNode;
-		if (side === 'top' || side === 'bottom') return { x: rect.x + rect.width * offset, y: side === 'top' ? rect.y : rect.y + rect.height, side };
-		return { x: side === 'left' ? rect.x : rect.x + rect.width, y: rect.y + rect.height * offset, side };
+		return { ...anchorPointEstimate(node, contractOf(node), rectNode, { target, side, offset }), side };
 	};
 	return { rectOf, endOf };
 }

@@ -1,13 +1,13 @@
 /* the accents of the families of the AWS series (doc/aws.md), on the resource card of the base
-   series (ResourceNodeCard.css, --resource-accent) and on a node drawn simple (CardSimple.css,
+   series (ResourceNodeCard.css, --resource-accent) and on the mark of a resource (CardMark.css,
    --doc-card-accent): the colors of the categories of the official icons, so a card agrees with
    its icon when the icons are fetched (AwsIcon.js) */
-.doc-resource-card.is-aws-network, .doc-card-simple.is-aws-network { --resource-accent: #8c4fff; --doc-card-accent: #8c4fff; }
-.doc-resource-card.is-aws-compute, .doc-card-simple.is-aws-compute { --resource-accent: #ed7100; --doc-card-accent: #ed7100; }
-.doc-resource-card.is-aws-database, .doc-card-simple.is-aws-database { --resource-accent: #c925d1; --doc-card-accent: #c925d1; }
-.doc-resource-card.is-aws-storage, .doc-card-simple.is-aws-storage { --resource-accent: #7aa116; --doc-card-accent: #7aa116; }
-.doc-resource-card.is-aws-security, .doc-card-simple.is-aws-security { --resource-accent: #dd344c; --doc-card-accent: #dd344c; }
-.doc-resource-card.is-aws-management, .doc-card-simple.is-aws-management { --resource-accent: #e7157b; --doc-card-accent: #e7157b; }
+.doc-resource-card.is-aws-network, .doc-card-mark.is-aws-network { --resource-accent: #8c4fff; --doc-card-accent: #8c4fff; }
+.doc-resource-card.is-aws-compute, .doc-card-mark.is-aws-compute { --resource-accent: #ed7100; --doc-card-accent: #ed7100; }
+.doc-resource-card.is-aws-database, .doc-card-mark.is-aws-database { --resource-accent: #c925d1; --doc-card-accent: #c925d1; }
+.doc-resource-card.is-aws-storage, .doc-card-mark.is-aws-storage { --resource-accent: #7aa116; --doc-card-accent: #7aa116; }
+.doc-resource-card.is-aws-security, .doc-card-mark.is-aws-security { --resource-accent: #dd344c; --doc-card-accent: #dd344c; }
+.doc-resource-card.is-aws-management, .doc-card-mark.is-aws-management { --resource-accent: #e7157b; --doc-card-accent: #e7157b; }
 
 /* the cards of rows with fixed fields: an attribute's name, a method, a path */
 .doc-aws-row-card .doc-aws-attribute-name, .doc-aws-row-card .doc-aws-route-path { font-family: var(--font-mono, ui-monospace, monospace); font-size: 0.68rem; overflow-wrap: anywhere; }

@@ -2,6 +2,15 @@
   padding-top: 1rem;
 }
 
+/* the subtitle of a document (its frontmatter description): fumadocs draws it text-lg with mb-8
+   (18px, larger than the text of the document, 16px, and 32px above it); here it is a quiet line
+   under the title, smaller than the text. Unlayered, so it wins over the utilities of fumadocs */
+.doc-page-description {
+  font-size: 0.875rem;
+  line-height: 1.5;
+  margin-bottom: 1.25rem;
+}
+
 .doc-page-title + .doc-page-description {
   margin-top: -0.75rem;
 }

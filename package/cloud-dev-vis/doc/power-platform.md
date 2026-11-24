@@ -43,7 +43,7 @@ invalid enum values and duplicate property IDs are rejected. Anchors are
 direction, side, endpoint, and label rules. No runtime execution order is
 inferred from card placement: label branches and run-after conditions explicitly.
 
-Every kind of the series can be [drawn simple](card-diagram-impl.md#the-display-of-a-node), for an overview: a tile with its icon, in its tone for a table or a choice, in the accent of its family for a flow step or a rule. Files for each resource share a prefix: `PowerAutomateNode*` and `BusinessRuleNode*` contain its card (the resource card of the base series with an icon and an accent color), its fields and validation, and its starting text. The kinds themselves (contract, schema, card, create entry) are declared in `power-platform-node-registry.js`. See [Power Platform diagrams](../comp-mdx/power-platform/comp-powerplatform.md) for complete examples and design-specific caveats.
+Files for each resource share a prefix: `PowerAutomateNode*` and `BusinessRuleNode*` contain its card (the resource card of the base series with an icon and an accent color), its fields and validation, and its starting text. The kinds themselves (contract, schema, card, create entry) are declared in `power-platform-node-registry.js`. See [Power Platform diagrams](../comp-mdx/power-platform/comp-powerplatform.md) for complete examples and design-specific caveats.
 
 ## Mapping Operators
 

@@ -1,5 +1,5 @@
 import { diagramGeometryMovedBuild, lineTypeOfConnection } from './DiagramArrange.js';
-import { diagramGeometryEstimateBuild, nodeIsSimple } from './DiagramArrangeOutline.js';
+import { diagramGeometryEstimateBuild } from './DiagramArrangeOutline.js';
 import { diagramLaneWidthOf, diagramLinesRoute } from './DiagramArrangeRouter.js';
 import { endpointKeyOf } from './DiagramERData.js';
 import { routeTypeIsRightAngle } from './DiagramRoute.js';
@@ -100,7 +100,7 @@ export const diagramArrangerBlocks = {
 	description: 'Stands the blocks (background cards) in columns, each where its columns are lowest, with one gap between columns and between blocks; the cards of a block move with it. The lines between cards of two blocks get lanes in the gaps between the columns, each gap as wide as its lanes need.',
 	geometryEstimate: (diagram, options) => diagramGeometryEstimateBuild(diagram, options),
 	isApplicable: (diagram) => (diagram.nodes ?? []).filter((node) => node.renderer?.type === 'color-block').length >= 2,
-	arrange(diagram, geometry, { origin = { x: 0, y: 0 }, gap = GAP, gapColumn, columnWidth, columnCount, columnById = {}, aspect = ASPECT, blockIdList, connectionIdList, laneMargin = LANE_MARGIN, registry } = {}) {
+	arrange(diagram, geometry, { origin = { x: 0, y: 0 }, gap = GAP, gapColumn, columnWidth, columnCount, columnById = {}, aspect = ASPECT, blockIdList, connectionIdList, laneMargin = LANE_MARGIN } = {}) {
 		const nodeList = diagram.nodes ?? [];
 		const rectOf = (id) => geometry.rectOf(id);
 		const blockList = (blockIdList ?? nodeList.filter((node) => rectOf(node.id)?.isBackground).map((node) => node.id))
@@ -177,14 +177,10 @@ export const diagramArrangerBlocks = {
 		// routed where the blocks will be: the blocks are what a line keeps clear of, and their columns the router's
 		const geometryMoved = diagramGeometryMovedBuild(geometry, positionById, handleSideList);
 		const rectList = blockList.map((one) => ({ ...geometryMoved.rectOf(one.id), id: one.id, isBackground: false }));
-		const keyOf = (endpoint) => {
-			const node = nodeById.get(endpoint.nodeId);
-			return endpointKeyOf(endpoint, node, Boolean(node) && nodeIsSimple(diagram, node, registry?.kindByType?.[node.renderer?.type]?.contract));
-		};
 		const routerLineList = lineList.flatMap(({ connection, sourceBlock, targetBlock }) => {
 			const source = geometryMoved.endOf(connection, 'source');
 			const target = geometryMoved.endOf(connection, 'target');
-			return source && target ? [{ id: connection.id, type: lineTypeOfConnection(diagram, connection), source, target, sourceNodeId: sourceBlock, targetNodeId: targetBlock, sourceKey: keyOf(connection.source), targetKey: keyOf(connection.target) }] : [];
+			return source && target ? [{ id: connection.id, type: lineTypeOfConnection(diagram, connection), source, target, sourceNodeId: sourceBlock, targetNodeId: targetBlock, sourceKey: endpointKeyOf(connection.source), targetKey: endpointKeyOf(connection.target) }] : [];
 		});
 		const { routeById, reportList } = diagramLinesRoute({ rectList, lineList: routerLineList, measureType: 'step', laneMargin });
 		return { positionById, handleSideList, routeById, reportList };

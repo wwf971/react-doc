@@ -1041,39 +1041,6 @@ export class DiagramEditStore {
 		});
 	}
 
-	// the display of a node (card-diagram-impl.md#the-display-of-a-node): detailed or simple. a
-	// node displayed as the diagram says by default writes nothing of its own
-	nodeDisplayGet(nodeId) {
-		const node = this.nodeGet(nodeId);
-		if (!this.registry?.kindByType[node?.renderer?.type]?.contract.simple) return 'detailed';
-		return node.display ?? this.value.defaults?.node?.display ?? 'detailed';
-	}
-
-	nodeDisplaySet(nodeId, display) {
-		if (!this.registry?.kindByType[this.nodeGet(nodeId)?.renderer?.type]?.contract.simple && display === 'simple') {
-			this.message = `${nodeId} has no simple display.`;
-			return false;
-		}
-		return this.changeApply(documentNext => {
-			const path = [...this.nodePathGet(nodeId), 'display'];
-			if (display === (this.value.defaults?.node?.display ?? 'detailed')) documentNext.deleteIn(path);
-			else documentNext.setIn(path, display);
-		});
-	}
-
-	// every node of the diagram in one display: the default of the diagram, each node following it
-	diagramDisplaySet(display) {
-		return this.changeApply(documentNext => {
-			if (display !== 'detailed') documentNext.setIn(['defaults', 'node', 'display'], display);
-			else if (documentNext.hasIn(['defaults', 'node', 'display'])) documentNext.deleteIn(['defaults', 'node', 'display']);
-			const node = documentNext.getIn(['defaults', 'node']);
-			if (node && node.items?.length === 0) documentNext.deleteIn(['defaults', 'node']);
-			const defaults = documentNext.getIn(['defaults']);
-			if (defaults && defaults.items?.length === 0) documentNext.deleteIn(['defaults']);
-			this.nodes.forEach((item, index) => { if (item.display !== undefined) documentNext.deleteIn(['nodes', index, 'display']); });
-		});
-	}
-
 	nodeMove(nodeId, position) {
 		const node = this.nodeGet(nodeId);
 		if (!node || node.isPositionLocked || !node.position || node.position === 'auto') return false;

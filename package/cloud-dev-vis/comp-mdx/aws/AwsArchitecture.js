@@ -21,7 +21,7 @@ import { switchPathLast, switchPathNormalize, switchPathParent } from '../card-d
 //                 { partList: [{ id, title, tag?, text?, tone? }], linkList?: [{ from, to, label? }] }  parts: modules, keys
 //
 //   {root}                      the groups as frames showing their overview, the clients, what passes between them
-//   {root}/{group}              @resources (cards), @overview (simple marks), @{flow}: the same cards, the
+//   {root}/{group}              @resources (cards), @overview (marks), @{flow}: the same cards, the
 //                               steps of one flow as the lines; @frame, embedded only: its own resources as
 //                               marks, what the frame of the group shows in {root}
 //   {root}/{group}/{resource}   the detail of a resource
@@ -110,11 +110,14 @@ export function awsArchitectureNormalize(input) {
 const handle = (id, direction, side) => ({ id, direction, anchor: { target: 'body', side } });
 const lineOf = (id, [source, handleSource], [target, handleTarget], label, extra = {}) => ({ id, source: { nodeId: source, handleId: handleSource }, target: { nodeId: target, handleId: handleTarget }, ...(label ? { label: { text: label } } : {}), ...extra });
 
-function resourceNodeBuild(model, key, { isSimple, isExternal }) {
+// a resource as its card, or as its mark (aws-mark: at a glance, and where it belongs to another
+// group, whose own scene draws its card): under one id in every view, so a switch moves the card
+// into its mark
+function resourceNodeBuild(model, key, { isMark, isExternal }) {
 	const resource = model.resourceByKey.get(key);
-	const node = { id: key, renderer: { type: resource.kind }, data: { ...resource.data, name: resource.name }, handles: [] };
-	if (isSimple || isExternal) node.display = 'simple';
-	else node.size = { width: CARD_WIDTH, height: 'auto' };
+	const node = isMark || isExternal
+		? { id: key, renderer: { type: 'aws-mark' }, data: { name: resource.name, resourceType: resource.kind }, handles: [] }
+		: { id: key, renderer: { type: resource.kind }, size: { width: CARD_WIDTH, height: 'auto' }, data: { ...resource.data, name: resource.name }, handles: [] };
 	if (isExternal) node.link = `${model.root}/${resource.group}`;
 	else if (resource.detail) node.link = `${model.root}/${resource.group}/${resource.id}`;
 	return node;
@@ -127,11 +130,11 @@ function clientNodeBuild(model, id) {
 
 // the nodes of a scene and the lines between them: each line a handle of its own at its source,
 // one handle per node to arrive at; the layer arranger turns and spreads them
-function graphBuild(model, endList, lineList, { isSimple, groupId, styleOf }) {
+function graphBuild(model, endList, lineList, { isMark, groupId, styleOf }) {
 	const nodeById = new Map();
 	for (const end of endList) {
 		if (nodeById.has(end)) continue;
-		nodeById.set(end, model.clientById.has(end) ? clientNodeBuild(model, end) : resourceNodeBuild(model, end, { isSimple, isExternal: model.resourceByKey.get(end).group !== groupId }));
+		nodeById.set(end, model.clientById.has(end) ? clientNodeBuild(model, end) : resourceNodeBuild(model, end, { isMark, isExternal: model.resourceByKey.get(end).group !== groupId }));
 	}
 	const handleAdd = (nodeId, item) => {
 		const node = nodeById.get(nodeId);
@@ -176,11 +179,11 @@ function groupViewListBuild(model, group, registry) {
 	const endList = groupEndListOf(model, group);
 	const relationList = group.relationList.map((relation, index) => ({ ...relation, id: `r${index + 1}` }));
 	const resources = arranged(graphBuild(model, endList, relationList, { groupId: group.id }), registry);
-	const overview = arranged(graphBuild(model, endList, relationList, { groupId: group.id, isSimple: true }), registry, diagramArrangerLayers, { gapCard: 40 });
+	const overview = arranged(graphBuild(model, endList, relationList, { groupId: group.id, isMark: true }), registry, diagramArrangerLayers, { gapCard: 40 });
 	// what the frame of the group shows where everything else is drawn around it: its own resources
 	// alone, as marks, and what passes between them
 	const ownSet = new Set(group.resourceList.map((resource) => resource.key));
-	const frame = arranged(graphBuild(model, endList.filter((end) => ownSet.has(end)), relationList.filter((relation) => ownSet.has(relation.from) && ownSet.has(relation.to)), { groupId: group.id, isSimple: true }), registry, diagramArrangerLayers, { gapCard: 40 });
+	const frame = arranged(graphBuild(model, endList.filter((end) => ownSet.has(end)), relationList.filter((relation) => ownSet.has(relation.from) && ownSet.has(relation.to)), { groupId: group.id, isMark: true }), registry, diagramArrangerLayers, { gapCard: 40 });
 	const viewList = [
 		{ id: 'resources', label: 'Resources', title: `${group.label}: its resources`, diagram: resources },
 		{ id: 'overview', label: 'Overview', title: `${group.label} at a glance`, diagram: overview },

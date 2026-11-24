@@ -101,13 +101,6 @@ export function nodeRegistrySearch(registry, query) {
 	}).filter(item => item.rank >= 0).sort((a, b) => a.rank - b.rank);
 }
 
-// the simple display of a resource card (CardSimpleData.js): its mark with the icon of the
-// card, colored by its family (.doc-card-simple.is-{family}), its name, and one head field
-// under it (textFieldId), the one that says most at a glance
-export function resourceNodeSimpleBuild({ Icon, family, textFieldId, shape = 'tile' }) {
-	return { shape, contentGet: data => ({ title: data.name, text: textFieldId ? data[textFieldId] : undefined, Icon, family }) };
-}
-
 // a card with head fields and property rows (ResourceNodeCard.jsx): its
 // create function. a series uses it for its resource kinds
 export function resourceNodeCreateBuild(type, fields, name) {

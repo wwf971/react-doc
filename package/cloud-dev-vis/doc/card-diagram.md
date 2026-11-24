@@ -19,7 +19,7 @@ a diagram moving between states  the animation wrapper: card-diagram-animation.m
 many diagrams in one viewport    the switching layer: card-diagram-flexible-switch.md
 a layer over every diagram       a feature of the registry: card-diagram-impl.md#features
 drawing tools, groups by rules   the parametric canvas: card-diagram-parametric-canvas.md
-how a node looks at a glance     its simple display: card-diagram-impl.md#the-display-of-a-node
+a thing at a glance              a mark, a kind of its own: card-diagram-impl.md#marks
 a diagram where a canvas is in   DiagramStatic: card-diagram-impl.md#a-diagram-without-a-canvas
 the way
 how a line runs (anchors, routes) DiagramRoute: card-diagram-connection-line.md
@@ -89,7 +89,7 @@ A command is a method of `DiagramEditStore` (or of a store a series adds on the 
 | ☐ | A fresh node from `create` is valid as it is, with explicit handles where the author would expect them |
 | ☐ | Its colors are the style of the node ([The style of a node](card-diagram-impl.md#the-style-of-a-node)): `contract.styleList` names what its card draws (a card with a schema draws a fill without saying so), and its css falls back from `var(--doc-node-fill)`; no color property of its own for its background |
 | ☐ | Search finds its words ([Search](card-diagram-impl.md#search)): a card with a schema needs nothing, unless a variant draws a cell otherwise than its value (`contract.searchCellTextGet`); a card without one answers `contract.searchMatch` when the words of its data are not what it shows, and a kind holding a scene asks for it through `helper.childSearch` |
-| ☐ | A thing a system is drawn with (a resource, a table, a store) has a simple display (`contract.simple`: its shape, and what its mark says, [The display of a node](card-diagram-impl.md#the-display-of-a-node)); its anchors need nothing more, every handle goes to the mark |
+| ☐ | A series whose things are seen at a glance (the resources of a system) draws them as marks with a mark kind of its own (`cardMarkKindBuild`: its shape, and what a mark says from its data, [Marks](card-diagram-impl.md#marks)), not as a look of each card; a generator writes a thing's mark under the id of its card, so a switch moves the one into the other |
 | ☐ | A card whose height follows its content answers `contract.sizeEstimate`, so an arranger with nothing drawn places it where it will be ([the contract](card-diagram-arrange.md#the-contract)) |
 | ☐ | The kind has a test beside the registry (as `OperatorNodes.test.js`, `aws-node-registry.test.js`), covering normalization, the schema's rows and fields, a cell edit and its undo |
 | ☐ | The series document and the usage document describe it, whose examples show it |

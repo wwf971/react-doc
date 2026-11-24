@@ -1,7 +1,8 @@
-import { Archive, Braces, Database, KeyRound, Route, ScrollText, SquareFunction, Users } from '../../../../main/frontend/UICommon.js';
+import { Archive, Braces, Database, KeyRound, Route, ScrollText, Shapes, SquareFunction, Users } from '../../../../main/frontend/UICommon.js';
 import { nodeRegistryBuild } from '../card-diagram/node-registry.js';
 import { cardDiagramFeatureList, cardDiagramNodeKindList } from '../card-diagram/card-diagram-node-registry.js';
 import { resourceCardSchemaBuild } from '../card-diagram/TableCardSchema.js';
+import { cardMarkKindBuild } from '../card-diagram/CardMark.jsx';
 import { diagramArrangerLanesAcross, diagramArrangerLanesDown, diagramArrangerLayers } from '../card-diagram/DiagramArrangeLayers.js';
 import { awsHandleOf } from './AwsCardData.js';
 import { awsIconOf } from './AwsIcon.js';
@@ -24,23 +25,30 @@ import { AwsRouteGroupNode } from './AwsRouteGroupNode.jsx';
 import './AwsCard.css';
 
 // The node kinds of the AWS series (doc/aws.md): the resources of AWS a system is drawn with, as
-// schemas over the cards of the base series, each with a simple display (a mark in the accent of
-// its family, for an overview), on top of the generic kinds of the base series. A client (a
-// browser, a page) is not an AWS kind: it is drawn with the cards of the base series.
+// schemas over the cards of the base series, and the mark of a resource (aws-mark), for an
+// overview, on top of the generic kinds of the base series. A client (a browser, a page) is not an
+// AWS kind: it is drawn with the cards of the base series.
 
-// drawn simple (CardSimpleData.js): the mark of its family with its icon, its name, the service
-// (or its official icon, when it was fetched: AwsIcon.js)
-const simpleOf = ({ type, Icon, family, service, shape = 'tile' }) => ({ shape, contentGet: (data) => {
-	const icon = awsIconOf(type);
-	return { title: data.name, text: service, Icon, family, iconUrl: icon?.url, isIconFramed: icon?.isFramed };
-} });
+// how a resource of each kind reads at a glance: its icon, its family (the accent of its card and of
+// its mark: AwsCard.css), the name of its service
+export const AWS_RESOURCE_LOOK_BY_TYPE = {
+	'aws-http-api': { Icon: Route, family: 'aws-network', service: 'API Gateway' },
+	'aws-lambda': { Icon: SquareFunction, family: 'aws-compute', service: 'Lambda' },
+	'aws-dynamodb-table': { Icon: Database, family: 'aws-database', service: 'DynamoDB' },
+	'aws-s3-bucket': { Icon: Archive, family: 'aws-storage', service: 'S3' },
+	'aws-cognito-user-pool': { Icon: Users, family: 'aws-security', service: 'Cognito' },
+	'aws-iam-role': { Icon: KeyRound, family: 'aws-security', service: 'IAM role' },
+	'aws-log-group': { Icon: ScrollText, family: 'aws-management', service: 'CloudWatch Logs' },
+	'aws-route-group': { Icon: Braces, family: 'aws-network', service: 'routes' },
+};
 
 // a kind on the resource card: head fields and property rows (ResourceNodeCard.jsx)
-function awsResourceKindBuild({ type, label, fields, contract, Card, Icon, family, service, description, keywordList, name }) {
+function awsResourceKindBuild({ type, label, fields, contract, Card, description, keywordList, name }) {
+	const { Icon } = AWS_RESOURCE_LOOK_BY_TYPE[type];
 	return {
 		type,
 		label,
-		contract: { ...contract, simple: simpleOf({ type, Icon, family, service }) },
+		contract,
 		schema: resourceCardSchemaBuild(type, fields, label),
 		Card,
 		create: {
@@ -54,39 +62,34 @@ function awsResourceKindBuild({ type, label, fields, contract, Card, Icon, famil
 }
 
 export const awsHttpApiNodeKind = awsResourceKindBuild({
-	type: 'aws-http-api', label: 'HTTP API', fields: awsHttpApiNodeFields, contract: awsHttpApiNodeContract, Card: AwsHttpApiNode,
-	Icon: Route, family: 'aws-network', service: 'API Gateway', name: '{prefix}--api',
+	type: 'aws-http-api', label: 'HTTP API', fields: awsHttpApiNodeFields, contract: awsHttpApiNodeContract, Card: AwsHttpApiNode, name: '{prefix}--api',
 	description: 'An http api of API Gateway: its authorizer, CORS, throttle, and its groups of routes.', keywordList: ['api gateway', 'http', 'rest', 'endpoint'],
 });
 
 export const awsLambdaNodeKind = awsResourceKindBuild({
-	type: 'aws-lambda', label: 'Lambda function', fields: awsLambdaNodeFields, contract: awsLambdaNodeContract, Card: AwsLambdaNode,
-	Icon: SquareFunction, family: 'aws-compute', service: 'Lambda', name: '{prefix}--function',
+	type: 'aws-lambda', label: 'Lambda function', fields: awsLambdaNodeFields, contract: awsLambdaNodeContract, Card: AwsLambdaNode, name: '{prefix}--function',
 	description: 'A function: runtime, memory and time, its role, the names of its environment.', keywordList: ['lambda', 'function', 'compute', 'serverless'],
 });
 
 export const awsS3BucketNodeKind = awsResourceKindBuild({
-	type: 'aws-s3-bucket', label: 'S3 bucket', fields: awsS3BucketNodeFields, contract: awsS3BucketNodeContract, Card: AwsS3BucketNode,
-	Icon: Archive, family: 'aws-storage', service: 'S3', name: '{prefix}--data',
+	type: 'aws-s3-bucket', label: 'S3 bucket', fields: awsS3BucketNodeFields, contract: awsS3BucketNodeContract, Card: AwsS3BucketNode, name: '{prefix}--data',
 	description: 'A bucket: who reaches it, its key prefixes, its lifecycle.', keywordList: ['s3', 'bucket', 'object', 'storage'],
 });
 
 export const awsCognitoUserPoolNodeKind = awsResourceKindBuild({
-	type: 'aws-cognito-user-pool', label: 'Cognito user pool', fields: awsCognitoUserPoolNodeFields, contract: awsCognitoUserPoolNodeContract, Card: AwsCognitoUserPoolNode,
-	Icon: Users, family: 'aws-security', service: 'Cognito', name: '{prefix}--users',
+	type: 'aws-cognito-user-pool', label: 'Cognito user pool', fields: awsCognitoUserPoolNodeFields, contract: awsCognitoUserPoolNodeContract, Card: AwsCognitoUserPoolNode, name: '{prefix}--users',
 	description: 'A user pool: its app clients, its groups, its MFA mode.', keywordList: ['cognito', 'user pool', 'sign in', 'auth', 'identity'],
 });
 
 export const awsIamRoleNodeKind = awsResourceKindBuild({
-	type: 'aws-iam-role', label: 'IAM role', fields: awsIamRoleNodeFields, contract: awsIamRoleNodeContract, Card: AwsIamRoleNode,
-	Icon: KeyRound, family: 'aws-security', service: 'IAM role', name: '{prefix}--role',
+	type: 'aws-iam-role', label: 'IAM role', fields: awsIamRoleNodeFields, contract: awsIamRoleNodeContract, Card: AwsIamRoleNode, name: '{prefix}--role',
 	description: 'A role: who assumes it, what it allows, by service.', keywordList: ['iam', 'role', 'policy', 'permission'],
 });
 
 export const awsLogGroupNodeKind = {
 	type: 'aws-log-group',
 	label: 'Log group',
-	contract: { ...awsLogGroupNodeContract, simple: simpleOf({ type: 'aws-log-group', Icon: ScrollText, family: 'aws-management', service: 'CloudWatch Logs' }) },
+	contract: awsLogGroupNodeContract,
 	schema: null,
 	Card: AwsLogGroupNode,
 	create: {
@@ -98,7 +101,7 @@ export const awsLogGroupNodeKind = {
 export const awsDynamodbTableNodeKind = {
 	type: 'aws-dynamodb-table',
 	label: 'DynamoDB table',
-	contract: { ...awsDynamodbTableNodeContract, simple: simpleOf({ type: 'aws-dynamodb-table', Icon: Database, family: 'aws-database', service: 'DynamoDB' }) },
+	contract: awsDynamodbTableNodeContract,
 	schema: awsDynamodbTableSchema,
 	Card: AwsDynamodbTableNode,
 	create: {
@@ -113,7 +116,7 @@ export const awsDynamodbTableNodeKind = {
 export const awsRouteGroupNodeKind = {
 	type: 'aws-route-group',
 	label: 'Route group',
-	contract: { ...awsRouteGroupNodeContract, simple: simpleOf({ type: 'aws-route-group', Icon: Braces, family: 'aws-network', service: 'routes' }) },
+	contract: awsRouteGroupNodeContract,
 	schema: awsRouteGroupSchema,
 	Card: AwsRouteGroupNode,
 	create: {
@@ -126,13 +129,36 @@ export const awsRouteGroupNodeKind = {
 
 export const awsNodeKindList = [awsHttpApiNodeKind, awsLambdaNodeKind, awsDynamodbTableNodeKind, awsS3BucketNodeKind, awsCognitoUserPoolNodeKind, awsIamRoleNodeKind, awsLogGroupNodeKind, awsRouteGroupNodeKind];
 
+// a resource drawn as a mark (CardMark.jsx: card-diagram-impl.md#marks), for an overview: the icon of
+// its kind in the accent of its family (or its official icon, when it was fetched: AwsIcon.js), its
+// name, its service under it. data: { name, resourceType: the type of an AWS kind above }. The
+// scenes of a description draw a resource so where they show it at a glance (AwsArchitecture.js),
+// under the id its card has in the other views, so a switch moves the card into its mark
+export const awsMarkNodeKind = cardMarkKindBuild({
+	type: 'aws-mark',
+	label: 'Resource mark',
+	contentGet: (data) => {
+		const look = AWS_RESOURCE_LOOK_BY_TYPE[data.resourceType];
+		const icon = awsIconOf(data.resourceType);
+		return { title: data.name, text: look?.service, Icon: look?.Icon, family: look?.family, iconUrl: icon?.url, isIconFramed: icon?.isFramed };
+	},
+	propertyList: [
+		{ id: 'name', label: 'Name', kind: 'text' },
+		{ id: 'resourceType', label: 'Resource', kind: 'enum', values: awsNodeKindList.map((kind) => kind.type), valueLabels: Object.fromEntries(awsNodeKindList.map((kind) => [kind.type, kind.label])) },
+	],
+	create: {
+		description: 'A resource as a mark with its name and service under it, for an overview.', icon: Shapes, keywordList: ['aws', 'mark', 'overview', 'resource', 'icon'],
+		nodeCreate: (idNext) => ({ id: idNext('mark'), renderer: { type: 'aws-mark' }, data: { name: '{prefix}--function', resourceType: 'aws-lambda' }, handles: [awsHandleOf('in', 'in'), awsHandleOf('out', 'out')] }),
+	},
+});
+
 // the arrangers of a system read downward (DiagramArrangeLayers.js)
 export const awsArrangerList = [diagramArrangerLayers, diagramArrangerLanesDown, diagramArrangerLanesAcross];
 
 // DiagramAws, DiagramAwsSwitch: the AWS kinds with the generic ones, so a diagram mixes a
 // browser drawn as a note with the resources it talks to
 // the features of the base series too (the parametric canvas): offered where a viewport names them
-export const awsNodeRegistry = nodeRegistryBuild({ id: 'aws', label: 'AWS', kindList: [...cardDiagramNodeKindList, ...awsNodeKindList], arrangerList: awsArrangerList, featureList: cardDiagramFeatureList });
+export const awsNodeRegistry = nodeRegistryBuild({ id: 'aws', label: 'AWS', kindList: [...cardDiagramNodeKindList, ...awsNodeKindList, awsMarkNodeKind], arrangerList: awsArrangerList, featureList: cardDiagramFeatureList });
 
 // DiagramAwsResource: one card of a resource outside a canvas, the kinds that are cards
 export const awsResourceNodeRegistry = nodeRegistryBuild({ id: 'aws-resource', label: 'AWS resource', kindList: awsNodeKindList.filter((kind) => kind.schema) });

@@ -13,6 +13,18 @@ function nodeStyleOf(node, sizePlaced) {
 
 const viewStates = new WeakMap();
 
+// The camera a canvas remembers across mounts: one state per owner (the source store of the page,
+// useDocStores().sourceStore) and block (config.sourcePath, config.blockIndex). CardDiagram.jsx reads
+// it once as a canvas mounts, so a canvas taking the place of another (the editor replacing the
+// reading canvas, the reading canvas drawn again after a save) opens where the reader was.
+//
+// As it is kept today, the owner is told apart by identity, never by what it holds: two canvases share
+// a camera only when their host gives both the very same source store object. A host that builds its
+// source store per mount (an object spread in a render or a useMemo, `{ ...base, configDoc }`) gives
+// each canvas an owner of its own: nothing fails, every editor simply opens fitted. The camera is also
+// kept only for a viewport of the same signature (its size: CardDiagram.jsx), so the two canvases are
+// drawn at one height too. What is worth keeping is the behaviour (entering the editor moves nothing);
+// these conditions belong to this way of keeping the camera, and go with it if it is reworked.
 export function diagramViewStateGet(owner, config) {
 	if (!owner || !config.sourcePath || config.blockIndex === undefined) return {};
 	let states = viewStates.get(owner);

@@ -7,15 +7,15 @@
 //   a node as high as its content (height auto: a table, a note, a resource card)
 //                                     its width; the height keeps following the content
 //   a node as wide as its words (isWidthFit: a label), drawn around others, derived by a feature,
-//   pinned to the viewport, or drawn simple (a mark)
+//   or pinned to the viewport
 //                                     nothing
 //
-// contract.resizeAxisList: ['width', 'height'] | ['width'] | ['height'] | [] (an icon: its width; what
-// a generator writes: nothing). A kind that lists its size modes (below) is resized as its mode says.
+// contract.resizeAxisList: ['width', 'height'] | ['width'] | ['height'] | [] (an icon: its width; a
+// mark, what a generator writes: nothing). A kind that lists its size modes (below) is resized as its mode says.
 export const NODE_RESIZE_AXIS_LIST = ['width', 'height'];
 
 export function nodeResizeAxisListOf(node, contract) {
-	if (!node || node.isDerived || node.around || node.pin !== undefined || node.display === 'simple') return [];
+	if (!node || node.isDerived || node.around || node.pin !== undefined) return [];
 	if (contract?.sizeModeList) return NODE_SIZE_MODE_BY_ID[nodeSizeModeOf(node)].axisList;
 	if (Array.isArray(contract?.resizeAxisList)) return contract.resizeAxisList.filter(axis => NODE_RESIZE_AXIS_LIST.includes(axis));
 	if (node.isWidthFit) return [];

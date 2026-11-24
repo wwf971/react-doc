@@ -36,15 +36,15 @@ aws-comp.js                                                     the four compone
 - **What is written is what a document of the system says.** Names keep the form of the deployment scripts, `{prefix}--{name}`; no deployment's own prefix or id is drawn.
 - **A client is not an AWS kind.** A page, a browser, a script are drawn with the cards of the base series (`card-note`), in the same diagram.
 
-## Families and the simple display
+## Families and marks
 
-Each kind belongs to a family of services, which gives its accent (`AwsCard.css`): `aws-network` (API Gateway), `aws-compute` (Lambda), `aws-database` (DynamoDB), `aws-storage` (S3), `aws-security` (IAM, Cognito), `aws-management` (CloudWatch). The accents are the colors of the categories of the official icons, so a card agrees with its icon whether the icons were fetched or not.
+Each kind belongs to a family of services, which gives its accent (`AwsCard.css`): `aws-network` (API Gateway), `aws-compute` (Lambda), `aws-database` (DynamoDB), `aws-storage` (S3), `aws-security` (IAM, Cognito), `aws-management` (CloudWatch). The accents are the colors of the categories of the official icons, so a card agrees with its icon whether the icons were fetched or not. What a resource of each kind shows at a glance, its icon, its family and its service, is one table (`AWS_RESOURCE_LOOK_BY_TYPE`).
 
-Every kind has a [simple display](card-diagram-impl.md#the-display-of-a-node): a tile with the icon of its service, the name of the resource, and the name of the service under it in a small monospace line, in the look of the architecture diagrams of AWS. So one system is drawn at two levels with the same data: an overview of tiles, and the resources as cards. The icon is the official one of AWS where it was fetched ([below](#the-official-icons)), else the icon of the page in the accent of the family.
+A resource at a glance is drawn by one more kind, **`aws-mark`** ([a mark](card-diagram-impl.md#marks)): `data: { name, resourceType }`, a tile with the icon of the service of `resourceType`, the name of the resource, and the name of the service under it in a small line, in the look of the architecture diagrams of AWS. Its edit card edits the name and the resource it stands for. So one system is drawn at two levels: an overview of marks, and the resources as cards, two views under the same ids. The icon is the official one of AWS where it was fetched ([below](#the-official-icons)), else the icon of the page in the accent of the family; a `resourceType` of no kind of the series is a mark with its name alone.
 
 ## The official icons
 
-AWS publishes the icons of its services as a package of SVG files, for drawing architecture diagrams. The kinds use them where they are present: a service icon (`Arch_*`, a colored square of its own) is the whole tile of a node drawn simple; a resource icon (`Res_*`, a glyph: a role, a log group, a group of routes) is drawn inside a white tile. The title line of a card shows the same icon, small.
+AWS publishes the icons of its services as a package of SVG files, for drawing architecture diagrams. The kinds use them where they are present: a service icon (`Arch_*`, a colored square of its own) is the whole tile of a mark; a resource icon (`Res_*`, a glyph: a role, a log group, a group of routes) is drawn inside a white tile. The title line of a card shows the same icon, small.
 
 The package does not hold them. The page of the icons says "We allow customers and partners to use these toolkits and assets to create architecture diagrams", and does not say they may be passed on. So each machine that draws with them fetches them, into a folder git ignores:
 
@@ -73,7 +73,7 @@ The cards answer `contract.sizeEstimate` from their rows (`resourceCardHeightEst
 | Component | Is | Starting text |
 | --- | --- | --- |
 | `DiagramAws` | `cardDiagramCompCreate(awsNodeRegistry)` | a page, an api, a function, a table and a bucket, laid out by `layers` |
-| `DiagramAwsSwitch` | `cardDiagramSwitchCompCreate(awsNodeRegistry)`, scenes by path | one scene in two views: the overview drawn simple, the resources as cards |
+| `DiagramAwsSwitch` | `cardDiagramSwitchCompCreate(awsNodeRegistry)`, scenes by path | one scene in two views: the overview as marks, the resources as cards |
 | `DiagramAwsArchitecture` | `cardDiagramSwitchCompCreate(awsNodeRegistry, { loadBuild })`: scenes generated from a description ([below](#scenes-generated-from-a-description)) | a shop of three groups and two clients |
 | `DiagramAwsResource` | `cardStandaloneCompCreate(awsResourceNodeRegistry)`, one card outside a canvas | a function |
 
@@ -100,7 +100,7 @@ A click on a frame zooms into its group; a resource with a detail opens it; a re
 
 | Place | Role |
 | --- | --- |
-| `aws-node-registry.js` | the kinds, their simple displays and create entries, the two registries, the arrangers offered |
+| `aws-node-registry.js` | the kinds and their create entries, the look of a resource at a glance, the mark of a resource (`aws-mark`), the two registries, the arrangers offered |
 | `AwsCardData.js` | the families, a handle read downward (`awsHandleOf`), the cards of rows with fixed fields: schema, normalization, anchors |
 | `Aws{Resource}Node.jsx`, `Aws{Resource}NodeData.js` | per kind: its card, its fields and contract |
 | `AwsSource.js` | the starting texts, the example description |
@@ -109,5 +109,5 @@ A click on a frame zooms into its group; a resource with a detail opens it; a re
 | `icon-official/`, `../../script-icon/aws-icon-fetch.mjs` | where the icons are fetched to (ignored by git), and the script fetching them |
 | `aws-comp.js`, `comp.yaml` | the components and their manifest |
 | `AwsCard.css` | the accents of the families, the look of the rows of fixed fields, the official icon on a card |
-| `aws-node-registry.test.js` | every kind valid from the create panel, a cell edited and undone, rows of fixed fields, the display of a node and of a diagram, the starting texts without a line on another, the official icon of every kind |
+| `aws-node-registry.test.js` | every kind valid from the create panel, a cell edited and undone, rows of fixed fields, the mark of a resource and its edit, the starting texts without a line on another, the official icon of every kind |
 | `AwsArchitecture.test.js` | every scene and view of the example a valid diagram, no line on another in what it lays out, an error naming its place |

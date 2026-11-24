@@ -336,7 +336,7 @@ export const SwitchCanvas = observer(function SwitchCanvas({ store, config, regi
 		sourceGet: () => '',
 		editorGet: () => null,
 		endsGet: () => null,
-		lineListGet: () => diagramCanvasLineListGet(context.edgeGeometry, store.entryGet(store.pathFlow)?.canvas.graph?.connections ?? [], store.entryGet(store.pathFlow)?.canvas.graph?.nodes),
+		lineListGet: () => diagramCanvasLineListGet(context.edgeGeometry, store.entryGet(store.pathFlow)?.canvas.graph?.connections ?? []),
 	}), [store, config, context]);
 	const switchContext = useMemo(() => ({ store, isStatic: false, depth: 0, pathChain: [], get presentation() { return switchPresentationBuild(store.pathFlow, false, null, { depth: 0, depthMax: store.depthRenderMax }); } }), [store]);
 	const searchPathGet = useMemo(() => () => store.pathFlow, [store]);

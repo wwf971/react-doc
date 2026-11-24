@@ -30,13 +30,11 @@ export function diagramCanvasEndsGet(edgeGeometry, connectionId, connection) {
 }
 
 // the lines of a canvas as they are drawn, for routeOverlapListGet: an end is known by
-// its node and handle, or by its place on the mark of a node drawn simple (endpointKeyOf).
-// nodeList: the nodes of the graph drawn
-export function diagramCanvasLineListGet(edgeGeometry, connectionList, nodeList = []) {
-	const nodeById = new Map(nodeList.map((node) => [node.id, node]));
+// its node and handle (endpointKeyOf)
+export function diagramCanvasLineListGet(edgeGeometry, connectionList) {
 	return connectionList.flatMap((connection) => {
 		const d = edgeGeometry?.get(connection.id)?.d;
-		return d ? [{ id: connection.id, d, sourceKey: endpointKeyOf(connection.source, nodeById.get(connection.source?.nodeId)), targetKey: endpointKeyOf(connection.target, nodeById.get(connection.target?.nodeId)) }] : [];
+		return d ? [{ id: connection.id, d, sourceKey: endpointKeyOf(connection.source), targetKey: endpointKeyOf(connection.target) }] : [];
 	});
 }
 

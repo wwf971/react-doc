@@ -1,5 +1,4 @@
 import { routeNormalize, routeTypeHasAnchors } from './DiagramRoute.js';
-import { CARD_SIMPLE_HEIGHT, CARD_SIMPLE_WIDTH, cardSimpleAnchorOf, nodeDisplayRead } from './CardSimpleData.js';
 import { CARD_FOOTER_ANCHOR } from './TableCardSchema.js';
 import { nodeStyleRead } from './DiagramNodeStyle.js';
 import { NODE_SIZE_MODE_BY_ID, nodeSizeModeOf } from './DiagramNodeResize.js';
@@ -147,12 +146,10 @@ export function endpointIsDangling(endpoint) {
 }
 
 // what an end of a line is attached to, for the rule of lines on top of each other
-// (routeOverlapPairGet): its node and handle; on a node drawn simple, the place on its mark, so
-// the handles of one side and offset, which meet there, are one endpoint
-export function endpointKeyOf(endpoint, node, isSimple = node?.display === 'simple') {
+// (routeOverlapPairGet): its node and handle
+export function endpointKeyOf(endpoint) {
 	if (!endpoint || endpointIsDangling(endpoint)) return '';
-	const handle = isSimple ? node?.handles?.find(item => item.id === endpoint.handleId) : null;
-	return handle ? `${endpoint.nodeId}/~mark:${handle.anchor?.side}:${handle.anchor?.offset ?? 0.5}` : `${endpoint.nodeId}/${endpoint.handleId}`;
+	return `${endpoint.nodeId}/${endpoint.handleId}`;
 }
 
 export function endpointRead(value, field) {
@@ -185,11 +182,9 @@ export function diagramNormalize(input, registry, resolve, height = 620) {
 	if (!Number.isInteger(columns)) throw new Error('layout.columns must be an integer.');
 	const gap = mapping(layout.gap ?? {}, 'layout.gap');
 	const layoutResolved = { columns, gap: { x: number(gap.x ?? 110, 'gap.x', 0), y: number(gap.y ?? 60, 'gap.y', 0) } };
-	// how nodes are displayed when they do not say (card-diagram-impl.md#the-display-of-a-node): a
-	// kind with no simple display keeps its card
-	const nodeDefault = mapping(defaults.node ?? {}, 'defaults.node');
-	if (Object.keys(nodeDefault).some(key => key !== 'display')) throw new Error('defaults.node holds display only.');
-	const displayDefault = nodeDefault.display === undefined ? 'detailed' : nodeDisplayRead(nodeDefault.display, 'defaults.node.display');
+	// a diagram written when a node could be drawn as a mark by a display of its own: a mark is now a
+	// kind (card-diagram-impl.md#marks), so the field would be read as nothing
+	if (own(defaults, 'node')) throw new Error('defaults.node is not read: a node is drawn as its kind, and a mark is a kind of its own.');
 	const nodeAllList = list(value.nodes, 'nodes').map(node => {
 		mapping(node, 'node');
 		const id = text(node.id, 'node.id');
@@ -214,22 +209,18 @@ export function diagramNormalize(input, registry, resolve, height = 620) {
 		for (const anchor of anchors) {
 			if (!Array.isArray(anchor.sideList) || !anchor.sideList.length || anchor.sideList.some(side => !sides.includes(side))) throw new Error(`${id}: invalid sides for anchor "${anchor.id}".`);
 		}
-		// detailed (its card) or simple (a mark with its name): written on the node, else the default
-		// of the diagram where the kind can be drawn simple
-		if (node.display !== undefined) nodeDisplayRead(node.display, `${id}.display`);
-		if (node.display === 'simple' && !contract.simple) throw new Error(`${id}: a ${renderer.type ?? renderer.component} node has no simple display.`);
-		const display = node.display ?? (contract.simple ? displayDefault : 'detailed');
-		const isSimple = display === 'simple';
+		if (own(node, 'display')) throw new Error(`${id}.display is not read: a node is drawn as its kind, and a mark is a kind of its own.`);
 		const size = mapping(node.size ?? {}, `${id}.size`);
 		const sizeResolved = { width: dimension(size.width, `${id}.width`), height: dimension(size.height, `${id}.height`) };
-		const sizeDefault = isSimple ? { width: contract.simple.width ?? CARD_SIMPLE_WIDTH, height: CARD_SIMPLE_HEIGHT } : { width: 220, height: 100, ...contract.sizeDefault };
+		const sizeDefault = { width: 220, height: 100, ...contract.sizeDefault };
 		// a kind whose lines to the card as a whole end on another part of it (handleAnchorDrawnOf)
-		const anchorSideDrawn = contract.anchorSideDrawn && !isSimple ? { anchorSideDrawn: contract.anchorSideDrawn } : {};
-		const anchorBottomDrawn = isCard && !isSimple ? { anchorBottomDrawn: CARD_FOOTER_ANCHOR } : {};
+		const anchorSideDrawn = contract.anchorSideDrawn ? { anchorSideDrawn: contract.anchorSideDrawn } : {};
+		const anchorBottomDrawn = isCard ? { anchorBottomDrawn: CARD_FOOTER_ANCHOR } : {};
+		const anchorBodyDrawn = contract.anchorBodyDrawn ? { anchorBodyDrawn: contract.anchorBodyDrawn } : {};
 		// a kind as wide as what it says, when no width is written
-		const widthFit = contract.isWidthFit && !isSimple && sizeResolved.width === 'auto' ? { isWidthFit: true } : {};
+		const widthFit = contract.isWidthFit && sizeResolved.width === 'auto' ? { isWidthFit: true } : {};
 		// a kind listing its size modes takes its box in one of them (DiagramNodeResize.js)
-		if (contract.sizeModeList && !isSimple && !contract.sizeModeList.includes(nodeSizeModeOf({ size: sizeResolved }))) {
+		if (contract.sizeModeList && !contract.sizeModeList.includes(nodeSizeModeOf({ size: sizeResolved }))) {
 			throw new Error(`${id}: the size of a ${renderer.type ?? renderer.component} node is ${contract.sizeModeList.map(mode => `${NODE_SIZE_MODE_BY_ID[mode].sizeText} (${NODE_SIZE_MODE_BY_ID[mode].label.toLowerCase()})`).join(' or ')}.`);
 		}
 		for (const axis of ['width', 'height']) {
@@ -259,7 +250,7 @@ export function diagramNormalize(input, registry, resolve, height = 620) {
 			if (contract.isBackground !== true) throw new Error(`${id}: only a background (a color block) is drawn around other nodes.`);
 			return { ...node, id, renderer, data, anchors, handles, isBackground: true, around: aroundRead(node.around, id), size: { width: 1, height: 1 }, sizeDefault, position: { x: 0, y: 0 } };
 		}
-		return { ...node, id, renderer, data, anchors, handles, display, isBackground: contract.isBackground === true, size: sizeResolved, sizeDefault, ...widthFit, ...anchorSideDrawn, ...anchorBottomDrawn, position: node.position === undefined || node.position === 'auto' ? 'auto' : point(node.position, `${id}.position`) };
+		return { ...node, id, renderer, data, anchors, handles, isBackground: contract.isBackground === true, size: sizeResolved, sizeDefault, ...widthFit, ...anchorSideDrawn, ...anchorBottomDrawn, ...anchorBodyDrawn, position: node.position === undefined || node.position === 'auto' ? 'auto' : point(node.position, `${id}.position`) };
 	});
 	// a node pinned to a corner of the viewport (a legend) is not on the canvas: it stays in its
 	// corner while the camera moves, takes no line and has no place in a layout or in the bounds of
@@ -443,17 +434,50 @@ export const lineTypeList = lineTypes;
 export const markerTypeList = markerTypes;
 export const attachPolicyList = attachPolicies;
 
-// the part of a card a handle is drawn on. a node drawn simple has its mark, on which every
-// handle stands at its side and offset, and under its words for a handle at the bottom. a line
-// to a card as a whole leaving its bottom leaves its footer, the strip under its rows, at its
-// offset, so it is never read as leaving the last row (every card has one). a line to a card as
-// a whole, at the middle of its left or right side, ends where the kind says
-// (contract.anchorSideDrawn): a table card, the middle of its title line. only the drawing
-// changes: the handle stays what it was written as
+// the part of a card a handle is drawn on. a handle on the node as a whole stands, on each side,
+// where its kind says (contract.anchorBodyDrawn: a mark, on its shape, and under its words for a
+// handle at the bottom: CardMarkData.js). a line to a card as a whole leaving its bottom leaves
+// its footer, the strip under its rows, at its offset, so it is never read as leaving the last row
+// (every card has one). a line to a card as a whole, at the middle of its left or right side, ends
+// where the kind says (contract.anchorSideDrawn): a table card, the middle of its title line. only
+// the drawing changes: the handle stays what it was written as
 export function handleAnchorDrawnOf(node, handle) {
-	if (node.display === 'simple') return cardSimpleAnchorOf(handle.anchor.side);
 	const { target, side, offset } = handle.anchor;
+	if (target === 'body' && node.anchorBodyDrawn?.[side]) return node.anchorBodyDrawn[side];
 	if (target === 'body' && side === 'bottom' && node.anchorBottomDrawn) return node.anchorBottomDrawn;
 	const isCardSide = target === 'body' && (side === 'left' || side === 'right') && offset === 0.5;
 	return isCardSide && node.anchorSideDrawn ? node.anchorSideDrawn : target;
+}
+
+// how high the caps of a cylinder are, a part of the height of its outline (a mark: CardMark.jsx)
+export const ANCHOR_CYLINDER_CAP = 0.24;
+
+// the point of a handle on an anchor: on its side at its offset, moved onto the outline of the
+// anchor when it is not a rectangle (an element says so, data-anchor-outline: ellipse, cylinder; a
+// kind, to an arranger, contract.anchorOutlineOf), so a line ends on a circle where it touches it.
+// rect { left, top, width, height } in any unit; answers { x, y } in the same
+export function anchorPointOnOutline(rect, side, offset, outline = 'rect') {
+	const { left, top, width, height } = rect;
+	const isHorizontal = side === 'top' || side === 'bottom';
+	const point = {
+		x: isHorizontal ? left + width * offset : side === 'left' ? left : left + width,
+		y: isHorizontal ? (side === 'top' ? top : top + height) : top + height * offset,
+	};
+	if (outline !== 'ellipse' && outline !== 'cylinder') return point;
+	const radiusX = width / 2;
+	const centerX = left + radiusX;
+	if (outline === 'cylinder') {
+		if (!isHorizontal) return point;
+		const radiusY = (height * ANCHOR_CYLINDER_CAP) / 2;
+		const depth = radiusY * (1 - Math.sqrt(Math.max(0, 1 - ((point.x - centerX) / radiusX) ** 2)));
+		return { x: point.x, y: side === 'top' ? top + depth : top + height - depth };
+	}
+	const radiusY = height / 2;
+	const centerY = top + radiusY;
+	if (isHorizontal) {
+		const part = Math.sqrt(Math.max(0, 1 - ((point.x - centerX) / radiusX) ** 2));
+		return { x: point.x, y: side === 'top' ? centerY - radiusY * part : centerY + radiusY * part };
+	}
+	const part = Math.sqrt(Math.max(0, 1 - ((point.y - centerY) / radiusY) ** 2));
+	return { x: side === 'left' ? centerX - radiusX * part : centerX + radiusX * part, y: point.y };
 }

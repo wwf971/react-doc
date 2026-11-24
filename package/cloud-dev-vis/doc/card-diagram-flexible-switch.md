@@ -171,7 +171,7 @@ A portal out is the same, in reverse, starting from the camera the reader left t
 
 ### A morph
 
-`switchMorphBuild` pairs the nodes of two scenes by id. A node in both keeps its React identity and moves; its handles are those of both scenes while the lines of the scene left fade. Two nodes of one id with **different content** are two nodes: the old one, renamed `~from:{id}`, fades out while the new one fades in, both moving between the same places. A kind may say what counts as its content (`contract.morphKeyGet`), as the tabs header does, whose focus changes in place; a node drawn in another [display](card-diagram-impl.md#the-display-of-a-node) is another drawing, so an overview of marks and a view of cards with the same ids morph each card into its mark. `switchMorphFrameAt` gives the positions and sizes at a progress.
+`switchMorphBuild` pairs the nodes of two scenes by id. A node in both keeps its React identity and moves; its handles are those of both scenes while the lines of the scene left fade. Two nodes of one id with **different content** are two nodes: the old one, renamed `~from:{id}`, fades out while the new one fades in, both moving between the same places. A kind may say what counts as its content (`contract.morphKeyGet`), as the tabs header does, whose focus changes in place; a node of another kind is another drawing, so an overview of [marks](card-diagram-impl.md#marks) and a view of cards with the same ids morph each card into its mark. `switchMorphFrameAt` gives the positions and sizes at a progress.
 
 ### Between two cameras
 

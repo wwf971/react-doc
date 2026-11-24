@@ -124,7 +124,7 @@ handles:
 
 **Arranged.** A [layer arranger](card-diagram-arrange.md#the-layer-arrangers) turns the handles of lines going down to the bottom. A card whose footer appears that way is counted taller by the footer, so the next layer does not move up under it.
 
-**Drawn simple**, a node has no footer: its bottom handles stand under its name (the anchor `foot`, [below](#when-a-node-changes-its-look-its-lines-stay-attached)). Its lines leave from the same side in both displays.
+**A mark** has no footer: its bottom handles stand under its name (the anchor `foot`, [Cards and marks](#cards-and-marks)).
 
 A card that is not made of rows (`card-note`, `card-brief`, `card-database`) has no footer: its bottom edge already is the card. A component of your own lists the anchors it has, and gets no footer from the framework.
 
@@ -142,32 +142,32 @@ A card that is not made of rows (`card-note`, `card-brief`, `card-database`) has
 
 Routes of lines work the same in all of them, also in a scene embedded in a card.
 
-## Detailed and simple
+## Cards and marks
 
-A node of a kind that has one can be drawn two ways: **detailed**, as the card of its kind, and **simple**, as a mark with its name under it (a circle, a rounded square, a cylinder, with the icon of the kind), for a picture of a whole system at a glance. The resource cards, the tables and the databases have one; a note, a block or a scene does not.
+A thing seen at a glance is a **mark**: a shape with its name under it (a rounded square, a circle, a cylinder, with the icon of what it is), for a picture of a whole system. A mark is a node of a kind of its own, which a series offers for what it draws so: the AWS series has `aws-mark`, a resource of any of its kinds (`resourceType`), with its name and its service under it.
 
 ```yaml
-defaults:
-  node: { display: simple }     # every node that can be drawn simple
 nodes:
   - id: bucket
-    renderer: { type: aws-s3-bucket }
-    display: detailed           # this one keeps its card
+    renderer: { type: aws-mark }
+    data: { name: shop--data, resourceType: aws-s3-bucket }
+    handles:
+      - { id: in, direction: in, anchor: { side: top } }
 ```
 
-In the editor, **Drawn as** in the tab of a card switches one node, and the shapes button of the bar switches all of them; both are steps of the history. The data, the handles and the lines are the same in both displays: only how the node is drawn changes. Two levels of detail of one system are therefore two views of one scene with the same ids, an overview drawn simple and the resources as cards: switching between them moves each card into its mark ([Views of a scene](card-diagram-usage-flexible-switch.md#views-of-a-scene)). A mark is smaller than its card: let an [arranger](card-diagram-arrange.md#the-layer-arrangers) place the simple view again rather than reusing the positions of the cards. The design is in [The display of a node](card-diagram-impl.md#the-display-of-a-node).
+Its handles are written on the node as a whole, as those of a card, and drawn on the mark. Two levels of detail of one system are two views of one scene, a thing under the same id in both: an overview of marks and the resources as cards. Switching between them moves each card into its mark ([Views of a scene](card-diagram-usage-flexible-switch.md#views-of-a-scene)). A mark is smaller than its card: let an [arranger](card-diagram-arrange.md#the-layer-arrangers) place the overview again rather than reusing the positions of the cards. A generator writes both views from one description, as [the scenes of an AWS system](aws.md#scenes-generated-from-a-description) are. The design is in [Marks](card-diagram-impl.md#marks).
 
 ## When a node changes its look, its lines stay attached
 
-A node is drawn differently in many places: simple or detailed, a card embedding another scene that shows a cylinder at rest and a diagram under the pointer, a table card switched to another view, the same id in two scenes. Its handles then stand somewhere else, and the lines must still arrive naturally. These are the ways to keep them so, from the one that costs nothing to the one that moves the most:
+A node is drawn differently in many places: as a card in one view and as its mark in another, a card embedding another scene that shows a cylinder at rest and a diagram under the pointer, a table card switched to another view, the same id in two scenes. Its handles then stand somewhere else, and the lines must still arrive naturally. These are the ways to keep them so, from the one that costs nothing to the one that moves the most:
 
 | Method | What it does | Where it is used |
 | --- | --- | --- |
 | **Keep the side, move the end** | A handle keeps its id, its side and its offset in every look; each look only says on which of its parts it is drawn. So a line keeps arriving from the same direction and slides along that side, and its route, whose anchors follow the two ends (`along`), keeps its shape | the framework itself: never give a handle another side in another look |
-| **One box for every look** | Every look is drawn at the size of the node, and touches its box where the handles are, the middle of a side. The ends do not move at all | the database of the [migration](power-platform-migration.md#scenes): a `scene-embed` whose view at rest is a cylinder filling the card (`isFrameHiddenEmbedded`), with its handles on the card; a node drawn simple at a size of its own, whose mark fills the box above its words |
-| **Keep the middle** | A smaller look stands in the middle of the place of the larger one, so a line from above or below keeps its line | a simple mark is drawn in the middle of the width its node has; a generator placing two views places by the middle |
-| **A coarser anchor for what is not drawn** | A part a look does not draw (a row of a card, on a mark) hands its handles to the part that stands for it, at the same side and offset. Handles that then meet are one end of their lines, which may share the last stretch into it ([the rule](#no-lines-on-top-of-each-other)) | a node drawn simple: every handle on its mark; a row left out by a table view: its handle on the side of the card |
-| **Out of the way of the words** | A line leaving a mark downward starts under its name, not on the mark, so it crosses no words | the bottom handles of a node drawn simple (the anchor `foot`) |
+| **One box for every look** | Every look is drawn at the size of the node, and touches its box where the handles are, the middle of a side. The ends do not move at all | the database of the [migration](power-platform-migration.md#scenes): a `scene-embed` whose view at rest is a cylinder filling the card (`isFrameHiddenEmbedded`), with its handles on the card |
+| **Keep the middle** | A smaller look stands in the middle of the place of the larger one, so a line from above or below keeps its line | the shape of a mark stands in the middle of the width its node has; a generator placing two views places by the middle |
+| **A coarser anchor for what is not drawn** | A part a look does not draw (a row of a card left out of a view) hands its handles to the part that stands for it, at the same side and offset | a row left out by a table view: its handle on the side of the card |
+| **Out of the way of the words** | A line leaving a mark downward starts under its name, not on the mark, so it crosses no words | the bottom handles of a mark (the anchor `foot`) |
 | **Route each look again** | When a look moves things more than a little, its lines get their routes for that look: an arranger per view in a generator, **Arrange** after switching in the editor | the overview and the resources of [the storage service](~aws-utils:aws-utils/doc/storage-architecture.md) |
 
 Between two views sharing ids, a switch moves each node into its new place and fades its old drawing into the new one, and the lines of both views fade between their routes: nothing more is to be done there. Whichever method is used, look at every look again, as below: a line that was clear in one may cross something in another.
@@ -237,8 +237,8 @@ A graph of a few dozen things is cards and lines. One of hundreds or thousands (
 What a diagram should look like, whoever draws it:
 
 - **A list wraps.** Do not lay out many cards in one row, or fitting the whole diagram makes them small. A list on a canvas breaks into lines at a small count (four or so), and a generator breaks them itself. A chain that must read in one direction may turn downward rather than run on. Stacking by a meaning (rows by rank, columns by depth) is better still.
-- **The labels of lines side by side stand in one column.** Give lines running side by side, as the column mappings between two tables do, one label position. Do not stagger them to keep them apart: a row is taller than a label, and labels that jump left and right are harder to read down.
-- **A label is in the words of the page.** The label of a line, of a static scene, of a simple card: the sans-serif of the page, 12 px for a line (`.doc-switch-edge-label`, the text of a line of React Flow, `.doc-diagram-static-label`), never a monospace font, which reads as code. The placer of labels estimates them at that size (`labelSizeEstimate`). Code stays monospace where it is code (an attribute name, a route path of an AWS card).
+- **The labels of lines side by side stand in one column.** Give lines running side by side, as the column mappings between two tables do, one label position. Do not stagger them to keep them apart: a row is taller than a label, and labels that jump left and right are harder to read down. Lines routed by the lanes arrangers do so with `labelBand: true` ([a band of labels](card-diagram-arrange.md#labels)): their labels stand in a band beside the table they leave, whatever turns the lines take after it.
+- **A label is in the words of the page.** The label of a line, of a static scene, of a mark: the sans-serif of the page, 12 px for a line (`.doc-switch-edge-label`, the text of a line of React Flow, `.doc-diagram-static-label`), never a monospace font, which reads as code. The placer of labels estimates them at that size (`labelSizeEstimate`). Code stays monospace where it is code (an attribute name, a route path of an AWS card).
 - **A line meets an icon node at its words.** On its right, a line ends just after the end of the words, however short they are: the anchor `text` of the `card-icon` (`anchor: { target: text, side: right }`, 12 px after the words, `TEXT_ANCHOR_GAP`), never the right edge of the node, which is often as wide as its column and would leave a stretch of nothing between the words and the line. On its left a line ends at the mark (`target: icon`). A row of a list (`isCompact`) is met the same way. An arranger estimates the anchor past the node's edge when the words fill it, so no lane stands behind where a line starts ([the lane router](card-diagram-arrange.md#the-lane-router)).
 - **A line to a table as a whole ends at its title line.** It is what a table card does by itself with a handle on the left or right side of the card (`anchor: { side: left }`). A line about one row ends on that row. Do not place a handle at the middle of a table's side by other means.
 - **A line leaving a card downward leaves its footer**, never the edge under the last row ([the footer](#lines-out-of-the-bottom-of-a-card-the-footer)). Writing `side: bottom` on the card is enough.
@@ -325,5 +325,5 @@ The first thing to draw for any report is therefore the diagram someone would sk
 | ☐ | A scene generated from data gets its layout from [an arranger](#a-scene-generated-from-data-gets-its-layout-from-an-arranger), or has a reason not to |
 | ☐ | Where looks mean something, a [`card-legend`](#legends) pinned to the viewport says what, and no legend of its own was drawn |
 | ☐ | A graph of hundreds of things is [drawn by how many there are](#many-things-in-a-graph), and each thing is found by a search |
-| ☐ | Every look of a node was looked at, simple and detailed, each view: [its lines stay attached](#when-a-node-changes-its-look-its-lines-stay-attached) and arrive from the same side |
+| ☐ | Every look of a node was looked at, its card and its mark, each view: [its lines stay attached](#when-a-node-changes-its-look-its-lines-stay-attached) and arrive from the same side |
 | ☐ | A process before tables, and figures on the steps they belong to |

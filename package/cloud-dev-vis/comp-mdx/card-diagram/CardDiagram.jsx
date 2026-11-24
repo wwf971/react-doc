@@ -68,6 +68,8 @@ export const DiagramERView = observer(function DiagramERView({ data = {}, config
 	const sourceDiagram = data.source || data.raw || '';
 	const { compById, docStore, sourceStore } = useDocStores();
 	const sourceStoreDocPathGet = () => docStore.docCurrentPath;
+	// the camera remembered for this block, kept for now under the identity of sourceStore: a host gives
+	// the canvases that replace each other one source store object (DiagramERStore.js: diagramViewStateGet)
 	const [viewState] = useState(() => diagramViewStateGet(sourceStore, config));
 	const [store] = useState(() => new DiagramERStore(sourceDiagram, (name, placement) => {
 		const definition = compDefinitionNormalize(compById[compIdResolve(sourceStore.configDoc, name)]);
@@ -113,7 +115,7 @@ export const DiagramERView = observer(function DiagramERView({ data = {}, config
 		sourceGet: () => store.source,
 		editorGet: () => canvasEditor.current,
 		endsGet: (connectionId, connection) => diagramCanvasEndsGet(edgeGeometry.current, connectionId, connection),
-		lineListGet: () => diagramCanvasLineListGet(edgeGeometry.current, store.graph?.connections ?? [], store.graph?.nodes),
+		lineListGet: () => diagramCanvasLineListGet(edgeGeometry.current, store.graph?.connections ?? []),
 		geometryGet: () => diagramCanvasGeometryBuild(store, edgeGeometry.current),
 	}), [store, config.sourcePath, data.title]);
 

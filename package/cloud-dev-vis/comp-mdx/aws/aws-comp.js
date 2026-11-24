@@ -16,7 +16,7 @@ import './AwsIconOfficial.js';
 // diagram, many scenes in one viewport, and one card of a resource outside a canvas.
 export const DiagramAws = compDefine(cardDiagramCompCreate(awsNodeRegistry, 'AwsDiagram'), cardDiagramDefineOptionsBuild({
 	label: 'AWS diagram',
-	description: 'The resources of a system on AWS as cards or simple marks, and the lines between them, on a canvas.',
+	description: 'The resources of a system on AWS as cards or marks, and the lines between them, on a canvas.',
 	icon: Cloud,
 	sourceDefaultCreate: awsSourceDefaultCreate,
 	registry: awsNodeRegistry,

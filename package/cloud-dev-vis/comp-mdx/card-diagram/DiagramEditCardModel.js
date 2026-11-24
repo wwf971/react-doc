@@ -111,7 +111,7 @@ export function cardModelBuild(editor) {
 	const sizeSectionOf = (id) => {
 		const nodeSized = store.nodeGet(id);
 		const contract = store.registry?.kindByType[nodeSized?.renderer?.type]?.contract;
-		if (!(contract?.sizeModeList?.length > 1) || nodeSized.display === 'simple') return null;
+		if (!(contract?.sizeModeList?.length > 1)) return null;
 		const mode = nodeSizeModeOf(nodeSized);
 		const propertyList = [{
 			id: 'size-mode', label: 'Box', kind: 'enum', value: mode, values: contract.sizeModeList,
@@ -415,11 +415,6 @@ export function cardModelBuild(editor) {
 			// a card: the properties of its schema; what is no card: those of its kind and those its data declares (a label carrying settings)
 			const nodePropertyList = schema ? schema.nodePropertyList : nodePropertyListGet(node, store.registry).filter(definition => definition.isDeclared || definition.id !== 'name' || node.data.name !== undefined);
 			sectionList.push({ id: 'node', label: schema?.labelNode ?? 'Node', propertyList: nodePropertyList.map(definition => ({ ...propertyOf(definition, node.data, (id, value) => store.fieldSet(nodeId, null, id, value)), min: definition.min, max: definition.max, step: definition.step, placeholder: definition.placeholder, isReadOnly: definition.isReadOnly === true })), actionList: [] });
-			// detailed or simple (card-diagram-impl.md#the-display-of-a-node), for a kind that can be drawn simple
-			const displayProperty = store.kind === 'diagram' && store.registry?.kindByType[node.renderer?.type]?.contract.simple
-				? [{ id: 'nodeDisplay', label: 'Drawn as', kind: 'enum', value: store.nodeDisplayGet(nodeId), values: ['detailed', 'simple'], valueLabels: { detailed: 'Its card', simple: 'A simple mark' }, set: value => change(() => store.nodeDisplaySet(nodeId, value)) }]
-				: [];
-			if (displayProperty.length && !schema) sectionList.push({ id: 'display', label: 'Display', propertyList: displayProperty, actionList: [] });
 			if (schema) {
 				const viewCurrent = store.cardViewGet(nodeId);
 				const isChosen = Boolean(viewCurrent.rowDisplay);
@@ -427,7 +422,6 @@ export function cardModelBuild(editor) {
 				sectionList.push({
 					id: 'display', label: 'Display',
 					propertyList: [
-						...displayProperty,
 						...(node.data.viewList?.length > 1 ? [{ id: 'viewDefault', label: 'Default view', kind: 'enum', value: node.data.viewDefault ?? '', values: ['', ...viewList.map(view => view.id)], valueLabels: { '': 'The first', ...Object.fromEntries(viewList.map(view => [view.id, cardViewLabelOf(view)])) }, set: value => change(() => store.viewDefaultSet(nodeId, value || null)) }] : []),
 						{ id: 'viewSwitcher', label: 'View switcher', kind: 'bool', value: cardViewSwitcherIsShown(node.data), set: value => change(() => store.viewSwitcherShownSet(nodeId, value)) },
 						{ id: 'rowDisplayMode', label: `${schema.labelRowPlural} shown`, kind: 'enum', value: isChosen ? 'chosen' : 'all', values: ['all', 'chosen'], valueLabels: { all: 'All', chosen: 'Chosen' }, set: value => change(() => store.rowDisplaySet(nodeId, value === 'chosen' ? store.rowDisplayCurrentGet(nodeId) : null)) },
@@ -448,7 +442,7 @@ export function cardModelBuild(editor) {
 			const header = schema ? handleSection('header', 'Title handles', schema.isHeaderHandleAllowed(node.data)) : null;
 			if (header) sectionList.push(header);
 			// the footer: shown by itself, or because a line leaves the bottom of the card
-			if (schema && store.nodeDisplayGet(nodeId) !== 'simple') {
+			if (schema) {
 				const isFooterWritten = node.data.footer !== undefined && node.data.footer !== false;
 				const isFooterNeeded = !isFooterWritten && cardFooterIsShown(node);
 				sectionList.push({ id: 'footer', label: 'Footer', propertyList: [
