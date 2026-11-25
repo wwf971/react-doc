@@ -187,6 +187,7 @@ Each [frontend object](doc_page_impl_obj_frontend.md) of a doc page has **a fold
 └── {id}--{name}/                one object; the name in ASCII (below), and the folder follows it
     ├── object.yaml              what makes the folder an object: id, entry
     ├── type.yaml                optional: the types it brings along
+    ├── portal.yaml              optional: the portals it provides (doc_page_impl_portal.md#declaring-a-portal)
     └── item/                    its asset items: an asset folder of the store, owned by the object
         ├── {entryId}/           its entry asset: item.yaml, {versionId}.yaml
         ├── item-list.yaml       an item list: the records of the assets lying here and below

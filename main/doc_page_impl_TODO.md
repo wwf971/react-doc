@@ -185,6 +185,16 @@ In the order they would matter ([Unified api registry](doc_page_impl_api.md)):
 - <a id="object-frontend-change"></a>**Being told of a change.** A mode re-renders when the asset store hears of a change (the page's own write, a file changed on disk); a mode holding something derived (an engine, a draft) is not told which asset changed. The [subscriptions by other subjects than a block](#event-subscription), with the object as subject, are the channel it would use.
 - <a id="object-frontend-partition-build"></a>**A build without the partitions kept out of git.** A playground document is left out of a static build, but a partition of a frontend object that git ignores (`item/real/`) is built like the rest when the checkout has it ([Partitions of a frontend object](doc_page_impl_dir.md#partitions-of-a-frontend-object)), so publishing from a checkout holding private data means moving the partition away first. The partitions a type declares with `isGitIgnored` would let `react-doc build` leave them out the way `playgroundLeaveOut` does.
 
+## Portal
+
+What [portals](doc_page_impl_portal.md) leave for later:
+
+- <a id="portal-settings"></a>**A Portals table in the settings panel**: every portal with its provider, its component and what does not fit, where the Frontend objects tab lists the types. Today `portal/list` answers it, and a portal that cannot be drawn says so where it is opened.
+- <a id="portal-object"></a>**A portal as an object of the registry, and a link to one**: found by a search, listed by `ObjectList`, written in a document as a link the navigation layer follows (`[Library](portal:frontend:…/library#/book/…)`) or a token of a cell. Today a portal is opened by its address, the switcher and the apis; a Markdown link holding `?portal=…` is not followed as one.
+- <a id="portal-launch"></a>**A launch page**: the portals of a workspace as tiles (`PortalIcon` at a large size), for a deployment with many apps. The switcher is the only list today.
+- <a id="portal-provider"></a>**Other providers**: a service instance, a document. The registry takes any provider (`register`), but only frontend objects declare portals in yaml.
+- <a id="portal-param"></a>**The place of a portal typed**: `at` is one string of the app's own; a declared shape (parameters with types, as an api has) would let the palette ask for them.
+
 ## Service layer
 
 In the order they would matter ([Service layer](doc_page_impl_service.md)):

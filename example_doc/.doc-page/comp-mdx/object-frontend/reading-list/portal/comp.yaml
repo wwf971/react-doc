@@ -1,0 +1,10 @@
+# the portal of the frontend object type example.reading-list (.doc-page/type.yaml, portalList;
+# design: main/doc_page_impl_portal.md): a component rendered by the host of a portal in the
+# placement portal, in the whole window, never written as a block. a group of its own beside the
+# modes of the type, so what draws the portal stays apart from what draws the blocks.
+compList:
+  - tagName: ReadingListPortal
+    id: specific/ReadingListPortal
+    entry: ./ReadingListPortal.jsx
+    export: ReadingListPortal
+    defineOptionsExport: readingListPortalDefineOptions

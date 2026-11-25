@@ -42,6 +42,8 @@ a component definition (compDefine)
     │   ├── objectInner              the frontend object types whose inner paths it answers for: what a path
     │   │                            names inside an object, the candidates completing a typed one
     │   ├── pagination               its data laid out on pages: the flow, the pieces, where they are cut
+    │   ├── portal                   it can draw a portal, a whole-window app of a frontend object: what it
+    │   │                            is made for, where the standard switcher stands
     │   └── blockLabelGet            what a block of it is called in edit mode, from what the block names
     │                                (ObjectFrontend: the type of its object); else its tag name
     └── non-standard names: kept as declared, read by whoever knows them (compExposeGet)
@@ -66,12 +68,13 @@ compDefine(Xxx, {
     apiList:       [apiDefine({ name, label, paramList, run, ... })]    the apis it offers the unified api registry
     objectView:    { typeList, contextList, priority }               the objects it draws, for the object registry
     pagination:    { pieceListGet, pieceTypeById, pageClassName?, pageSpec? }   its data on pages (doc_page_impl_pagination.md)
+    portal:        true | { deviceList?, switcherPlace? }             it can draw a portal (doc_page_impl_portal.md)
     anythingElse:  kept as written                                  for a host or a later feature
   },
 })
 ```
 
-Seven names are **standard**: the page knows their shape, normalizes them at registration (`comp-expose.js`, `compExposeNormalize`; a wrong shape fails there, not later in some reader), and reads them where it needs them. Every other name is **non-standard**: kept exactly as declared, read by whoever knows it through `compExposeGet(definition, name)`, so a host application or a feature that does not exist yet can hang its own facts on a component without a change to the registry. A legacy definition (a bare React component in `compById`) exposes nothing and gets the defaults of every standard name. The standard names are read through small accessors rather than by reaching into the definition (`compMetaGet`, `compIconGet`, `compViewModeListGet`, `compEditModeListGet`, `compSourceDefaultGet`, `compApiListGet`, `compObjectViewGet`, `compExposeGet`); for a component that exposes nothing they return the defaults described below.
+These names are **standard**: the page knows their shape, normalizes them at registration (`comp-expose.js`, `compExposeNormalize`; a wrong shape fails there, not later in some reader), and reads them where it needs them. Every other name is **non-standard**: kept exactly as declared, read by whoever knows it through `compExposeGet(definition, name)`, so a host application or a feature that does not exist yet can hang its own facts on a component without a change to the registry. A legacy definition (a bare React component in `compById`) exposes nothing and gets the defaults of every standard name. The standard names are read through small accessors rather than by reaching into the definition (`compMetaGet`, `compIconGet`, `compViewModeListGet`, `compEditModeListGet`, `compSourceDefaultGet`, `compApiListGet`, `compObjectViewGet`, `compExposeGet`); for a component that exposes nothing they return the defaults described below.
 
 The exposures of the components registered by the package are kept beside the component when it has an editor of its own (`image-expose.js`, `image-grid-expose.js`, the demo `StockTable`), and in `comp-doc/registry/registry-expose.js` for the others; every component that can start a block of a document exposes a label, a description, an icon, and a `sourceDefaultCreate`.
 
@@ -209,6 +212,10 @@ A component that draws objects of the [object registry](doc_page_impl_obj.md) sa
 ### Inner paths of frontend objects
 
 A component that knows what is inside the frontend objects of some types, when that is not their data items, says so: `expose.objectInner`, `{ typeList, resolve({ service, path }), complete({ service, text }) }`, checked at registration. `resolve` says what an inner path names in an object, `complete` lists the candidates completing a typed one; `service` is the api of a mode of the object asked about. The frontend object service layer asks the component of the nearest type, and reads the paths of the object's assets when no component answers ([Things inside an object](doc_page_impl_obj_frontend.md#things-inside-an-object-inner-paths)). It is what the object registry asks when a reference into an object is drawn or typed (`/object`), so a type usually exposes it on the mode that shows its things. The mode Information of the package cv exposes it for the values of a profile.
+
+### Portals
+
+A component that can draw a **portal**, a whole-window app of a frontend object, says so: `expose.portal`, `true` or `{ deviceList, switcherPlace }`, checked at registration (`compPortalGet(definition)` reads it). It renders in the placement `portal`, with `data { ref, portalId, param }`, `config.portal` (the portal, the place inside it, its own reading and editing, the other portals) and `config.objectFrontend` (the api of the object providing it). Which objects provide which portals with it is not the component's to say: a type declares them (`portalList`), or an object does (`portal.yaml`). A component may be a mode and the component of a portal at once ([The component of a portal](doc_page_impl_portal.md#the-component-of-a-portal)).
 
 ### Pagination
 

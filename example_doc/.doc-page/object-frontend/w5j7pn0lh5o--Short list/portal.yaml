@@ -1,0 +1,8 @@
+# The portals this object provides (main/doc_page_impl_portal.md#declaring-a-portal): those of its
+# type as it adjusts them, and any of its own. Its type gives every reading list the portal
+# "library"; this list names its own differently, and opens it on its cards.
+portalList:
+  - id: library
+    label: Short library
+    description: the short list as an app of its own
+    color: "#3b6a8c"

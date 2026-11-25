@@ -2,6 +2,7 @@ import { FileCode } from '../../frontend/UICommon.js';
 import { apiDefine, apiDefinitionIs } from '../../frontend/src/lib/doc-api.js';
 import { compIconDefault } from './comp-icon.jsx';
 import { OBJECT_VIEW_CONTEXT_DEFAULT_LIST, OBJECT_VIEW_CONTEXT_LIST } from '../../frontend/src/lib/doc-object-ref.js';
+import { PORTAL_DEVICE_LIST, PORTAL_SWITCHER_PLACE_LIST } from '../../frontend/src/lib/doc-portal.js';
 
 // What a component exposes about itself through its registry definition
 // (doc_page_impl_mdx_comp.md#what-a-component-exposes): the `expose` option
@@ -106,6 +107,13 @@ import { OBJECT_VIEW_CONTEXT_DEFAULT_LIST, OBJECT_VIEW_CONTEXT_LIST } from '../.
 //                  context { stores } (the page's stores: the label is read by an
 //                  observer, so it follows what it reads). absent, or answering
 //                  nothing, the tag name. ObjectFrontend names the type of its object
+//   portal         true, or { deviceList?, switcherPlace? }: the component can draw a portal, a
+//                  whole-window app of a frontend object (doc_page_impl_portal.md#the-component-of-a-portal).
+//                  it renders in the placement portal with data { ref, portalId, param } and
+//                  config.portal (the portal, its place, the others, its reading or editing state)
+//                  and config.objectFrontend (the api of the object providing it). deviceList:
+//                  what it is made for (browser, mobile, desktop); switcherPlace: where the standard
+//                  switcher stands: 'floating' (default, drawn by the host), 'own', 'none'
 //   pagination     { pieceListGet(data, context) -> [{ type, data }],
 //                  pieceTypeById: { [type]: { Render, split?, isFilledOnSplit? } },
 //                  pageClassName?, pageSpec? }: the component's data can be laid
@@ -155,7 +163,7 @@ const ASSET_SAVE_MODE_LIST = ['inPlace', 'newVersion'];
 // isAssetOnly renders there only with data from the asset service layer
 export const COMP_PLACEMENT_DOC_LIST = ['mdx', 'commentBlock'];
 
-export const compExposeNameStandardList = ['meta', 'icon', 'viewModeList', 'editModeList', 'sourceDefaultCreate', 'apiList', 'objectView', 'objectInner', 'pagination', 'blockLabelGet'];
+export const compExposeNameStandardList = ['meta', 'icon', 'viewModeList', 'editModeList', 'sourceDefaultCreate', 'apiList', 'objectView', 'objectInner', 'pagination', 'portal', 'blockLabelGet'];
 
 const REGEX_TYPE_ID = /^[a-z][a-z0-9-]*(\.[a-zA-Z][a-zA-Z0-9-]*)+$/;
 
@@ -170,7 +178,7 @@ export function compExposeNormalize(expose = {}) {
   if (expose.editTemplate !== undefined) {
     throw new Error('compDefine: expose.editTemplate is expose.sourceDefaultCreate(env) now (comp-expose.js).');
   }
-  const { meta, icon, viewModeList, editModeList, sourceDefaultCreate, apiList, objectView, objectInner, pagination, blockLabelGet, ...exposeOther } = expose;
+  const { meta, icon, viewModeList, editModeList, sourceDefaultCreate, apiList, objectView, objectInner, pagination, portal, blockLabelGet, ...exposeOther } = expose;
   if (blockLabelGet !== undefined && typeof blockLabelGet !== 'function') throw new Error('compDefine: expose.blockLabelGet(component, context) must be a function.');
   return {
     ...exposeOther,
@@ -183,6 +191,7 @@ export function compExposeNormalize(expose = {}) {
     objectView: objectViewNormalize(objectView),
     objectInner: objectInnerNormalize(objectInner),
     pagination: paginationNormalize(pagination),
+    portal: portalNormalize(portal),
     blockLabelGet,
   };
 }
@@ -200,6 +209,33 @@ export function compBlockLabelGet(definition, component, context) {
   } catch {
     return null;
   }
+}
+
+// what makes a component one that can draw a portal (doc_page_impl_portal.md#the-component-of-a-portal):
+// checked here; undefined for a component that draws none. true is every default
+//   deviceList      what it is made for, of browser | mobile | desktop (the stipulated words; none: any)
+//   switcherPlace   where the standard switcher stands while it is shown: 'floating' (default: the
+//                   host draws it at the top left, over the portal), 'own' (the component draws
+//                   PortalSwitcher in a place of its own), 'none'
+function portalNormalize(portal) {
+  if (portal === undefined || portal === false) return undefined;
+  if (portal === true) return { deviceList: [], switcherPlace: 'floating' };
+  if (!portal || typeof portal !== 'object' || Array.isArray(portal)) {
+    throw new Error('compDefine: expose.portal must be true, or { deviceList?, switcherPlace? }.');
+  }
+  const { deviceList = [], switcherPlace = 'floating', ...portalOther } = portal;
+  if (!Array.isArray(deviceList) || !deviceList.every((device) => typeof device === 'string')) {
+    throw new Error(`compDefine: expose.portal.deviceList must list devices (${PORTAL_DEVICE_LIST.join(', ')}).`);
+  }
+  if (!PORTAL_SWITCHER_PLACE_LIST.includes(switcherPlace)) {
+    throw new Error(`compDefine: expose.portal.switcherPlace must be one of ${PORTAL_SWITCHER_PLACE_LIST.join(', ')}.`);
+  }
+  return { ...portalOther, deviceList: [...deviceList], switcherPlace };
+}
+
+// what a component says of itself as the component of a portal, undefined for one that draws none
+export function compPortalGet(definition) {
+  return definition?.expose?.portal;
 }
 
 // what the component tells a pagination environment (doc_page_impl_pagination.md#the-contract):

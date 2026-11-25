@@ -17,7 +17,7 @@ built-in/type.yaml               the types of the page itself        core.*, doc
 the type registry                id -> type, ancestors, assignable, rank
         │
         ├─► object registry      search by type, views, labels, icons
-        └─► frontend objects     modes (components), kinds of assets
+        └─► frontend objects     modes (components), kinds of assets, portals
 ```
 
 ## What a type is
@@ -80,6 +80,8 @@ typeList:
     partitionList:                  # optional: the folders its items are split into (doc_page_impl_obj_frontend.md#partitions)
       - { id: example, label: Example, isDefault: true }          # where a write naming none goes (else the first)
       - { id: playground, label: Playground, isGitIgnored: true }
+    portalList:                     # optional: the portals every object of it provides (doc_page_impl_portal.md#declaring-a-portal)
+      - { id: library, label: Library, comp: ReadingListPortal, deviceList: [browser, desktop] }
 ```
 
 **Where to put one.** Types are declared in a file of their own, not in the file of what uses them. Choose by who needs the type:
@@ -98,7 +100,7 @@ typeList:
 - a different declaration of an id is a problem of the file, and the first is kept;
 - a problem (an unknown key, a reserved prefix, a mode without a component, modes on a type not below `frontend.object`) leaves out that item, never the page, and is listed in the Frontend objects tab and the console.
 
-Declaring is not limited to frontend objects: `example.ticket` extending `core.task` is a type like any other, for whichever provider answers with it. The registry takes what is declared directly, as configuration of the page; it does not go through a layer's provider, since it belongs to no layer. A layer reads the keys of its own tree from the same declaration: `modeList`, `kindList` and `partitionList` are the frontend object layer's, and mean nothing elsewhere; the kinds a `kindList` declares are types of the registry like any other ([Kinds of data items](#kinds-of-data-items)).
+Declaring is not limited to frontend objects: `example.ticket` extending `core.task` is a type like any other, for whichever provider answers with it. The registry takes what is declared directly, as configuration of the page; it does not go through a layer's provider, since it belongs to no layer. A layer reads the keys of its own tree from the same declaration: `modeList`, `kindList`, `partitionList` and `portalList` are the frontend object layer's, and mean nothing elsewhere (the portals a type declares are what its objects provide to the registry of [portals](doc_page_impl_portal.md)); the kinds a `kindList` declares are types of the registry like any other ([Kinds of data items](#kinds-of-data-items)).
 
 **Types of the templates** are declared in code, because a template is code: `expose.typeList` of its script ([Services](doc_page_impl_obj.md#services)), under its own name (`todo-list.todo`). The kernel refuses a type of another name with a problem, so two templates never collide. The kernel rebuilds its registry whenever a script changes: the built-in types, then the templates' (the oldest template id first; a second definition of an id is reported and left out), then those of instances whose template is gone. The page takes the backend's list over its own built-in copy when there is a backend.
 

@@ -1,0 +1,69 @@
+/* The portal Library of a reading list (ReadingListPortal.jsx): a bar and two panes filling the window. */
+.reading-list-portal {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  font-size: 0.875rem;
+}
+
+.reading-list-portal-bar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.4rem 0.8rem;
+  border-bottom: 1px solid var(--color-fd-border);
+  background: var(--color-fd-card, var(--color-fd-background));
+}
+
+.reading-list-portal-title {
+  font-weight: 600;
+}
+
+.reading-list-portal-count {
+  color: var(--color-fd-muted-foreground);
+}
+
+.reading-list-portal-space {
+  flex: 1 1 auto;
+}
+
+.reading-list-portal-body {
+  display: grid;
+  flex: 1 1 auto;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  min-height: 0;
+}
+
+/* each pane scrolls on its own and keeps the wheel at its ends */
+.reading-list-portal-pane {
+  min-width: 0;
+  min-height: 0;
+  padding: 0.8rem 1rem;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.reading-list-portal-pane + .reading-list-portal-pane {
+  border-left: 1px solid var(--color-fd-border);
+}
+
+.reading-list-portal-empty {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 2rem 0;
+  color: var(--color-fd-muted-foreground);
+}
+
+/* a narrow window: one pane under the other */
+.reading-list-portal[data-device='mobile'] .reading-list-portal-body {
+  grid-template-columns: minmax(0, 1fr);
+  grid-auto-rows: minmax(0, 1fr);
+}
+
+.reading-list-portal[data-device='mobile'] .reading-list-portal-pane + .reading-list-portal-pane {
+  border-top: 1px solid var(--color-fd-border);
+  border-left: 0;
+}

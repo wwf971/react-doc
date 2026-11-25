@@ -198,6 +198,11 @@ export {
   Puzzle,
   FileKey,
   Gauge,
+  // the portals (comp-doc/portal/): the documents, what a portal is made for
+  BookOpen,
+  Library,
+  Monitor,
+  Smartphone,
   // the styles of a cell text (comp-doc/cell/cell-style-registry.js, CellStyleBar.jsx)
   Bold,
   Italic,

@@ -7,6 +7,7 @@ import {
 import {
   OBJECT_FRONTEND_KIND_ROOT, objectFrontendAssetKindListConvert, objectFrontendKindHoldResolve, objectFrontendKindListRead,
 } from '../src/lib/doc-object-frontend-kind.js';
+import { portalDeclareListRead } from '../src/lib/doc-portal.js';
 
 // The types declared in yaml (design: doc_page_impl_type.md#declaring-a-type): what doc pages,
 // their frontend objects and packages add to the type registry, all in one grammar.
@@ -33,6 +34,9 @@ import {
 //                                                  type (doc_page_impl_type.md#kinds-of-data-items)
 //       partitionList: [{ id, label, ... }]        below frontend.object: the folders its items are split
 //                                                  into, some kept out of git (doc_page_impl_obj_frontend.md#partitions)
+//       portalList: [{ id, label, icon, comp, ... }]   below frontend.object: the portals every object of it
+//                                                  provides, each a whole-window app drawn by a component
+//                                                  (doc_page_impl_portal.md#declaring-a-portal)
 //
 // every problem is reported with the file and skips the item, never the page. the same
 // declaration twice is one type (objects carry theirs); a different one is a problem, and the
@@ -44,7 +48,7 @@ import {
 export const TYPE_CONFIG_FILE_NAME = 'type.yaml';
 const TOP_KEY_LIST = ['typeList'];
 // assetKindList: the former name of kindList, read with a problem (react-doc migrate rewrites it)
-const TYPE_KEY_LIST = ['id', 'kind', 'label', 'description', 'icon', 'extendList', 'summaryKeyList', 'modeList', 'kindList', 'assetKindList', 'partitionList'];
+const TYPE_KEY_LIST = ['id', 'kind', 'label', 'description', 'icon', 'extendList', 'summaryKeyList', 'modeList', 'kindList', 'assetKindList', 'partitionList', 'portalList'];
 const MODE_KEY_LIST = ['id', 'label', 'description', 'category', 'comp', 'param', 'isDefault', 'pathParam'];
 const PARTITION_KEY_LIST = ['id', 'label', 'description', 'isGitIgnored', 'isDefault', 'storagePoint'];
 
@@ -105,6 +109,13 @@ export type TypeKindHeld = {
 // doc_page_impl_asset_storage.md#which-point-a-partition-is-bound-to)
 export type TypePartition = { id: string; label: string; description: string; isGitIgnored: boolean; isDefault: boolean; storagePoint?: string };
 
+// a portal a type declares: every object of the type provides it (lib/doc-portal.js,
+// doc_page_impl_portal.md#declaring-a-portal)
+export type TypePortal = {
+  id: string; label?: string; description?: string; icon?: string; color?: string; comp?: string;
+  param?: Record<string, any>; deviceList?: string[];
+};
+
 export type TypeDeclared = {
   id: string;
   kind: 'object' | 'relation';
@@ -116,6 +127,7 @@ export type TypeDeclared = {
   modeList?: TypeMode[];
   kindList?: TypeKindHeld[];
   partitionList?: TypePartition[];
+  portalList?: TypePortal[];
   // of a kind (a type below frontend.item): what an item of it is, the type declaring it, its name there
   content?: TypeKindContent;
   declaredBy?: string;
@@ -258,7 +270,7 @@ function typeRead(item: any, place: string, problem: (message: string) => void):
       kindListValue = objectFrontendAssetKindListConvert(item.assetKindList);
     }
   }
-  const isOfFrontend = item.modeList !== undefined || kindListValue !== undefined || item.partitionList !== undefined;
+  const isOfFrontend = item.modeList !== undefined || kindListValue !== undefined || item.partitionList !== undefined || item.portalList !== undefined;
   const extendDefault = kind === 'relation' ? 'core.relation' : (isOfFrontend ? OBJECT_FRONTEND_TYPE_ROOT : 'core.object');
   const kindRead = kindListValue === undefined ? undefined : objectFrontendKindListRead(kindListValue, { typeId: id, place: `${place}.kindList`, problem });
   return {
@@ -273,6 +285,9 @@ function typeRead(item: any, place: string, problem: (message: string) => void):
     // the kinds it holds, resolved once every file is read (kindTypeListAdd); the kinds it declares
     ...(kindRead ? { kindList: kindRead.holdList as any, kindDeclareList: kindRead.kindDeclareList } : {}),
     ...(item.partitionList === undefined ? {} : { partitionList: partitionListRead(item.partitionList, `${place}.partitionList`, problem) }),
+    // the portals its objects provide: a type's declaration names its component; switching one off
+    // is an object's own business (portal.yaml), not a type's
+    ...(item.portalList === undefined ? {} : { portalList: portalDeclareListRead(item.portalList, `${place}.portalList`, problem).map(({ isDisabled: _isDisabled, ...portal }: any) => portal) }),
   } as any;
 }
 
@@ -372,13 +387,14 @@ export function typeDeclaredIsFrontend(typeList: { id: string; extendList: strin
 // modes and kinds of data items mean something for a frontend object only
 function frontendKeyListCheck(config: TypeDeclaredConfig) {
   for (const type of config.typeList as any[]) {
-    if ((type.modeList === undefined && type.kindList === undefined && type.partitionList === undefined) || typeDeclaredIsFrontend(config.typeList, type.id)) continue;
+    if ((type.modeList === undefined && type.kindList === undefined && type.partitionList === undefined && type.portalList === undefined) || typeDeclaredIsFrontend(config.typeList, type.id)) continue;
     const owner = type.definedBy.kind === 'package' ? type.definedBy.name : type.definedBy.alias;
-    config.problemList.push({ alias: owner, file: type.definedBy.file, message: `the type ${type.id} has modes or kinds of data items, which are for types below ${OBJECT_FRONTEND_TYPE_ROOT}; they are left out` });
+    config.problemList.push({ alias: owner, file: type.definedBy.file, message: `the type ${type.id} has modes, kinds of data items or portals, which are for types below ${OBJECT_FRONTEND_TYPE_ROOT}; they are left out` });
     delete type.modeList;
     delete type.kindList;
     delete type.kindDeclareList;
     delete type.partitionList;
+    delete type.portalList;
   }
 }
 

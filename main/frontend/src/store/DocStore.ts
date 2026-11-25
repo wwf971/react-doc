@@ -2,6 +2,7 @@ import { makeAutoObservable, runInAction, untracked } from 'mobx';
 import type { DocSourceStore } from './DocSourceStore.js';
 import { buildPageTreeModel } from '../lib/page-tree.js';
 import { sidePanelItemPathRouteGet } from '../lib/side-panel-item-path.js';
+import { PORTAL_PARAM_AT, PORTAL_PARAM_ID } from '../lib/doc-portal.js';
 import { textLocalizedGet } from '../lib/text-localized.js';
 import { compDefinitionNormalize, compIdResolve, compInputNormalize } from '../../../comp-doc/registry/comp-registry.js';
 import { compDefinitionGet } from '../../../comp-doc/registry/comp-definition.js';
@@ -787,9 +788,33 @@ export class DocStore {
     const route = this.routeResolve(path)?.route ?? path;
     if (this.routeMode !== 'query') return route + hash;
     const url = new URL(window.location.href);
+    // an address of a document is one of the documents: what names a portal of its own, and
+    // the place inside it, is no part of it (doc_page_impl_portal.md#the-address)
+    url.searchParams.delete(PORTAL_PARAM_ID);
+    url.searchParams.delete(PORTAL_PARAM_AT);
     url.searchParams.set('doc', route);
     url.hash = hash;
     return `${url.pathname}${url.search}${url.hash}`;
+  }
+
+  // the component of the registry a name means (a tag name, or an id): { compId, definition },
+  // or undefined. read with the registry (compByIdVersion), so what asks follows it
+  compFind(compName: string): { compId: string; definition: any } | undefined {
+    void this.compByIdVersion;
+    const compId = compIdResolve(this.sourceStore.configDoc, compName);
+    for (const id of [compId, compName]) {
+      const definition = compDefinitionNormalize(compDefinitionGet(this.compById, id));
+      if (definition) return { compId: id, definition };
+    }
+    return undefined;
+  }
+
+  // what opening the documents of a doc page shows: the home of the page for the main doc
+  // page, else the first item whose document is of that doc page ('' when it has none)
+  routeOfDocPageGet(docPageAlias: string): string {
+    if (!docPageAlias || docPageAlias === this.sourceStore.docPageAliasMain) return this.routeHome;
+    const item = this.treeModel.items.find((one: any) => one.docPath && this.sourceStore.docPageAliasOfPath(one.docPath) === docPageAlias);
+    return item?.route ?? '';
   }
 
   setLinkDropdownOpen(id: string) {

@@ -3,7 +3,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { parseDocument, stringify as yamlStringify } from 'yaml';
 import { readYaml, type EntryFileSection } from './doc-entry.ts';
-import { TYPE_CONFIG_FILE_NAME, typeDeclaredIsFrontend, type TypeDeclared } from './doc-type-config.ts';
+import { TYPE_CONFIG_FILE_NAME, typeDeclaredIsFrontend, type TypeDeclared, type TypePortal } from './doc-type-config.ts';
+import { portalDeclareListRead } from '../src/lib/doc-portal.js';
 import { idMs48Create, idMs48Is } from './id-ms48.ts';
 import { lineOperationListApply } from './doc-edit-lines.ts';
 import { yamlSeqItemInsertBuild, yamlSeqItemRemoveBuild } from './doc-yaml-edit.ts';
@@ -47,6 +48,8 @@ import { assetPathCompile } from '../src/lib/doc-object-frontend-asset-path.js';
 //   {id}--{name}/                      in ASCII; follows the name of the object
 //     object.yaml                      id, entry; isDeleted (the object was deleted, its files stay)
 //     type.yaml                        optional: types that travel with it (doc-type-config.ts)
+//     portal.yaml                      optional: the portals this object provides, beside or over those of
+//                                      its type (lib/doc-portal.js, doc_page_impl_portal.md#declaring-a-portal)
 //     item/                            its asset items: a folder of the asset store owned by the
 //                                      object, the entry among them, at any depth in folders of its own;
 //                                      each declares the object in its owner
@@ -69,10 +72,16 @@ import { assetPathCompile } from '../src/lib/doc-object-frontend-asset-path.js';
 // directory ('' when it is listed in objectList); listList: its item lists, as read;
 // partitionStorageList: its partitions that say which storage point holds them (partition.yaml;
 // a partition not named is held by file-tree, doc_page_impl_asset_storage.md)
+// portalList: what its portal.yaml declares, as read (absent: it has none): portals of its own, and
+// those of its type it adjusts or switches off (isDisabled)
 export type ObjectFrontendDecl = {
   id: string; entry: string; docPageAlias: string; dir: string; listList: ObjectFrontendList[];
   partitionStorageList: Omit<AssetStoragePartitionBind, 'config'>[];
+  portalList?: (TypePortal & { isDisabled?: boolean })[];
 };
+
+// the file of an object's folder declaring its portals
+export const OBJECT_FRONTEND_PORTAL_FILE_NAME = 'portal.yaml';
 
 // an item list: where it lies in the item folder ('' its top), its records, what could not be read
 export type ObjectFrontendList = { groupPath: string; assetList: any[]; problemList: string[] };
@@ -186,11 +195,37 @@ export function objectFrontendConfigOfDocPageListGet(
         for (const list of listList) pathList.push(listFileGet(itemDirAbs, list.groupPath));
         const partitionStorageList = assetStoragePartitionBindListRead(itemDirAbs, storageConfig, docPage.alias).map(({ config: _config, ...bind }) => bind);
         for (const bind of partitionStorageList) pathList.push(path.join(itemDirAbs, bind.partition, ASSET_STORAGE_PARTITION_FILE_NAME));
-        docPage.objectList.push({ id: meta.id, entry: meta.entry, docPageAlias: docPage.alias, dir: pathRelativeGet(meta.dirAbs, configDir), listList, partitionStorageList });
+        // its portals: watched whether the file exists or not, so that one written later is read
+        const portalFile = path.join(meta.dirAbs, OBJECT_FRONTEND_PORTAL_FILE_NAME);
+        pathList.push(portalFile);
+        const portalList = objectPortalListRead(portalFile, `${meta.dirRelative}/${OBJECT_FRONTEND_PORTAL_FILE_NAME}`, docPage);
+        docPage.objectList.push({ id: meta.id, entry: meta.entry, docPageAlias: docPage.alias, dir: pathRelativeGet(meta.dirAbs, configDir), listList, partitionStorageList, ...(portalList ? { portalList } : {}) });
       }
     }
   }
   return { docPageList, typeList, fileAbsByAlias, pathList, folderList, folderNewByAlias, objectDirAbsById };
+}
+
+// what portal.yaml of an object's folder declares (undefined: no file): { portalList: [...] }.
+// every problem is the doc page's, with the file, and leaves out that portal
+function objectPortalListRead(file: string, fileShown: string, docPage: ObjectFrontendDocPage) {
+  if (!fs.existsSync(file)) return undefined;
+  let content: any;
+  try {
+    content = readYaml(file) ?? {};
+  } catch (error: any) {
+    docPage.problemList.push(`${fileShown} does not parse: ${String(error?.message ?? error)}`);
+    return undefined;
+  }
+  if (!mappingIs(content)) {
+    docPage.problemList.push(`${fileShown} holds a mapping { portalList }`);
+    return undefined;
+  }
+  for (const key of Object.keys(content)) {
+    if (key !== 'portalList') docPage.problemList.push(`${fileShown}: unknown key "${key}" (known: portalList)`);
+  }
+  if (content.portalList === undefined) return [];
+  return portalDeclareListRead(content.portalList, `${fileShown}: portalList`, (message: string) => docPage.problemList.push(message), { isCompRequired: false });
 }
 
 // the mapping of the doc page's file; undefined when it has none or it says nothing usable

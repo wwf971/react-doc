@@ -12,6 +12,7 @@ import {
 import { objectFrontendKindItemCheck, objectFrontendKindProblemText, OBJECT_FRONTEND_KIND_ROOT } from '../lib/doc-object-frontend-kind.js';
 import { objectFrontendServiceBuild } from '../../../comp-doc/object-frontend/object-frontend-service.js';
 import { ASSET_STORE_ID_LOCAL } from '../lib/doc-asset-ref.js';
+import { portalDeclareListOfObjectGet, portalDeclareListResolve } from '../lib/doc-portal.js';
 
 // the layer as a provider of documents of the source (DocSourceStore.docProvidedSet)
 export const OBJECT_FRONTEND_DOC_PROVIDER_ID = 'frontend';
@@ -440,6 +441,44 @@ export class DocObjectFrontendStore {
     const registry = this.stores.objectStore?.typeRegistry;
     const ancestorList = registry?.typeGet(typeId) ? registry.ancestorListGet(typeId) : [OBJECT_FRONTEND_TYPE_ROOT];
     return objectFrontendModeListResolve(typeId, ancestorList, modeListByType) as ObjectFrontendMode[];
+  }
+
+  // ---------- portals (doc_page_impl_portal.md) ----------
+
+  // the portals a type declares for its objects: its own, then its ancestors' (as its modes)
+  portalListOfTypeGet(typeId: string): any[] {
+    const portalListByType: Record<string, any[]> = {};
+    for (const type of this.typeDeclaredList) portalListByType[type.id] = type.portalList ?? [];
+    const registry = this.stores.objectStore?.typeRegistry;
+    const ancestorList = registry?.typeGet(typeId) ? registry.ancestorListGet(typeId) : [];
+    return portalDeclareListResolve(typeId, ancestorList, portalListByType);
+  }
+
+  // what the objects provide to the portal registry: per object the portals of its type as it
+  // adjusts them, and its own (portal.yaml of its folder):
+  //   { provideList: [{ providerRef, providerKind, providerLabel, docPageAlias, portalList }],
+  //     problemList: [{ alias, ref, message }], isLoading }
+  // an object's type is said by its entry, so the entry of every object is read where some type
+  // declares a portal; where none does, only of the objects declaring portals themselves
+  get portalProvide(): { provideList: any[]; problemList: { alias: string; ref: string; message: string }[]; isLoading: boolean } {
+    const provideList: any[] = [];
+    const problemList: { alias: string; ref: string; message: string }[] = [];
+    let isLoading = this.config.status === 'idle' || this.config.status === 'loading';
+    const isTypeProviding = this.typeDeclaredList.some((type: any) => (type.portalList ?? []).length > 0);
+    for (const decl of this.declList as any[]) {
+      if (!isTypeProviding && !decl.portalList) continue;
+      const state = this.objectGet(decl.id);
+      if (state.status === 'loading') {
+        isLoading = true;
+        continue;
+      }
+      if (state.status !== 'found') continue;
+      const provided = portalDeclareListOfObjectGet(this.portalListOfTypeGet(state.typeId), decl.portalList);
+      for (const message of provided.problemList) problemList.push({ alias: decl.docPageAlias, ref: state.ref, message: `${state.name || state.id}: ${message}` });
+      if (provided.portalList.length === 0) continue;
+      provideList.push({ providerRef: state.ref, providerKind: 'objectFrontend', providerLabel: state.name || state.id, docPageAlias: decl.docPageAlias, portalList: provided.portalList });
+    }
+    return { provideList, problemList, isLoading };
   }
 
   // whether the type is a frontend object type (frontend.object or below it)

@@ -37,6 +37,7 @@ import { objectProviderAssetCreate } from './lib/doc-object-provider-asset.js';
 import { objectProviderBackendCreate } from './lib/doc-object-provider-backend.js';
 import { objectProviderFrontendCreate } from './lib/doc-object-provider-frontend.js';
 import { DocObjectFrontendStore } from './store/DocObjectFrontendStore.js';
+import { DocPortalStore } from './store/DocPortalStore.js';
 import { DocEventRouter } from './lib/doc-event.js';
 import { DocCompStateStore } from './store/DocCompStateStore.js';
 import { StoreContext, useDocStores } from './store/context.js';
@@ -72,6 +73,8 @@ import { DocCommandPalette } from '../../comp-doc/api/DocCommandPalette.jsx';
 import { DocApiNotice } from '../../comp-doc/api/DocApiNotice.jsx';
 import { DocHotkeyListener } from '../../comp-doc/api/DocHotkeyListener.jsx';
 import { DocTabTitle } from '../../comp-doc/page/DocTabTitle.jsx';
+import { PortalHost } from '../../comp-doc/portal/PortalHost.jsx';
+import { PortalSwitcher } from '../../comp-doc/portal/PortalSwitcher.jsx';
 import { DocPaletteButton } from '../../comp-doc/api/DocPaletteButton.jsx';
 import { serviceApiProviderCreate } from '../../comp-doc/api/api-service.js';
 import { compById as compByIdDefault } from '../../comp-doc/registry/registry.js';
@@ -316,6 +319,9 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
     // author type in place, their tokens (a link, a view of an object, a value of the
     // component's own data) and the slash mode typing them
     const cellStore = new DocCellStore({ cellTokenById, cellStyleById, stores: { slashStore, sourceStore, objectStore } });
+    // the portals (doc_page_impl_portal.md): the ways the page is shown as a whole, the documents
+    // of each doc page and the apps frontend objects provide; which one is shown, and where in it
+    const portalStore = new DocPortalStore({ docStore, sourceStore, configStore, objectFrontendStore, objectStore, envStore }, { routeMode: config.routeMode ?? 'memory' });
     const paletteStore = new DocPaletteStore({ apiStore });
     // find in a part of the page: the scopes components register (doc_page_impl_api.md#finding-in-a-part-of-the-page)
     const findStore = new DocFindStore();
@@ -411,6 +417,7 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
       panelLayoutStore,
       slashStore,
       cellStore,
+      portalStore,
       apiStore,
       paletteStore,
       findStore,
@@ -437,7 +444,10 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
 
   useEffect(() => {
     void stores.envStore.init();
+    // what the address named when the page started, read before the documents write theirs
+    stores.portalStore.locationInitialRead();
     stores.docStore.init();
+    stores.portalStore.init();
     stores.compStateStore.init();
     stores.editStore.init();
     stores.structStore.init();
@@ -451,6 +461,7 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
     stores.apiStore.init();
     return () => {
       stores.hotkeyStore.dispose();
+      stores.portalStore.dispose();
       stores.apiStore.dispose();
       stores.assetRemoteStore.dispose();
       stores.objectFrontendStore.dispose();
@@ -593,8 +604,14 @@ function headingAnchorGet(target) {
   return anchor;
 }
 
+// the place of the title of the documents, while the page has other portals: the portal switcher,
+// at the top left (doc_page_impl_portal.md#the-switcher). the layout hands it the class of its title
+function DocNavTitlePortal({ className = '' }) {
+  return <PortalSwitcher variant="title" className={className} />;
+}
+
 const DocsShell = observer(function DocsShell() {
-  const { docStore, sidePanelConfig } = useDocStores();
+  const { docStore, portalStore, sidePanelConfig } = useDocStores();
   // the search of the side panel stands at its top, above the first doc page,
   // after a banner the host gives (doc_page_impl_side_panel.md#searching-the-items)
   const sidePanelProps = useMemo(() => ({
@@ -606,12 +623,17 @@ const DocsShell = observer(function DocsShell() {
     },
   }), [sidePanelConfig]);
   const siteTitle = docStore.siteTitle;
-  const navProps = useMemo(() => ({ title: siteTitle, children: <><DocPaletteButton /><DocSettingsButton /></> }), [siteTitle]);
+  // a page with one portal, its documents, has its title as it always had
+  const isSwitcherOffered = portalStore.isSwitcherOffered;
+  const navProps = useMemo(() => ({ title: isSwitcherOffered ? DocNavTitlePortal : siteTitle, children: <><DocPaletteButton /><DocSettingsButton /></> }), [siteTitle, isSwitcherOffered]);
+  // a portal of its own is shown in the place of the documents: the whole window is its
+  const isPortalOpen = portalStore.portalIdOpen !== '';
   // what it reads is only what the layout shows (the tree, the site title):
   // the shell draws the whole page, and an observable read here that changes
   // on every write (the config of the document, read through the manifest)
   // drew every block, the side panel and the table of contents again on
   // every keystroke that writes the document (DocRootStyle reads those)
+  if (isPortalOpen) return <PortalHost />;
   return (
     <DocsLayout
       tree={docStore.treePage}

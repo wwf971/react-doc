@@ -32,6 +32,7 @@ export {
   compIconGet,
   compMetaGet,
   compPaginationGet,
+  compPortalGet,
   compSourceDefaultGet,
   compViewModeListGet,
 } from '../../comp-doc/registry/comp-expose.js';
@@ -131,6 +132,15 @@ export {
 } from './lib/doc-object-frontend.js';
 // the view of a thing inside a frontend object (its own type's view, the context panel), reaching the object
 export { useObjectFrontendInner } from '../../comp-doc/object-frontend/use-object-frontend-inner.js';
+// a mode of a frontend object drawn where no document is: in a portal, in a panel of a component
+// (doc_page_impl_obj_frontend.md#a-mode-outside-a-document)
+export { ObjectFrontendMode } from '../../comp-doc/object-frontend/ObjectFrontendMode.jsx';
+// portals (doc_page_impl_portal.md): the standard switcher a portal's component places in its own
+// bar, the icon of a portal at any size, and the registry of the page for a host
+export { PortalSwitcher } from '../../comp-doc/portal/PortalSwitcher.jsx';
+export { PortalIcon } from '../../comp-doc/portal/PortalIcon.jsx';
+export { DocPortalStore } from './store/DocPortalStore.js';
+export { PORTAL_DEVICE_LIST, portalDocIdBuild, portalIdBuild, portalIdSplit } from './lib/doc-portal.js';
 // a block's turn to mount what is heavy, one block per frame (#reading-many-assets)
 export { useObjectFrontendDrawTurn } from '../../comp-doc/object-frontend/use-object-frontend-draw-turn.js';
 // the unified api registry (doc_page_impl_api.md): a host defines apis and

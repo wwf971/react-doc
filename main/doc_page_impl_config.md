@@ -59,6 +59,7 @@ TagsDisplayAtLink...            tags beside document links
 TagsOverviewPopup...            popup listing the assets of one tag
 List...                         the measures of the lists of a document
 CodeBlock...                    how the fenced code blocks of a document are drawn
+Portal...                       which portal the page opens, its switcher, the order of the portals
 ```
 
 After the prefix comes what the key controls:
@@ -139,6 +140,8 @@ Built-in keys:
 | `TagsOverviewPopupAtSidePanelItemIsOn` | page | `false` | The popup also opens from a tag on a side-panel item. Off, a click there is a plain navigation gesture. |
 | `EditBlockEnterMode` | page | `click` | `click`: a block enters edit mode by clicking it (the caret at the clicked text) as well as through the Edit button of its toolbar; `button`: through the Edit button only. Development server only. |
 | `EditInsertRankByEntry` | doc | the basic blocks, in `config.yaml` | The [ranks](#ranks) of the entries of the insert menu, by entry id (`text:paragraph`, `component:{tag name}`, `service:{component id}`): a ranked entry is listed before every unranked one, in its row and in the results of a search. A `stringMap`, merged entry by entry; `null` takes a rank away. |
+
+The keys of the portals (`PortalDefault`, `PortalSwitcherIsOn`, `PortalSearchCountMin`, `PortalHiddenList`, `PortalRankById`: which portal the page opens, the switcher, the order) are listed with them: [Portals](doc_page_impl_portal.md#config). Which portals exist is never config: the objects declare them.
 
 How the tag features behave is described in [Tag system](doc_page_impl_tag.md#where-tags-are-displayed), the edit keys in [MDX document in-place editing](doc_page_impl_edit.md#availability-and-mode) and [The order of the insert menu](doc_page_impl_edit.md#the-order-of-the-insert-menu), the measures of a list in [The spacing of a list](doc_page_impl_mdx_li.md#the-spacing-of-a-list), the views of a code block in [Fenced code blocks](doc_page_impl_mdx_code.md#which-view-a-block-gets).
 

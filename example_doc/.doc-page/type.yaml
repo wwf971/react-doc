@@ -95,6 +95,16 @@ typeList:
       - id: stats
         label: Numbers
         comp: ReadingListStats
+    # the portals every reading list provides (main/doc_page_impl_portal.md#declaring-a-portal): a
+    # whole-window app drawn by a component exposing "portal". every object of the type provides
+    # it, so the page has one Library per list, told apart in the switcher by the name of the list
+    portalList:
+      - id: library
+        label: Library
+        description: the list as an app of its own, its shelf and the book chosen side by side
+        color: "#7a5230"
+        comp: ReadingListPortal
+        deviceList: [browser, desktop]
   # a reading list with fewer things on it: every mode of its parent, its
   # shelf as cards (the inherited mode of the same id is replaced)
   - id: example.reading-list-short

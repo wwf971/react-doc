@@ -192,6 +192,43 @@ export const configDefineListBuiltin = [
     scope: 'doc',
     description: 'The rank of the entries of the insert menu, by entry id (text:paragraph, component:{tag name}, service:{component id}): a ranked entry comes before every unranked one, ranks in order (0-9 and a-z, compared character by character, never ending with 0); null removes a rank declared below.',
   },
+  // portals (doc_page_impl_portal.md#config): which one the page opens, the switcher, their order
+  {
+    key: 'PortalDefault',
+    type: 'string',
+    valueDefault: null,
+    scope: 'page',
+    description: 'The portal the page opens when its address names none: a portal id ({provider}/{name}, as the Portals tab lists them). Not set: the documents. A deployment showing one portal as its front names it here.',
+  },
+  {
+    key: 'PortalSwitcherIsOn',
+    type: 'boolean',
+    valueDefault: true,
+    scope: 'page',
+    description: 'Show the portal switcher at the top left of the documents, and floating at the top left of a portal that draws none of its own, while the page has more than one portal.',
+  },
+  {
+    key: 'PortalSearchCountMin',
+    type: 'number',
+    valueDefault: 8,
+    scope: 'page',
+    description: 'From how many portals on the switcher has a field finding one by its name.',
+  },
+  {
+    key: 'PortalHiddenList',
+    type: 'stringList',
+    valueDefault: [],
+    scope: 'page',
+    description: 'Portal ids left out of the page: neither listed nor opened. docPage:{alias}/doc hides the documents of a doc page, for a deployment that is one portal only.',
+  },
+  {
+    key: 'PortalRankById',
+    type: 'stringMap',
+    valuePattern: RANK_PATTERN_TEXT,
+    valueDefault: {},
+    scope: 'page',
+    description: 'The rank of the portals of a doc page in the switcher, by portal id: a ranked portal comes before every unranked one, after the documents; null removes a rank declared below.',
+  },
 ];
 
 // The config layers (doc_page_impl_config.md#config-layers): page-wide

@@ -8,6 +8,7 @@ A **frontend object** is an object of the [object registry](doc_page_impl_obj.md
 .doc-page/object-frontend/{id}--{name}/    one folder per object: what is in it is the object
   object.yaml         { id, entry }             that it exists
   type.yaml                                     optional: types it brings along
+  portal.yaml                                   optional: the portals it provides (doc_page_impl_portal.md)
   item/               its asset items           an asset folder of the store, owned by the object
     {entryId}/        the entry asset           { name, type, description, metadata }
     item-list.yaml    an item list              { assetList [{ key, kind, itemId }] }: the assets lying here and below
@@ -60,6 +61,7 @@ An object is a folder, and the folder is self-contained: copied into another doc
 └── w5j7ozoijzl--Reading list/       {id}--{name}, in ASCII (a name with no ASCII gives way to the type); follows the name
     ├── object.yaml                  id, entry; isDeleted when there is something to say
     ├── type.yaml                    optional: the types it brings along
+    ├── portal.yaml                  optional: the portals it provides, beside or over those of its type
     └── item/                        the asset items of the object
         ├── w5j7ozokr1x/             the entry asset
         └── book/                    a folder of its own choosing
@@ -79,6 +81,7 @@ isDeleted: true                      # the object was deleted, its files stay (b
 - **A new name renames the folder**; ids stay, so nothing that refers to the object or its items changes.
 - **Deleting an object does not remove its folder.** Its `object.yaml` says `isDeleted: true`, so the object stops existing, and its assets are marked deleted, so references to them still resolve; with its assets kept it is an [orphan entry](#how-an-asset-comes-to-belong), which **List it** brings back. Removing the files is a step for a person.
 - **A type used by this object alone belongs in `type.yaml` beside it**, so that it travels with it ([Declaring a type](doc_page_impl_type.md#declaring-a-type)). The components its modes name do not travel: they are found in the doc page or a package, as any component, which is why the type of a package's components is the package's.
+- **The portals of this object alone are in `portal.yaml` beside it**: an app only it has, a portal of its type it names differently or leaves out ([Declaring a portal](doc_page_impl_portal.md#declaring-a-portal)). It travels with the folder too.
 - **The object holds its items whatever stores them.** A partition of `item/` may be bound to a storage point other than file-tree ([Where a partition is stored](#where-a-partition-is-stored)); what that point keeps (pack files, a cache) still lies in the folder of the partition.
 - Later, this folder may hold more than items (components of its own): [TODO](doc_page_impl_TODO.md#object-frontend).
 
@@ -583,6 +586,22 @@ A component of a mode never reaches the asset store, the development server or t
 
 **Creating a block.** The insert menu lists the entry as **Frontend Object…**: the component declares `meta.insertObjectPick: { typeList: [frontend.object], isCreateOffered: true }`, so choosing it opens the pick step of the menu, a search of the object registry limited to frontend objects (all of them listed before anything is typed), and one **New** button per type that creates an object of it in the doc page of the document ([Creating a block naming an object](doc_page_impl_edit.md#creating-a-block-naming-an-object)). The object chosen or created is written into the new block, which opens in its edit mode. Canceling the new block removes the block, not an object created for it: that object is real, and is deleted in the settings tab.
 
+## A mode outside a document
+
+A mode is drawn for a block, and a block has what a mode leans on: a text holding the mode and its parameters, and a document that is read or edited. Where no document is (a [portal](doc_page_impl_portal.md), a panel of a component) the one drawing the mode holds both, and `ObjectFrontendMode` (exported) is the entry component for it:
+
+```jsx
+<ObjectFrontendMode
+  object={service.ref}                  // the object: its reference or its id
+  mode="book" param={{ book: path }}    // a mode of its type (absent: the default), over its own parameters
+  docState={portal.docState}            // where a document would say whether it is edited (absent: reading)
+  onBlockChange={({ mode, param }) => …}   // the mode switched itself (modeSet, paramSet, blockSet)
+  instanceKey="right"                   // names this drawing among the host's: the state the mode keeps is found again
+/>
+```
+
+The component of the mode receives exactly what it receives in a block (`data { ref, mode, param }`, `config.objectFrontend`), so a mode needs no code to be drawn in an app: its cells, its cards and its dialogs are those of the block. A switch it asks for is handed to the host instead of a document (`onBlockChange`); the host keeps it, gives it back as `mode` and `param`, or makes of it something of its own (a book opened becomes the place of a portal). Without `onBlockChange` a switch is answered as not kept. `isEditable` of its api follows `docState.isEditing`, as it follows the edit mode of a document.
+
 ## Parameters of a block, of any component
 
 The parameters of a frontend object's mode are the data of its block. For any other component the same need, a block telling its component how to show its data, has two answers, for an inline block and an asset-backed one alike:
@@ -757,7 +776,8 @@ frontend/src/lib/doc-object-provider-frontend.js   its provider of the object re
 comp-doc/registry/comp-expose.js           expose.objectInner: a component answering for the inner paths of its types
 frontend/src/store/DocEditStore.ts         dataReplaceRequest and blockPropSetRequest found by the block's line in reading
                                            mode; the pick step of the insert menu
-comp-doc/object-frontend/                  ObjectFrontend (the entry component), object-frontend-service.js (the api of a mode),
+comp-doc/object-frontend/                  ObjectFrontend (the entry component), ObjectFrontendMode (a mode drawn where no document
+                                           is), object-frontend-service.js (the api of a mode),
                                            useObjectFrontendDrawTurn, ObjectFrontendEdit
                                            (its edit mode), ObjectFrontendOverview (the mode overview), ObjectViewFrontend
                                            (the view of frontend.object), ObjectViewFrontendInner (the view of

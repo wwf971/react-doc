@@ -130,7 +130,7 @@ test('a doc page declares types in type.yaml: modes, kinds, what is left out is 
   assert.deepEqual(typeList[2].extendList, ['doc.document'], 'a parent of any tree');
   assert.equal(typeList[2].modeList, undefined, 'modes mean nothing there');
   assert.match(problemList.map((one) => one.message).join(), /the prefix "core" of core.taken is the page's own/);
-  assert.match(problemList.map((one) => one.message).join(), /demo.stray has modes or kinds/);
+  assert.match(problemList.map((one) => one.message).join(), /demo.stray has modes, kinds of data items or portals/);
 });
 
 test('the entry names the type files: { file }, a list, in place, or none', () => {
@@ -324,6 +324,66 @@ test('type.yaml beside object.yaml travels with the object; a bad folder is repo
   assert.deepEqual(docPage.objectList.map((one) => one.id), ['w5aaaaaaaaa']);
   assert.ok(docPage.problemList.some((text) => text.includes('notes') && text.includes('object.yaml')));
   assert.ok(docPage.problemList.some((text) => text.includes('another id')));
+});
+
+test('a type declares the portals its objects provide; portal.yaml of an object adds, adjusts and switches off', () => {
+  const dir = fixtureCreate();
+  typeYamlWrite(dir, [
+    'typeList:',
+    '  - id: demo.library',
+    '    portalList:',
+    '      - { id: shelf, label: Shelf, icon: book, comp: LibraryShelf, deviceList: [browser] }',
+    '      - { id: doc, comp: Nope }',
+    '      - { id: gone, comp: Gone, isDisabled: true }',
+    '  - id: demo.plain',
+    '    extendList: [core.object]',
+    '    portalList:',
+    '      - { id: x, comp: X }',
+    '',
+  ].join('\n'));
+  const declared = typeDeclaredOf(dir);
+  const library = declared.typeList.find((type) => type.id === 'demo.library');
+  // a type with portals is below frontend.object without saying so; a type never switches one off
+  assert.deepEqual(library.extendList, ['frontend.object']);
+  assert.deepEqual(library.portalList, [
+    { id: 'shelf', label: 'Shelf', icon: 'book', comp: 'LibraryShelf', deviceList: ['browser'] },
+    { id: 'gone', comp: 'Gone' },
+  ]);
+  assert.ok(declared.problemList.some((one) => one.message.includes('"doc" is the portal of the documents')));
+  // portals mean something for a frontend object only
+  assert.equal(declared.typeList.find((type) => type.id === 'demo.plain').portalList, undefined);
+  assert.ok(declared.problemList.some((one) => one.message.includes('demo.plain') && one.message.includes('portals')));
+
+  const dirObject = objectFolderOf(dir, 'w5aaaaaaaaa--Library');
+  fs.mkdirSync(path.join(dirObject, 'item'), { recursive: true });
+  fs.writeFileSync(path.join(dirObject, 'object.yaml'), 'id: w5aaaaaaaaa\nentry: w5aaaaaaaab\n');
+  const dirPlain = objectFolderOf(dir, 'w5aaaaaaaac--Plain');
+  fs.mkdirSync(path.join(dirPlain, 'item'), { recursive: true });
+  fs.writeFileSync(path.join(dirPlain, 'object.yaml'), 'id: w5aaaaaaaac\nentry: w5aaaaaaaad\n');
+  // an object without the file declares nothing of its own
+  assert.equal(configGet(dir).docPageList[0].objectList[0].portalList, undefined);
+  fs.writeFileSync(path.join(dirObject, 'portal.yaml'), [
+    'portalList:',
+    '  - { id: shelf, label: My shelf }',
+    '  - { id: gone, isDisabled: true }',
+    '  - { id: desk, comp: LibraryDesk, param: { density: compact } }',
+    '  - { id: "bad id", comp: X }',
+    'other: 1',
+    '',
+  ].join('\n'));
+  const config = configGet(dir);
+  const docPage = config.docPageList[0];
+  assert.deepEqual(docPage.objectList.find((one) => one.id === 'w5aaaaaaaaa').portalList, [
+    { id: 'shelf', label: 'My shelf' },
+    { id: 'gone', isDisabled: true },
+    { id: 'desk', comp: 'LibraryDesk', param: { density: 'compact' } },
+  ]);
+  assert.equal(docPage.objectList.find((one) => one.id === 'w5aaaaaaaac').portalList, undefined);
+  assert.ok(docPage.problemList.some((text) => text.includes('portal.yaml') && text.includes('unknown key "other"')));
+  assert.ok(docPage.problemList.some((text) => text.includes('portal.yaml') && text.includes('"id" is letters')));
+  // the file is watched whether it exists or not: one written later is read
+  assert.ok(config.pathList.includes(path.join(dirObject, 'portal.yaml')));
+  assert.ok(config.pathList.includes(path.join(dirPlain, 'portal.yaml')));
 });
 
 test('folderList of the doc page\'s file names where its object folders are', async () => {

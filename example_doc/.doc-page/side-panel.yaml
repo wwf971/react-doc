@@ -102,6 +102,11 @@ sidePanelById:
       - doc: ~example/object-frontend.md
         text: Frontend Objects
         tags: [guide]
+      # the page shown as an app of its own in the whole window: the portals a frontend object
+      # provides (the Library of the reading lists), switched at the top left
+      - doc: ~example/portal.md
+        text: Portals
+        tags: [guide]
       # the settings of an app as config layers of a frontend object, stacked (package app-config)
       - doc: ~example/app-config.md
         text: App Config Layers

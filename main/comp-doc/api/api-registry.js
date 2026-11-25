@@ -5,6 +5,7 @@ import { apiByIdNav } from './api-nav.js';
 import { apiByIdPage } from './api-page.js';
 import { apiByIdObject } from './api-object.js';
 import { apiByIdPlayground } from './api-playground.js';
+import { apiByIdPortal } from './api-portal.js';
 import { apiByIdSource } from './api-source.js';
 import { apiByIdStruct } from './api-struct.js';
 
@@ -25,5 +26,6 @@ export const apiById = {
   ...apiByIdPage,
   ...apiByIdObject,
   ...apiByIdPlayground,
+  ...apiByIdPortal,
   ...apiByIdSource,
 };
