@@ -29,6 +29,9 @@ import { objectRefInnerBuild, objectRefInnerSplit, objectRefParse } from './doc-
 //   kind self     { ref }             the object being walked, to write as it is
 //   kind dir      { paramNext }       a folder inside the object: choosing goes on inside it
 //   kind item     { ref }             something inside the object, to write
+//   kind new      { ref }             something that may be made inside the object, where the
+//                                     text typed names nothing: written as a reference, made
+//                                     where the reference is worked on (its card)
 //   kind note                         a line saying why nothing is listed (not chosen)
 
 const OBJECT_COUNT_MAX = 60;
@@ -60,13 +63,15 @@ export function objectCompleteItemListGet(paramInput, registry) {
 }
 
 // what choosing an item does: { paramNext } (the parameter rewritten, the
-// walk goes on), { ref } (the reference to write), or undefined (a note)
+// walk goes on), { ref } (the reference to write; isNew: of a thing to be
+// made), or undefined (a note)
 export function objectCompleteChoose(item) {
   if (!item) return undefined;
   if (item.kind === 'type') return { paramNext: `${item.typeId}${TYPE_SEPARATOR}` };
   if (item.kind === 'object') return item.isInner ? { paramNext: item.ref } : { ref: item.ref };
   if (item.kind === 'dir') return { paramNext: item.paramNext };
   if (item.kind === 'self' || item.kind === 'item') return { ref: item.ref };
+  if (item.kind === 'new') return { ref: item.ref, isNew: true };
   return undefined;
 }
 
@@ -145,7 +150,7 @@ function innerItemListGet(parsed, registry) {
   for (const item of complete.itemList) {
     itemList.push(item.kind === 'dir'
       ? { id: `dir:${item.text}`, kind: 'dir', label: item.label, detail: item.detail ?? '', paramNext: objectRefInnerBuild(parsed.ref, item.text) }
-      : { id: `item:${item.ref}`, kind: 'item', ref: item.ref, label: item.label, detail: item.detail ?? '' });
+      : { id: `${item.isNew ? 'new' : 'item'}:${item.ref}`, kind: item.isNew ? 'new' : 'item', ref: item.ref, label: item.label, detail: item.detail ?? '' });
   }
   if (itemList.length === 0) return [noteItem(complete.message || 'Nothing inside matches')];
   return itemList;

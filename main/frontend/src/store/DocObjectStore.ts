@@ -170,7 +170,8 @@ export type ObjectProvider = {
   // sections of a document). answered at once from what its layer holds,
   // read in an observer: { status: done | loading, itemList, message }, each
   // item { kind: 'dir', text, label, detail } (typing goes on with text) or
-  // { kind: 'item', ref, label, detail } (ref: the reference of what it names)
+  // { kind: 'item', ref, label, detail, isNew? } (ref: the reference of what it names;
+  // isNew: nothing is there yet, the reference names a thing to be made)
   innerComplete?: (ref: string, text: string, registry: any) => ObjectInnerCompleteResult;
   // facts about a type beyond its definition that this provider knows (the
   // modes of a frontend object type): merged into typeInfoGet

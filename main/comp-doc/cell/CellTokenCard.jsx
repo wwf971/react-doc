@@ -21,6 +21,9 @@ import './Cell.css';
 //                     to the rest of it; cardHostGet says in which box)
 //   part, cell        the token and its cell
 //   where             'value' | 'surface': handed to the Card
+//   markedBy          how the token came to be marked in the typed text ('pointer', 'key', 'open',
+//                     'insert': a slash action just wrote it), handed to the Card: one opened on a
+//                     token just made may take the focus, to go on with it at once
 //   tokenSet(change)  the token written again ({ body?, param? }), or taken out (null)
 //   close(how)        how: 'escape' | 'button' | 'outside' (a pointer going down outside the card
 //                     and outside isInsideGet(target): the token, the surface it is typed in) |
@@ -31,7 +34,7 @@ import './Cell.css';
 // typed in (a block: as wide as the block, so a text breaks into the lines it will have there;
 // twice the usual width where no place is known), 'normal' gives the usual width back. What is
 // wide is the kind's to say (a value that is a text), never the frame's
-export function CellTokenCard({ anchorRectGet, observeElementGet, placeRectGet, placement = 'right', part, cell, where = 'value', tokenSet, close, isInsideGet }) {
+export function CellTokenCard({ anchorRectGet, observeElementGet, placeRectGet, placement = 'right', part, cell, where = 'value', markedBy, tokenSet, close, isInsideGet }) {
   const cardRef = useRef(null);
   const [place, placeSet] = useState(null);
   const [widthMode, widthModeSet] = useState('normal');
@@ -129,7 +132,7 @@ export function CellTokenCard({ anchorRectGet, observeElementGet, placeRectGet, 
       </div>
       {/* the Card may close itself when its work is done (close()): the kind decides, e.g. after a
           value is saved; the token stays, and a click on it opens the card again */}
-      <Card token={part} cell={cell} tokenSet={tokenSet} close={(how = 'done') => close(how)} widthSet={widthSet} where={where} />
+      <Card token={part} cell={cell} tokenSet={tokenSet} close={(how = 'done') => close(how)} widthSet={widthSet} where={where} markedBy={markedBy} />
     </div>,
     host,
   );

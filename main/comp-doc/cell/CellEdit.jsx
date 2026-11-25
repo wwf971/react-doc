@@ -33,7 +33,8 @@ import './Cell.css';
 // A token is one thing in the text as well (#a-token-marked-in-the-typed-text):
 // a click on its words, or the caret coming to its edge from outside, marks it
 // (a highlight of its words, the caret at its edge) and opens its card under it
-// when its kind offers one there; Backspace or Delete then take it out whole,
+// when its kind offers one there (a token a slash action wrote and asked to have
+// marked is marked the same way, its card told so); Backspace or Delete then take it out whole,
 // and a click on it again unmarks it, the caret inside its words, typed as any
 // text. The card writes the token into the draft (tokenSet), or what the token
 // names through the kind's own write.
@@ -80,7 +81,8 @@ export const CellEdit = observer(function CellEdit({
   // the text as kept, as last typed; a text set by code (textVersion) is the typed text from then on
   const textTypedRef = useRef(text);
   const textVersionRef = useRef(textVersion);
-  // the token marked: { start, end } of its words in the typed text
+  // the token marked: { start, end } of its words in the typed text, and how it came to be
+  // marked (by: 'pointer' | 'key' | 'open' | 'insert'), which its card is told
   const [mark, markSet] = useState(null);
   const markRef = useRef(mark);
   markRef.current = mark;
@@ -113,12 +115,12 @@ export const CellEdit = observer(function CellEdit({
     return tokenParse ? tokenParse(cellSurfaceTextRead(surfaceRef.current)) : [];
   };
 
-  // a token marked: the caret at an edge of its words ('start' | 'end')
-  const tokenMark = (token, edge) => {
+  // a token marked: the caret at an edge of its words ('start' | 'end'); by: how it came to be
+  const tokenMark = (token, edge, by) => {
     const element = surfaceRef.current;
     if (!element) return;
     cellSurfaceSelectionSet(element, edge === 'start' ? token.start : token.end);
-    markSet({ start: token.start, end: token.end });
+    markSet({ start: token.start, end: token.end, by });
   };
   // the token whose words a point (a click) lies on
   const tokenAtPointGet = (point) => {
@@ -179,7 +181,7 @@ export const CellEdit = observer(function CellEdit({
         markSet(null);
         return;
       }
-      tokenMark(token, edgeNearerGet(token));
+      tokenMark(token, edgeNearerGet(token), 'pointer');
     };
     // the focus going elsewhere than the card unmarks it (the card's own pointer handling closes it
     // for a click outside)
@@ -214,7 +216,7 @@ export const CellEdit = observer(function CellEdit({
     const point = selectionInitial?.type === 'point' ? selectionInitial : undefined;
     const tokenOfPoint = point ? tokenAtPointGet(point) : undefined;
     const token = tokenOfPoint ?? cellTokenSoleGet(partListGet());
-    if (token) tokenMark(token, tokenOfPoint ? edgeNearerGet(token) : 'end');
+    if (token) tokenMark(token, tokenOfPoint ? edgeNearerGet(token) : 'end', 'open');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -254,7 +256,7 @@ export const CellEdit = observer(function CellEdit({
     const token = cellTokenEdgeArrivalGet(partListGet(), selection.start, direction);
     if (!token) return false;
     event.preventDefault();
-    tokenMark(token, direction === 'left' ? 'end' : 'start');
+    tokenMark(token, direction === 'left' ? 'end' : 'start', 'key');
     return true;
   };
 
@@ -270,7 +272,15 @@ export const CellEdit = observer(function CellEdit({
       cellSurfaceRangeReplace(element, token.start, token.end, rawNext);
       textReport(cellSurfaceTextRead(element));
     }
-    markSet(change === null ? null : { start: token.start, end: token.start + rawNext.length });
+    markSet(change === null ? null : { start: token.start, end: token.start + rawNext.length, by: markRef.current?.by });
+  };
+
+  // a slash action wrote a text and asked to have it marked (slashEffect.replace with isMarked):
+  // the token it is, marked as one thing, its card open under it. the write has been reported as
+  // typed by now (which unmarks), so this comes last
+  const slashTextMark = (start, end) => {
+    const token = partListGet().find((part) => part.type === 'token' && part.start >= start && part.end <= end);
+    if (token) tokenMark(token, 'end', 'insert');
   };
 
   // what is selected, told in the offsets of the bare text. typed raw, the surface counts in
@@ -318,6 +328,7 @@ export const CellEdit = observer(function CellEdit({
           textReport(textNext);
         }}
         onSelectionChange={selectionHandle}
+        onSlashTextMark={slashTextMark}
         onSubmitRequest={onSubmitRequest}
         onCancelRequest={onCancelRequest}
       />
@@ -326,6 +337,7 @@ export const CellEdit = observer(function CellEdit({
           key={`${markToken.start}:${markToken.name}`}
           placement="below"
           where="surface"
+          markedBy={mark.by}
           part={markToken}
           cell={cell}
           anchorRectGet={() => cellSurfaceRangeRectGet(surfaceRef.current, markToken.start, markToken.end)}

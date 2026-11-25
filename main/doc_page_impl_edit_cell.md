@@ -116,12 +116,15 @@ cellTokenDefine({
                                           number after the context of the cell changed (#using-it-in-a-component)
     textGet(token, cell) -> string        its plain text
   how it is typed:
-    slashAction                           a slash action, or (cell) => one
-    isTriggerDirect                       a brace kind: its opening text enters the action at once (default true)
+    slashAction                           a slash action, or a list of them (a kind typed in several ways:
+                                          /query finds a value, /new makes one), or (cell) => either
+    isTriggerDirect                       a brace kind: its opening text enters its first action at once
+                                          (default true)
   how one token is shown and changed where it is:
-    Card({ token, cell, tokenSet, close, widthSet, where })   optional: its card (#the-card-of-a-token), drawn
-                                          beside a token selected where it is drawn (where 'value') and
-                                          under a token marked in the typed text (where 'surface')
+    Card({ token, cell, tokenSet, close, widthSet, where, markedBy })   optional: its card
+                                          (#the-card-of-a-token), drawn beside a token selected where it is
+                                          drawn (where 'value') and under a token marked in the typed text
+                                          (where 'surface'; markedBy: how it came to be marked)
     cardPlaceList                         where the card is offered: ['value', 'surface'] (default both)
 })
 token = { kind, name, raw, body, param, data, start, end }
@@ -190,7 +193,7 @@ CellEdit  { cell, text, ... }     the text typed: tokens written out, words in t
 
 **The slash of a cell** is built by the kit from its kinds (`DocCellStore.slashBuild`):
 
-- **Its actions are the actions of its kinds**, the owner's first, and nothing else: the page's other actions are not offered in a cell.
+- **Its actions are the actions of its kinds**, the owner's first, and nothing else: the page's other actions are not offered in a cell. A kind may bring several (`slashAction: [find, make]`): each is listed, and the first is the one its opening text enters.
 - **`/` starts the slash mode wherever no word goes on after it**, whatever stands before it, as in a document ([The state machine](doc_page_impl_edit_slash.md#the-state-machine)). A cell is often text without spaces between its words (`{{birth/month}}月`), where a rule asking for a space before the `/` would never hold.
 - **The opening text of a brace kind enters its action at once** (a direct trigger): `{{` lists what the owner's kind completes, `{{@` what `/object` lists. The author who knows what a token looks like types it and is completed; the author who does not types `/` and reads the menu. Both end with the same text.
 - **Its context** is the owner's own, read live, with the page's services added: `{ ...the owner's, cell, sourcePath, docPageAlias, source, object }`. So an action of the page (`/link`, `/object`) and an action of the owner read what they need from one object.
@@ -315,6 +318,7 @@ marked
 ```
 
 - **A cell opened by a click on a token marks it at once**, and so does a cell whose whole text is one token: the most common cell (one value of a profile) opens with that value's card under it, and a second click on the token reaches its words.
+- **A token an action has just written may be marked too.** An action answering `slashEffect.replace(text, { isMarked: true })` ([Something written, then gone on with](doc_page_impl_edit_slash.md#the-action-interface)) has the token it wrote marked and its card opened, so what was named is worked on without a click: a path that did not exist is given its value. The card is told how its token came to be marked (`markedBy`: `'pointer'` a click on its words, `'key'` the caret coming to its edge, `'open'` the cell opened on it, `'insert'` an action wrote it), and only for `'insert'` may it take the focus: a card that took it whenever the caret passed a token would stop the caret.
 - **The mark is drawn by the browser's highlight registry** (`::highlight(doc-cell-token-mark)`), so the surface stays plain text: no element is added to what is typed, the caret moves and the text reads back as before. One token is marked on the page.
 - **`tokenSet` from a card in the surface writes the typed text**, not the owner's data: the draft changes as if typed, and the owner saves it with the rest. A card that changes what the token names (a value kept elsewhere) writes that itself, at once, and says where it is kept.
 - **The card stands under the token**, its left edge at the token's (above it when the window has no room under it), floating: it is a popup of the edit layer, so a click in it does not leave the cell, and the cell keeps its place (rule 9).

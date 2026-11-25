@@ -74,7 +74,10 @@ export type ObjectFrontendInner = {
   message: string;
 };
 
-export type ObjectFrontendInnerCandidate = { kind: 'dir' | 'item'; path: string; label: string; detail: string };
+// isNew: nothing is at the path yet, and choosing it names a thing to be made there (a new
+// value of a profile): written as any reference, and made where its card is (the view of its
+// type in the context panel)
+export type ObjectFrontendInnerCandidate = { kind: 'dir' | 'item'; path: string; label: string; detail: string; isNew?: boolean };
 
 export type ObjectFrontendAsset = {
   key: string;
@@ -1204,6 +1207,7 @@ export class DocObjectFrontendStore {
         status: !Array.isArray(answer) && answer?.status === 'loading' ? 'loading' : 'done',
         itemList: list.filter((item: any) => item && typeof item.path === 'string').map((item: any) => ({
           kind: item.kind === 'dir' ? 'dir' : 'item', path: item.path, label: String(item.label ?? item.path), detail: String(item.detail ?? ''),
+          ...(item.isNew === true && item.kind !== 'dir' ? { isNew: true } : {}),
         })),
         message: String((!Array.isArray(answer) && answer?.message) || ''),
       };

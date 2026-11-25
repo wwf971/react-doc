@@ -83,7 +83,9 @@ export { TextBlockEdit } from '../../../built-in/comp-mdx/text/TextBlockEdit.jsx
 // the slash mode of the default editors (doc_page_impl_edit_slash.md): a
 // host defines its own actions and hands them as config.slashActionById
 export { slashActionDefine } from '../../comp-doc/slash/slash-define.js';
-export { slashEffect } from './lib/doc-slash.js';
+// slashParamCommandRead, slashCommandItemListGet: the commands of a place typed inside a parameter
+// that is a path ("work//new": doc_page_impl_edit_slash.md#commands-inside-a-path)
+export { slashCommandItemListGet, slashEffect, slashParamCommandRead } from './lib/doc-slash.js';
 export { DocSlashStore } from './store/DocSlashStore.js';
 // the kinds of atoms (doc_page_impl_edit_structure.md#atoms-of-a-kind): a thing a component
 // writes inside a text, typed as a chip, its value edited below it (a formula of LaTeX); a host

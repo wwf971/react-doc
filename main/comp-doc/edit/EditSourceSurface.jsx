@@ -94,6 +94,12 @@ import './DocEdit.css';
 //                       optional: an atom of a kind a slash action puts at the
 //                       caret (slashEffect.atom): the editor around the surface
 //                       adds it; without it the action's text is typed
+//   onSlashTextMark(start, end)
+//                       optional: a text a slash action wrote and asked to have
+//                       marked (slashEffect.replace with isMarked), where it stands
+//                       in the text of the surface: the editor around the surface
+//                       marks it as one thing (the cell editing kit: the token
+//                       there, whose card opens); without it nothing more is done
 //   onSubmitRequest()   Ctrl/Cmd + Enter
 //   onCancelRequest()   Escape
 //   surfaceRef          optional: a ref given the editable element while it is
@@ -139,6 +145,7 @@ export function EditSourceSurface({
   onAtomValueChange,
   atomOpenRequest,
   onAtomInsert,
+  onSlashTextMark,
   surfaceRef,
   codec,
   ariaLabel = 'Block source',
@@ -160,7 +167,7 @@ export function EditSourceSurface({
   // the text of the surface goes along: the slash text is gone from it already
   const blockInsert = onBlockInsert ? (source, offset) => onBlockInsert(source, offset, surfaceTextGet(elementRef.current)) : undefined;
   const atomInsert = onAtomInsert ? (atomKind, isRow, offset) => onAtomInsert(atomKind, isRow, offset, surfaceTextGet(elementRef.current)) : undefined;
-  const slashBinding = useEditSlash(elementRef, slash, { textBeforeCaretGet, charAfterCaretGet, blockInsert, atomInsert });
+  const slashBinding = useEditSlash(elementRef, slash, { textBeforeCaretGet, charAfterCaretGet, blockInsert, atomInsert, textMark: onSlashTextMark });
   const onSelectionChangeRef = useRef(onSelectionChange);
   onSelectionChangeRef.current = onSelectionChange;
   const isSelectionReported = Boolean(onSelectionChange);

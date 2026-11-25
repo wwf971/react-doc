@@ -28,6 +28,7 @@ import { slashActionByNameBuild } from '../../../comp-doc/slash/slash-define.js'
 //    │                                  param mode (delegated to the action)
 //    │                                    │  item chosen -> effect:
 //    │                                    │    paramSet  stays, parameter rewritten
+//    │                                    │    actionSet stays, another action goes on with it
 //    └── replace / cancel / Esc / two spaces / caret leaves / blur
 //
 // slashActionById  the registry of the page (DocPageMdx builds it,
@@ -69,8 +70,9 @@ export type SlashState = {
 export type SlashTrigger = { text: string; action: any; endList?: string[] };
 // what the surface does after a choice: replace the slash text (its
 // lengthOld characters before the caret) by textNew when given; the slash
-// mode has ended when isEnded
-export type SlashApply = { textNew: string | undefined; isEnded: boolean; lengthOld: number };
+// mode has ended when isEnded. isMarked: the surface is asked to mark what was
+// written, as one thing of its text (a cell: the token, whose card opens)
+export type SlashApply = { textNew: string | undefined; isEnded: boolean; lengthOld: number; isMarked?: boolean };
 
 const storageKeyDefault = 'doc-page-edit-slash';
 

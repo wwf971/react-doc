@@ -6,9 +6,11 @@ import {
   SLASH_MODE_PARAM,
   slashActionMatchList,
   slashBlockTextInsert,
+  slashCommandItemListGet,
   slashEffect,
   slashEffectApplyGet,
   slashLineRead,
+  slashParamCommandRead,
   slashTextGet,
   slashTextParse,
   slashTriggerIs,
@@ -319,4 +321,41 @@ test('/math puts a formula at the caret: in the line by default, on a row of its
   const effect = mathSlashAction.param.itemChoose(itemList[1], '', {});
   assert.equal(effect.isRow, true);
   assert.match(effect.textFallback, /^\n\$\$\nx\n\$\$\n$/);
+});
+
+// ---------- a text marked once written, another action going on, commands of a place ----------
+
+test('replace asks for a mark only when told, and never for an empty text', () => {
+  assert.deepEqual(slashEffectApplyGet(slashEffect.replace('{{a/b}}'), 'query'), { textNew: '{{a/b}}', isEnded: true });
+  assert.deepEqual(slashEffectApplyGet(slashEffect.replace('{{a/b}}', { isMarked: true }), 'query'), { textNew: '{{a/b}}', isEnded: true, isMarked: true });
+  assert.deepEqual(slashEffectApplyGet(slashEffect.replace('', { isMarked: true }), 'query'), { textNew: '', isEnded: true });
+});
+
+test('actionSet writes the other action out, whatever the slash mode was entered with', () => {
+  const trigger = { text: '{{', action: { name: 'query', param: {} } };
+  assert.deepEqual(slashEffectApplyGet(slashEffect.actionSet('new', 'work/x/'), 'query', trigger), { textNew: '/new work/x/', isEnded: false });
+  assert.deepEqual(slashEffectApplyGet(slashEffect.actionSet('new'), 'query'), { textNew: '/new ', isEnded: false });
+  // the text it writes is the param mode of that action
+  const actionGet = (name) => (name === 'new' ? { name: 'new', param: {} } : undefined);
+  assert.equal(slashTextParse('/new work/x/', actionGet).mode, 'param');
+  assert.equal(slashTextParse('/new work/x/', actionGet).param, 'work/x/');
+});
+
+test('a command is typed where the next segment of a path would start', () => {
+  assert.deepEqual(slashParamCommandRead('work/sample-systems//new'), { base: 'work/sample-systems/', query: 'new' });
+  assert.deepEqual(slashParamCommandRead('work//'), { base: 'work/', query: '' });
+  assert.deepEqual(slashParamCommandRead('/ne'), { base: '', query: 'ne' });
+  assert.deepEqual(slashParamCommandRead('/'), { base: '', query: '' });
+  assert.equal(slashParamCommandRead('work/'), undefined);
+  assert.equal(slashParamCommandRead('work/new'), undefined);
+  assert.equal(slashParamCommandRead(''), undefined);
+  assert.equal(slashParamCommandRead('work//new/x'), undefined);
+});
+
+test('the commands of a place are listed by what is typed of their name', () => {
+  const commandList = [{ name: 'new', label: 'New value', description: 'made here' }, { name: 'rename', label: 'Rename' }];
+  assert.deepEqual(slashCommandItemListGet(commandList, '').map((item) => item.label), ['/new', '/rename']);
+  assert.deepEqual(slashCommandItemListGet(commandList, 'ne'), [{ id: 'command:new', kind: 'command', name: 'new', label: '/new', detail: 'New value: made here' }]);
+  assert.deepEqual(slashCommandItemListGet(commandList, 'value').map((item) => item.name), ['new']);
+  assert.deepEqual(slashCommandItemListGet(commandList, 'zz'), []);
 });

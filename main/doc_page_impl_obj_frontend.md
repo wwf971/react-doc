@@ -377,7 +377,8 @@ compDefine(CvProfileInfo, {
       typeList: ['cv.profile'],                              // and every type below it: the nearest wins
       // { status: found | missing | unknown | loading, path, label, detail, kind, text?, typeId? }
       resolve: ({ service, path }) => cvProfileInnerResolve(service, path),
-      // [{ kind: 'dir' | 'item', path, label, detail }]  (a dir's path ends with "/": typing goes on)
+      // [{ kind: 'dir' | 'item', path, label, detail, isNew? }]  (a dir's path ends with "/": typing goes on;
+      // isNew: nothing is at the path yet, and choosing it names a thing to be made there)
       complete: ({ service, text }) => cvProfileInnerComplete(service, text),
     },
   },
@@ -385,6 +386,8 @@ compDefine(CvProfileInfo, {
 ```
 
 `service` is the api of a mode ([The entry component](#the-entry-component)) of the object asked about, without a block. Both functions are called inside an observer and read the object through it, so their answers follow the data; `loading` while the data of an asset is on its way. `text` of a resolve makes the thing a **value**: it is drawn in a line as that text. `typeId` gives the thing a type of its own below `frontend.inner`, for a type that wants a view of its own for its things ([Object views](doc_page_impl_obj.md#object-views)).
+
+**A thing made where it is named.** `complete` may answer a candidate with `isNew`: nothing is at its path yet, and the path could hold something. `/object` lists it with a plus, writes its reference like any other, and asks the surface to mark it ([Something written, then gone on with](doc_page_impl_edit_slash.md#the-action-interface)): in a cell the card of the token opens, the view of the thing's type in the context `panel`, and **that view is where the thing is made** (its value typed and written through the object's api). For this, `resolve` answers the `typeId` of such a path too, while its status is still `unknown`, so the card is the type's own and not the fallback. The layer has no api for creating a thing inside an object: naming it and working on what is named are the two steps there already. A value of a profile of the package cv is made so from any cell.
 
 **In the registry.** An inner reference is an object of the type `frontend.inner` (a `core.place`): `label` its name, `summary { objectRef, objectLabel, path, kind, text? }`, missing (still of its type) when nothing is at the path. `common/ObjectViewFrontendInner` draws it: a chip in a line (the value itself when it is one), a card, and in the block context the mode declaring `pathParam`. Opening it goes to its document when the asset is one ([Documents of an object](#documents-of-an-object)), else to the object in the settings tab. On the page: `DocObjectFrontendStore.innerResolve(object, path)`, `innerComplete(object, text)`, `innerBlockGet(object, path)`, `innerOpen(object, path)`.
 

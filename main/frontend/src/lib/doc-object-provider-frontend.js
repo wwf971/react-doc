@@ -181,7 +181,7 @@ export function objectProviderFrontendCreate({ objectFrontendStore }) {
         message: result.message,
         itemList: result.itemList.map((item) => (item.kind === 'dir'
           ? { kind: 'dir', text: item.path, label: item.label, detail: item.detail }
-          : { kind: 'item', ref: objectFrontendInnerRefBuild(id, item.path), label: item.label, detail: item.detail })),
+          : { kind: 'item', ref: objectFrontendInnerRefBuild(id, item.path), label: item.label, detail: item.detail, ...(item.isNew ? { isNew: true } : {}) })),
       };
     },
 

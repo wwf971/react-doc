@@ -1,7 +1,7 @@
 import { action, makeAutoObservable, observable } from 'mobx';
 import { cellTextParse, cellTextPlainGet, cellTextStyledParse, cellTokenListResolve, cellTriggerListBuild } from '../lib/doc-cell.js';
 import { cellStyleSpecWrite, cellStyleTextBareGet } from '../lib/doc-cell-style.js';
-import { cellTokenSlashActionGet } from '../../../comp-doc/cell/cell-define.js';
+import { cellTokenSlashActionGet, cellTokenSlashActionListGet } from '../../../comp-doc/cell/cell-define.js';
 import { cellStyleCssGet, cellStyleListResolve } from '../../../comp-doc/cell/cell-style-define.js';
 
 // The cell editing kit of the page (design: doc_page_impl_edit_cell.md).
@@ -234,9 +234,12 @@ export class DocCellStore {
     const store = this;
     const actionOf = (kind: any) => cellTokenSlashActionGet(kind, cell);
     const actionList: any[] = [];
+    // every action of every kind: a kind typed in several ways brings several (the first is
+    // the one its opening text enters, actionOf)
     for (const kind of cell.tokenList) {
-      const action = actionOf(kind);
-      if (action && !actionList.includes(action)) actionList.push(action);
+      for (const action of cellTokenSlashActionListGet(kind, cell)) {
+        if (!actionList.includes(action)) actionList.push(action);
+      }
     }
     const context = Object.create(cell.context, {
       cell: { value: cell, enumerable: true },

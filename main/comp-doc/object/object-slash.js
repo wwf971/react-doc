@@ -1,5 +1,5 @@
 import { createElement } from 'react';
-import { Box, ChevronRight, CircleDashed, FolderIcon } from '../../frontend/UICommon.js';
+import { Box, ChevronRight, CircleDashed, FolderIcon, Plus } from '../../frontend/UICommon.js';
 import { objectCompleteChoose, objectCompleteHintGet, objectCompleteItemListGet } from '../../frontend/src/lib/doc-object-complete.js';
 import { slashEffect } from '../../frontend/src/lib/doc-slash.js';
 import { slashActionDefine } from '../slash/slash-define.js';
@@ -44,7 +44,9 @@ export function objectSlashActionBuild({ textBuild = objectInlineTextBuild } = {
       itemChoose: (item) => {
         const choice = objectCompleteChoose(item);
         if (!choice) return undefined;
-        return choice.ref ? slashEffect.replace(textBuild(choice.ref)) : slashEffect.paramSet(choice.paramNext);
+        // a thing to be made is marked once written: where the surface has cards (a cell), the
+        // card of the reference opens, which is where it is made
+        return choice.ref ? slashEffect.replace(textBuild(choice.ref), { isMarked: choice.isNew === true }) : slashEffect.paramSet(choice.paramNext);
       },
       ItemRender: ObjectSlashItem,
     },
@@ -65,7 +67,7 @@ export const objectSlashAction = objectSlashActionBuild();
 // object and a thing inside are written
 function ObjectSlashItem({ item }) {
   const isGoingOn = item.kind === 'type' || item.kind === 'dir' || (item.kind === 'object' && item.isInner);
-  const Icon = item.kind === 'note' ? CircleDashed : item.kind === 'dir' ? FolderIcon : item.kind === 'type' ? objectIconComponentGet(item.icon) : Box;
+  const Icon = item.kind === 'note' ? CircleDashed : item.kind === 'dir' ? FolderIcon : item.kind === 'new' ? Plus : item.kind === 'type' ? objectIconComponentGet(item.icon) : Box;
   return createElement(
     'span',
     { className: 'doc-edit-slash-row', 'data-kind': item.kind },

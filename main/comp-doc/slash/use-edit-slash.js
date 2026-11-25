@@ -45,7 +45,12 @@ import { EditSlashMenu } from './EditSlashMenu.jsx';
 //                    atom of a kind an action puts at the caret (slashEffect.atom:
 //                    a formula): offset is where the caret is, the slash text
 //                    gone. without it the action's textFallback is typed
-export function useEditSlash(elementRef, slash, { textBeforeCaretGet, charAfterCaretGet, blockInsert, atomInsert }) {
+//   textMark(start, end)  optional: what the editor does with a text an action
+//                    asked to have marked once written (slashEffect.replace with
+//                    isMarked): start and end are where it stands in the text of the
+//                    surface. a cell marks the token there and opens its card;
+//                    without it the text is written and nothing more
+export function useEditSlash(elementRef, slash, { textBeforeCaretGet, charAfterCaretGet, blockInsert, atomInsert, textMark }) {
   const surfaceId = useId();
   const slashStore = slash?.store;
 
@@ -91,6 +96,12 @@ export function useEditSlash(elementRef, slash, { textBeforeCaretGet, charAfterC
   const apply = (result) => {
     if (!result || result.textNew === undefined || !elementRef.current) return;
     slashTextReplace(elementRef.current, result.lengthOld, result.textNew);
+    if (result.isMarked && textMark) {
+      // the caret stands after what was written: its place in the text of the surface
+      const offsetEnd = textBeforeCaretGet(elementRef.current)?.length;
+      if (offsetEnd !== undefined) textMark(offsetEnd - result.textNew.length, offsetEnd);
+      return;
+    }
     if (result.atom) {
       const offsetAtom = textBeforeCaretGet(elementRef.current)?.length;
       if (atomInsert && offsetAtom !== undefined) atomInsert(result.atom.atomKind, result.atom.isRow, offsetAtom);

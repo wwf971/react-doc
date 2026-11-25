@@ -60,6 +60,7 @@ param mode             the slash text is "/name " + the parameter
   ▼
 effect   replace(text)   the slash text is replaced by text; back to idle
          paramSet(text)  the parameter is rewritten; the param mode stays (a folder chosen: going on in it)
+         actionSet(name, param)   the param mode of another action goes on with the parameter
          cancel()        back to idle; the text stays as typed
 
 back to idle, the text kept as typed:
@@ -134,7 +135,8 @@ context = { sourcePath, docPageAlias, source, object,   the document edited, its
                                                           from); where a block put at the caret stands (undefined:
                                                           a block of the document, 'inListItem': the text of a list
                                                           item) and the config of the document (configValueGet(key))
-effect  = slashEffect.replace(text) | slashEffect.paramSet(text) | slashEffect.cancel()
+effect  = slashEffect.replace(text, { isMarked }) | slashEffect.paramSet(text) | slashEffect.cancel()
+        | slashEffect.actionSet(name, param)     another action of the surface goes on (below)
         | slashEffect.block(source)              a block at the caret (below)
         | slashEffect.atom(atomKind, { isRow, textFallback })
                                                  an atom of a kind at the caret (below)
@@ -158,6 +160,28 @@ effect  = slashEffect.replace(text) | slashEffect.paramSet(text) | slashEffect.c
 **A block and its view.** The actions that put a block at the caret are defined with `slashBlockActionDefine({ name, …, viewList, viewDefaultGet(context), sourceBuild(view, context) })` (`slash-define.js`): `run` answers the block in its default view, and the parameter is the view, optional and listed on the row. The default is the view the block gets where the caret is (`viewDefaultGet`: a code block reads the config of its place, `context.place`), and choosing it writes no view, so the block goes on following that default; another view is written in the block. Any later kind of block that has views is added the same way.
 
 **Going on after a part of the parameter.** An action whose parameter is a path chosen a part at a time (a folder, then what is in it) answers a folder chosen with `paramSet`: the parameter becomes the folder followed by `/`, the menu lists what is inside, and the author goes on choosing, never leaving the slash mode until a leaf is chosen and `replace` writes it. `/link ~example/`, a CV's `/query name/jp/` and `/object` (a type, then an object, then what is inside it) work so; the menu shows such an item with a folder icon (`kind: 'dir'`). An action whose parameter does not read as a path while it is walked (a reference holding an id) says what it has reached with `hintGet`. An item an action lists only to say something (why a list is empty, that it is still asked for) is chosen to no effect: `itemChoose` answers nothing.
+
+**Something written, then gone on with.** `slashEffect.replace(text, { isMarked: true })` writes the text and asks the surface to **mark** it as one thing: a cell marks the token it is and opens its card ([A token marked in the typed text](doc_page_impl_edit_cell.md#a-token-marked-in-the-typed-text)), so that what an action has just named is worked on at once, a value typed for a path that was new. The surface decides what marking means (`textMark(start, end)` of the binding); one that marks nothing writes the text and no more, so an action never has to know where it runs.
+
+**Another action going on.** `slashEffect.actionSet(name, param)` hands the parameter over to another action of the surface: the slash text becomes `/name param`, whatever it was entered with (a direct trigger too), and the slash mode stays open in that action's param mode. It is how one walk leads into another without the author leaving it: a command chosen inside a path ([below](#commands-inside-a-path)).
+
+### Commands inside a path
+
+A parameter walked as a path has **places**, and something may be done at a place beside choosing what is there: a new thing made under it. Such a **command** is typed where the next segment would start, as `/` and its name:
+
+<!--renderComp=DiagramText-->
+```text
+{{work/sample-systems/            the place: what lies there is listed
+{{work/sample-systems//           "/" where a segment would start: the commands of the place
+                                    ⧄ /new   New value: a value that does not exist yet …
+{{work/sample-systems//new        Enter: the action /new goes on with the place
+/new work/sample-systems/         its param mode, the folders to go on under listed
+/new work/sample-systems/motto    ＋ work/sample-systems/motto  a new value …
+```
+
+An empty segment is no part of any path, so `//` can mean nothing else, and a command needs no key of its own. The slash mode knows no command: the action lists them when `slashParamCommandRead(param)` answers (`{ base, query }`: the place, and what is typed of the name), as items of the kind `command` (`slashCommandItemListGet(commandList, query)`), and answers one chosen with an effect, usually `actionSet`. The package cv does so in the walk of a profile (`@cv-dev/cv/doc/cv-query.md#a-new-value-where-it-is-named`); `/new` there is also an action of its own, typed at the start.
+
+**The kinds of an item** the default row draws an icon for: `dir` (a folder: choosing goes on inside it), `file`, `new` (something made by choosing it), `command`. An item of another kind has no icon, and an action drawing more brings its `ItemRender`.
 
 Callbacks rather than a component of its own keep the parameter logic pure and testable (`/link` is `lib/doc-link-complete.js` plus four lines of definition), while the menu stays one component with one keyboard behavior. `itemListGet` is called inside an observer, so an action may read MobX stores, and its list follows them (a document added to the source appears in the list while the author types). An action whose callback throws lists nothing, and a warning names it (`[doc-slash]`), so a broken action never breaks the editor. The effects are the whole vocabulary of what an action can do to the text. A later need (open a dialog) is one more effect type, applied in one place (`slashEffectApplyGet`, `DocSlashStore.effectApply`).
 
@@ -256,12 +280,12 @@ What holds for both:
 | --- | --- | --- |
 | a paragraph or list of a document | the page's registry | the edit layer (`config.edit.slash`) |
 | a cell of a component | the actions of the cell's token kinds: `/link`, `/object`, and the component's own | the [cell editing kit](doc_page_impl_edit_cell.md) (`useCell`) |
-| a cell of a Japanese-style CV (package cv) | `/query`, `/q`, or `{{`: a value of the profile as `{{path}}`, a segment at a time; `/link`, `/object` | the package cv, as a token kind of its cells |
+| a cell of a Japanese-style CV (package cv) | `/query`, `/q`, or `{{`: a value of the profile as `{{path}}`, a segment at a time, a version of it after `@`, a path nothing holds as a new value; `/new`: a value that does not exist yet; `/link`, `/object` | the package cv, as a token kind of its cells (one kind, two actions) |
 | a remark or a note of a reading list (the demonstration) | `/book`, or `{{`: another book of the list; `/link`, `/object` | the demonstration's mode, as a token kind of its cells |
 
 ## The surface binding
 
-`useEditSlash(elementRef, slash, { textBeforeCaretGet, charAfterCaretGet, blockInsert, atomInsert })` (`comp-doc/slash/use-edit-slash.js`) is the one place between the surface and the store (`charAfterCaretGet`: the character after the caret, `''` at the end of its line, for [where a `/` starts it](#the-state-machine); `blockInsert(source, offset)`: what the editor does with a block an action puts at the caret; `atomInsert(atomKind, isRow, offset)`: with an atom of a kind, [above](#the-action-interface)):
+`useEditSlash(elementRef, slash, { textBeforeCaretGet, charAfterCaretGet, blockInsert, atomInsert, textMark })` (`comp-doc/slash/use-edit-slash.js`) is the one place between the surface and the store (`charAfterCaretGet`: the character after the caret, `''` at the end of its line, for [where a `/` starts it](#the-state-machine); `blockInsert(source, offset)`: what the editor does with a block an action puts at the caret; `atomInsert(atomKind, isRow, offset)`: with an atom of a kind; `textMark(start, end)`: with a text an action asked to have marked once written, [above](#the-action-interface); `EditSourceSurface` takes it as `onSlashTextMark`):
 
 ```text
 surface onInput  -> textReport (the draft, as before) -> inputAfter
@@ -270,8 +294,9 @@ surface onInput  -> textReport (the draft, as before) -> inputAfter
                                    of one of its direct triggers? -> slashStart(line, column, context)
 selectionchange, scroll (while open)  -> slashUpdate, or slashEnd when the surface lost focus
 surface onKeyDown -> keyDown first (see Keys and pointer)
-choice -> SlashApply { textNew, isEnded, lengthOld }
+choice -> SlashApply { textNew, isEnded, lengthOld, isMarked? }
             -> select the lengthOld characters before the caret, execCommand('insertText', textNew)
+            -> isMarked: textMark(where the text now stands)
 ```
 
 The text is written through the browser's own editing command, as a paste is. The surface then reports the new text through its ordinary input event, so the session draft, the line mode of a list surface and the slash state all follow without a special path, and the browser's undo takes the replacement back. The slash text is always on one line, before the caret. It is usually inside the text node of the caret; otherwise the selection is extended character by character.
@@ -299,7 +324,7 @@ In the action mode, a query that matches no action shows no menu, because the au
 
 | file | role |
 | --- | --- |
-| `frontend/src/lib/doc-slash.js` | the grammar: trigger, slash text, mode parsing, action matching, effects |
+| `frontend/src/lib/doc-slash.js` | the grammar: trigger, slash text, mode parsing, action matching, effects; the commands of a place typed inside a path parameter |
 | `frontend/src/store/DocSlashStore.ts` | the registry, the switch, the open slash mode, choosing and effects |
 | `comp-doc/slash/slash-define.js` | `slashActionDefine`, building the registry by layers, the name index |
 | `comp-doc/slash/slash-registry.js` | the package's actions by id |

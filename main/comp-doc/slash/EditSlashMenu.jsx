@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { observer } from 'mobx-react-lite';
-import { FileText, FolderIcon } from '../../frontend/UICommon.js';
+import { FileText, FolderIcon, Plus, SquareSlash } from '../../frontend/UICommon.js';
 import { SLASH_MODE_ACTION, SLASH_MODE_PARAM } from '../../frontend/src/lib/doc-slash.js';
 import { EDIT_POPUP_CLASS } from '../edit/use-edit-outside-pointer.js';
 import './EditSlash.css';
@@ -189,9 +189,13 @@ function SlashActionItem({ action, choiceList = [], onChoiceChoose }) {
   );
 }
 
-// an item of a param mode: an icon by its kind, the label, the detail muted
+// an item of a param mode: an icon by its kind, the label, the detail muted. the kinds every
+// action may use: dir (a folder: choosing goes on inside it), file, new (something made by
+// choosing it), command (a command of the place walked: lib/doc-slash.js slashParamCommandRead)
+const SLASH_ITEM_ICON_BY_KIND = { dir: FolderIcon, file: FileText, new: Plus, command: SquareSlash };
+
 function SlashItemDefault({ item }) {
-  const Icon = item.kind === 'dir' ? FolderIcon : item.kind === 'file' ? FileText : undefined;
+  const Icon = SLASH_ITEM_ICON_BY_KIND[item.kind];
   return (
     <>
       {Icon ? <Icon size={13} className="doc-edit-slash-icon" /> : null}

@@ -41,10 +41,13 @@
 //     slashAction  a slash action (slashActionDefine), or (cell) => one: offered
 //                  in the slash mode of the cell, and, for a brace kind, entered
 //                  at once when its opening text is typed ("{{", "{{@"), unless
-//                  isTriggerDirect is false
+//                  isTriggerDirect is false. a kind typed in several ways gives a
+//                  list (or (cell) => a list): every action is offered, and the
+//                  first is the one its opening text enters (a value of a profile:
+//                  /query finds one, /new makes one)
 //
 //     how one token is shown and changed where it is
-//     Card({ token, cell, tokenSet, close, where })
+//     Card({ token, cell, tokenSet, close, widthSet, where, markedBy })
 //                  optional: the card of one token (doc_page_impl_edit_cell.md#the-card-of-a-token):
 //                  what it is and what may be done with it, the kind's alone to decide.
 //                  where 'value': in a value drawn that can be edited, a click on the
@@ -58,7 +61,12 @@
 //                  inside, when the kind decides its work is done (a value saved): the
 //                  token stays, a click on it opens the card again. widthSet('wide')
 //                  asks for a card as wide as the place the token is typed in (a value
-//                  that is a text), widthSet('normal') for the usual width
+//                  that is a text), widthSet('normal') for the usual width.
+//                  markedBy says how the token came to be marked in the typed text:
+//                  'pointer' (a click on its words), 'key' (the caret coming to its
+//                  edge), 'open' (the cell opened on it), 'insert' (a slash action just
+//                  wrote it and asked for it: the card may take the focus, a value
+//                  typed at once); undefined beside a token drawn (where 'value')
 //     cardPlaceList   where the card is offered: ['value', 'surface'] (the default).
 //                  ['surface'] keeps a click on the drawn token doing what it does
 //   })
@@ -113,10 +121,16 @@ export function cellTokenCardIsOffered(kind, place) {
   return Boolean(kind?.Card) && (kind.cardPlaceList ?? CARD_PLACE_LIST).includes(place);
 }
 
-// the slash action a kind is typed with in a cell, or undefined
+// the slash actions a kind is typed with in a cell (none: []): the first is the one its
+// opening text enters at once
+export function cellTokenSlashActionListGet(kind, cell) {
+  const given = typeof kind.slashAction === 'function' ? kind.slashAction(cell) : kind.slashAction;
+  return (Array.isArray(given) ? given : [given]).filter((action) => action && typeof action.name === 'string');
+}
+
+// the slash action a kind is typed with in a cell, the first of several, or undefined
 export function cellTokenSlashActionGet(kind, cell) {
-  const action = typeof kind.slashAction === 'function' ? kind.slashAction(cell) : kind.slashAction;
-  return action && typeof action.name === 'string' ? action : undefined;
+  return cellTokenSlashActionListGet(kind, cell)[0];
 }
 
 // the registry of the page, by id ({layer}/{name}): the package's kinds, the

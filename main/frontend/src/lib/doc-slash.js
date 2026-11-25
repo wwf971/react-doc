@@ -43,19 +43,30 @@ const SLASH_QUERY_LENGTH_MAX = 40;
 // text and to the slash mode. the slash mode applies them; an action never
 // touches the surface itself.
 //   replace(text)    the slash mode ends; the slash text ('/link a.md') is
-//                    replaced by text (the link written out)
+//                    replaced by text (the link written out). with
+//                    { isMarked: true } the surface is asked to mark what
+//                    was written, as one thing of its text: a cell marks the
+//                    token and opens its card, so that something just made
+//                    is gone on with at once (a new value typed). a surface
+//                    that marks nothing writes the text and no more
 //   paramSet(text)   the slash mode stays in the param mode of the action;
 //                    the parameter is rewritten (a folder chosen: 'docs/')
+//   actionSet(name, param)   the slash mode goes on in the param mode of
+//                    another action of the surface, the parameter handed
+//                    over: the slash text becomes '/name param', whatever it
+//                    was entered with (a command chosen inside a walk)
 //   cancel()         the slash mode ends; the text stays as typed
 export const SLASH_EFFECT_REPLACE = 'replace';
 export const SLASH_EFFECT_PARAM_SET = 'paramSet';
+export const SLASH_EFFECT_ACTION_SET = 'actionSet';
 export const SLASH_EFFECT_CANCEL = 'cancel';
 export const SLASH_EFFECT_BLOCK = 'block';
 export const SLASH_EFFECT_ATOM = 'atom';
 
 export const slashEffect = Object.freeze({
-  replace: (text) => ({ type: SLASH_EFFECT_REPLACE, text: String(text ?? '') }),
+  replace: (text, { isMarked = false } = {}) => ({ type: SLASH_EFFECT_REPLACE, text: String(text ?? ''), ...(isMarked === true ? { isMarked: true } : {}) }),
   paramSet: (text) => ({ type: SLASH_EFFECT_PARAM_SET, text: String(text ?? '') }),
+  actionSet: (actionName, text = '') => ({ type: SLASH_EFFECT_ACTION_SET, actionName: String(actionName ?? ''), text: String(text ?? '') }),
   cancel: () => ({ type: SLASH_EFFECT_CANCEL }),
   // a block at the caret (its source: lines of a block of the document, an
   // MDX block): the slash text goes, and the editor puts the block where the
@@ -203,6 +214,53 @@ export function slashViewItemListGet(viewList, viewDefault, param) {
     .map((one) => one.item);
 }
 
+// ---------- commands inside a parameter that is a path ----------
+//
+// A parameter walked as a path ("work/sample-systems/": a folder chosen, then what is in it) has
+// places, and something may be done at a place beside choosing what is there: a new thing made
+// under it. Such a command is typed where the next segment would start, as "/" and its name:
+//
+//   work/sample-systems//new     at work/sample-systems/, the command "new"
+//   /new                         at the top
+//   work/sample-systems//        every command of the place is listed
+//
+// An empty segment is no part of any path, so "//" can mean nothing else. The action decides
+// what its commands are and what choosing one does (usually slashEffect.actionSet: another
+// action goes on with the place); these two functions only read and list them.
+
+// the command being typed at the end of a path parameter, or undefined:
+//   { base, query }   base: the place, the path up to it ('' the top, else ending with "/");
+//                     query: what is typed of the command's name so far
+export function slashParamCommandRead(param) {
+  const match = /^(?:(.*\/))?\/([A-Za-z][A-Za-z0-9_-]*)?$/.exec(String(param ?? ''));
+  return match ? { base: match[1] ?? '', query: (match[2] ?? '').toLowerCase() } : undefined;
+}
+
+// the commands a query names, as items of the menu: those whose name starts with it, then
+// those whose name or label holds it
+//   commandList   [{ name, label?, description? }]
+//   -> [{ id, kind: 'command', name, label: '/name', detail }]
+export function slashCommandItemListGet(commandList, query) {
+  const text = String(query ?? '').toLowerCase();
+  const scoreGet = (command) => {
+    const name = String(command.name ?? '').toLowerCase();
+    if (text === '' || name.startsWith(text)) return 0;
+    if (name.includes(text) || String(command.label ?? '').toLowerCase().includes(text)) return 1;
+    return -1;
+  };
+  return (Array.isArray(commandList) ? commandList : [])
+    .map((command, index) => ({ command, index, score: scoreGet(command) }))
+    .filter((one) => one.score >= 0)
+    .sort((a, b) => a.score - b.score || a.index - b.index)
+    .map(({ command }) => ({
+      id: `command:${command.name}`,
+      kind: 'command',
+      name: command.name,
+      label: `/${command.name}`,
+      detail: [command.label, command.description].filter(Boolean).join(': '),
+    }));
+}
+
 // a block put at the caret of a paragraph (slashEffect.block): the paragraph
 // becomes the text before the caret, the block and the text after it, with
 // blank lines between them, so the block is one of its own and the two texts
@@ -225,9 +283,14 @@ export function slashBlockTextInsert(text, offset, source) {
 //               was: its text is kept instead ('{{' stays '{{')
 export function slashEffectApplyGet(effect, actionName, trigger) {
   if (!effect || typeof effect !== 'object') return { textNew: undefined, isEnded: false };
-  if (effect.type === SLASH_EFFECT_REPLACE) return { textNew: effect.text, isEnded: true };
+  if (effect.type === SLASH_EFFECT_REPLACE) return { textNew: effect.text, isEnded: true, ...(effect.isMarked === true && effect.text !== '' ? { isMarked: true } : {}) };
   if (effect.type === SLASH_EFFECT_PARAM_SET) {
     return { textNew: trigger ? `${trigger.text}${effect.text}` : `/${actionName} ${effect.text}`, isEnded: false };
+  }
+  // another action of the surface goes on with the parameter: its "/name " is written out, also
+  // where the slash mode was entered by a direct trigger, whose text is the first action's
+  if (effect.type === SLASH_EFFECT_ACTION_SET) {
+    return effect.actionName ? { textNew: `/${effect.actionName} ${effect.text}`, isEnded: false } : { textNew: undefined, isEnded: false };
   }
   if (effect.type === SLASH_EFFECT_CANCEL) return { textNew: undefined, isEnded: true };
   if (effect.type === SLASH_EFFECT_BLOCK) return { textNew: '', isEnded: true, blockSource: effect.source };
