@@ -507,7 +507,7 @@ export function docSourcePlugin(options: DocSourcePluginOptions = {}): Plugin {
       const assetStore = assetStoreGet(configDoc);
       // a built page has no playground: what a checkout holds of one stays out of it,
       // and its side panel item goes (doc_page_impl_test.md#a-built-page)
-      const playgroundDocSet = new Set<string>(isBuild ? configDoc.playgroundList.map((item: any) => item.doc) : []);
+      const playgroundDocSet = new Set<string>(isBuild ? playgroundDocLeaveOutGet(configDoc).map((item: any) => item.doc) : []);
       const fileEntriesAll = scanSource(configDoc, configDir).filter((entry) => !playgroundDocSet.has(entry.internalPath));
       const fileEntries = entriesVisibleGet(configDoc, fileEntriesAll);
       const dirEntries = scanSourceDirs(configDoc, configDir);
@@ -1726,6 +1726,7 @@ export function loadConfigDoc(configFile: string, options: DocSourcePluginOption
   const playgroundConfig = playgroundConfigOfDocPageListGet(entryLoaded.docPageList, configDir);
   for (const problem of playgroundConfig.problemList) problemListReport('doc-playground', problem.file, [problem.message]);
   config.playgroundList = playgroundConfig.list;
+  config.playgroundDocLeaveOutList = playgroundConfig.docLeaveOutList;
   // what the packages bring beside components and types: the auth kinds (doc_page_impl_auth.md)
   // and the storage types with a driver of the page (doc_page_impl_asset_storage.md). the page
   // receives what they declare as configuration, and their modules with the code
@@ -1806,13 +1807,19 @@ export function loadConfigDoc(configFile: string, options: DocSourcePluginOption
 }
 
 // the configuration as a built page gets it: no playground, no item of one
+// what a build leaves out: the document of every playground listed, its template found or not (a
+// template kept on one machine only, which an export of the commit does not hold)
+function playgroundDocLeaveOutGet(configDoc: any): { doc: string; docLocal: string }[] {
+  return configDoc.playgroundDocLeaveOutList ?? configDoc.playgroundList ?? [];
+}
+
 function playgroundLeaveOut(configDoc: any): any {
-  const referenceSet = new Set<string>(configDoc.playgroundList.flatMap((item: any) => [item.doc, item.docLocal]));
+  const referenceSet = new Set<string>(playgroundDocLeaveOutGet(configDoc).flatMap((item: any) => [item.doc, item.docLocal]));
   if (referenceSet.size === 0) return configDoc;
   const treeFilter = (list: any[]): any[] => list
     .filter((node) => !referenceSet.has(node?.doc))
     .map((node) => (Array.isArray(node?.children) ? { ...node, children: treeFilter(node.children) } : node));
-  return { ...configDoc, playgroundList: [], sidePanel: { ...configDoc.sidePanel, tree: treeFilter(configDoc.sidePanel?.tree ?? []) } };
+  return { ...configDoc, playgroundList: [], playgroundDocLeaveOutList: [], sidePanel: { ...configDoc.sidePanel, tree: treeFilter(configDoc.sidePanel?.tree ?? []) } };
 }
 
 // the keys of the former configuration, which named the source rules and the

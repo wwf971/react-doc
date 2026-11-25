@@ -1,6 +1,8 @@
 import { action, makeAutoObservable, observable } from 'mobx';
-import { cellTextParse, cellTextPlainGet, cellTokenListResolve, cellTriggerListBuild } from '../lib/doc-cell.js';
+import { cellTextParse, cellTextPlainGet, cellTextStyledParse, cellTokenListResolve, cellTriggerListBuild } from '../lib/doc-cell.js';
+import { cellStyleSpecWrite, cellStyleTextBareGet } from '../lib/doc-cell-style.js';
 import { cellTokenSlashActionGet } from '../../../comp-doc/cell/cell-define.js';
+import { cellStyleCssGet, cellStyleListResolve } from '../../../comp-doc/cell/cell-style-define.js';
 
 // The cell editing kit of the page (design: doc_page_impl_edit_cell.md).
 //
@@ -8,7 +10,8 @@ import { cellTokenSlashActionGet } from '../../../comp-doc/cell/cell-define.js';
 // place: a cell of a table, a field of a form, a line of a card, usually
 // of a mode of a frontend object. Its text is plain text with tokens in it
 // (lib/doc-cell.js): a link, a view of an object, a value the component
-// reads from its own data. This store is the one central part between
+// reads from its own data; its words may be drawn in styles
+// (lib/doc-cell-style.js). This store is the one central part between
 // three things that know nothing of each other:
 //
 //   the token kinds      what a token is: written, drawn, typed (cell-define.js).
@@ -23,6 +26,11 @@ import { cellTokenSlashActionGet } from '../../../comp-doc/cell/cell-define.js';
 //
 //   cellTokenById   the registry of the page (DocPageMdx builds it, cell-define.js
 //                   cellTokenByIdBuild)
+//   cellStyleById   the style kinds of the page (cell-style-define.js cellStyleByIdBuild):
+//                   what can be said of how words are drawn (bold, a color, a size)
+//   isStyleRaw      the typed text of every cell shows its style markup instead of drawing
+//                   the styles: the text as it is kept, for looking into it (one switch for
+//                   the page, as the slash mode has one)
 //   token           the one token selected on the page, or undefined: { key, start }
 //                     key     the value it stands in (CellValue cellKey)
 //                     start   where it starts in the text of that value
@@ -48,7 +56,13 @@ import { cellTokenSlashActionGet } from '../../../comp-doc/cell/cell-define.js';
 //     source, object the service objects the kinds of the page read
 //     slash          what its surface offers the slash mode (undefined
 //                    without a slash store: the surface is plain text)
-//     parse(text)    its parts; textGet(text): its plain text }
+//     isStyled       its words may be drawn in styles: a text as kept is read for
+//                    styled segments, and its surface draws and sets them
+//     styleList      the style kinds it accepts; styleCssGet(style): the css of a style
+//     parse(text)    the parts of a text as kept, its styles read (offsets of its bare text)
+//     tokenParse(text)   the parts of a bare text: what is typed in its surface
+//     bareGet(text)  a text as kept without its style markup
+//     textGet(text)  its plain text: no markup, every token as text }
 
 type Stores = { slashStore?: any; sourceStore?: any; objectStore?: any };
 
@@ -59,6 +73,27 @@ type Stores = { slashStore?: any; sourceStore?: any; objectStore?: any };
 export function cellContextVersionBuild() {
   const version = observable.box(0);
   return { get: () => version.get(), touch: action(() => version.set(version.get() + 1)) };
+}
+
+// the text a token reads, as plain text: a value kept elsewhere may be written in styles of its
+// own (drawn in them by CellValue), which a plain text does not hold
+export function cellTokenTextBareGet(text: any, isStyled: boolean) {
+  return isStyled && typeof text === 'string' ? cellStyleTextBareGet(text) : text;
+}
+
+// the css of a style by the kinds of a cell, kept by how the style is written: a styled
+// segment is drawn on every render of its value, and the same few styles come again
+export function cellStyleCssCachedBuild(styleList: any[]) {
+  const cssBySpec = new Map<string, Record<string, any>>();
+  return (style: Record<string, any>) => {
+    const spec = cellStyleSpecWrite(style);
+    let css = cssBySpec.get(spec);
+    if (!css) {
+      css = cellStyleCssGet(style, styleList);
+      cssBySpec.set(spec, css);
+    }
+    return css;
+  };
 }
 
 export type CellField = {
@@ -78,6 +113,13 @@ export type CellSpec = {
   context?: Record<string, any>;
   sourcePath?: string;
   owner?: string;
+  // false: its text is words and tokens only, never read for styles (a value that is no prose:
+  // a key, a path, a pattern)
+  isStyled?: boolean;
+  // the cell's own style kinds (a look the component names)
+  styleList?: any[];
+  // the style kinds of the page it accepts, by id: undefined every one, [] none
+  styleIdList?: string[];
 };
 
 const PARSE_CACHE_SIZE_MAX = 400;
@@ -87,19 +129,23 @@ export type CellTokenSelected = { key: string; start: number };
 export class DocCellStore {
   stores: Stores;
   cellTokenById: Record<string, any> = {};
+  cellStyleById: Record<string, any> = {};
+  isStyleRaw = false;
   field: CellField | undefined = undefined;
   token: CellTokenSelected | undefined = undefined;
   // the parts of a text, by the kinds it was parsed against: cells are drawn
   // on every render of their component, and their texts seldom change
   parseCacheByTokenList = new WeakMap<object, Map<string, any[]>>();
 
-  constructor({ cellTokenById = {}, stores = {} }: { cellTokenById?: Record<string, any>; stores?: Stores } = {}) {
+  constructor({ cellTokenById = {}, cellStyleById = {}, stores = {} }: { cellTokenById?: Record<string, any>; cellStyleById?: Record<string, any>; stores?: Stores } = {}) {
     this.cellTokenById = cellTokenById;
+    this.cellStyleById = cellStyleById;
     this.stores = stores;
     makeAutoObservable(this, {
       stores: false,
       parseCacheByTokenList: false,
       cellTokenById: observable.ref,
+      cellStyleById: observable.ref,
       field: observable.ref,
       token: observable.ref,
     });
@@ -109,6 +155,15 @@ export class DocCellStore {
 
   replaceCellTokenById(cellTokenById: Record<string, any>) {
     this.cellTokenById = cellTokenById ?? {};
+  }
+
+  replaceCellStyleById(cellStyleById: Record<string, any>) {
+    this.cellStyleById = cellStyleById ?? {};
+  }
+
+  // the typed text of the cells shown raw (its style markup written out) or with its styles drawn
+  styleRawSet(isStyleRaw: boolean) {
+    this.isStyleRaw = isStyleRaw === true;
   }
 
   // the kinds a cell accepts: its own, then the page's (lib/doc-cell.js)
@@ -125,8 +180,13 @@ export class DocCellStore {
     const store = this;
     const contextOwn = spec.context ?? {};
     const contextVersion = cellContextVersionBuild();
+    const isStyled = spec.isStyled !== false;
+    const styleList = isStyled ? cellStyleListResolve({ styleOwnList: spec.styleList ?? [], styleById: this.cellStyleById, styleIdList: spec.styleIdList }) : [];
     const cell: any = {
       tokenList,
+      isStyled,
+      styleList,
+      styleCssGet: cellStyleCssCachedBuild(styleList),
       context: contextOwn,
       contextVersionGet: contextVersion.get,
       contextTouch: contextVersion.touch,
@@ -134,16 +194,21 @@ export class DocCellStore {
       owner: spec.owner ?? '',
       get source() { return store.stores.sourceStore?.sourceService; },
       get object() { return store.stores.objectStore; },
-      parse: (text: string) => store.parse(text, tokenList),
-      textGet: (text: string) => cellTextPlainGet(store.parse(text, tokenList), (part: any) => part.kind.textGet?.(part, cell)),
+      parse: (text: string) => store.parse(text, tokenList, isStyled),
+      tokenParse: (text: string) => store.parse(text, tokenList, false),
+      bareGet: (text: string) => (isStyled ? cellStyleTextBareGet(text) : String(text ?? '')),
+      textGet: (text: string) => cellTextPlainGet(store.parse(text, tokenList, isStyled), (part: any) => cellTokenTextBareGet(part.kind.textGet?.(part, cell), isStyled)),
     };
     cell.slash = this.slashBuild(cell);
     return cell;
   }
 
-  // the parts of a text read against the kinds of a cell, kept while the kinds are
-  parse(text: string, tokenList: any[]): any[] {
-    const key = String(text ?? '');
+  // the parts of a text read against the kinds of a cell, kept while the kinds are.
+  // isStyled: the text is one as kept, read for its styles (a text without any reads the same
+  // either way, and is kept once)
+  parse(text: string, tokenList: any[], isStyled = false): any[] {
+    const textKept = String(text ?? '');
+    const key = isStyled && textKept.includes('[[') ? `s:${textKept}` : `t:${textKept}`;
     let cache = this.parseCacheByTokenList.get(tokenList);
     if (!cache) {
       cache = new Map();
@@ -151,7 +216,7 @@ export class DocCellStore {
     }
     let partList = cache.get(key);
     if (!partList) {
-      partList = cellTextParse(key, tokenList);
+      partList = key.startsWith('s:') ? cellTextStyledParse(textKept, tokenList) : cellTextParse(textKept, tokenList);
       if (cache.size >= PARSE_CACHE_SIZE_MAX) cache.clear();
       cache.set(key, partList);
     }

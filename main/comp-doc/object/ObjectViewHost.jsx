@@ -23,6 +23,8 @@ import './DocObject.css';
 //   onClose        a consumer showing the object in something that closes (the card of a token, in
 //                  the context panel): config.objectView.close, so the view may close it when its
 //                  work is done (a value saved)
+//   onWidthSet     the same holder's width asked for: config.objectView.widthSet('wide' | 'normal'),
+//                  a view showing a text asking for the width of the place it is named in
 export const ObjectViewHost = observer(function ObjectViewHost({
   objectRef,
   context = 'card',
@@ -32,6 +34,7 @@ export const ObjectViewHost = observer(function ObjectViewHost({
   note = '',
   sourcePath,
   onClose,
+  onWidthSet,
 }) {
   const { objectStore } = useDocStores();
   const state = objectStore.resolveStateGet(objectRef);
@@ -49,7 +52,7 @@ export const ObjectViewHost = observer(function ObjectViewHost({
         configRuntime={{
           // isEditableConsumer: the consumer alone allows a change; a view of a thing written through
           // a layer of its own (a value inside a frontend object) asks that layer too
-          objectView: { context: contextDrawn, contextAsked: context, isEditAllowed: editUnavailableReason === '', isEditableConsumer: isEditable, editUnavailableReason, note, viewCompId: view.compId, isFallback: view.isFallback, ...(onClose ? { close: onClose } : {}) },
+          objectView: { context: contextDrawn, contextAsked: context, isEditAllowed: editUnavailableReason === '', isEditableConsumer: isEditable, editUnavailableReason, note, viewCompId: view.compId, isFallback: view.isFallback, ...(onClose ? { close: onClose } : {}), ...(onWidthSet ? { widthSet: onWidthSet } : {}) },
           ...(sourcePath !== undefined ? { sourcePath } : {}),
           instanceId: `object:${objectRef}:${context}`,
         }}

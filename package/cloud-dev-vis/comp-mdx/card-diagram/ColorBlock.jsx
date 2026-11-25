@@ -74,7 +74,8 @@ export const ColorBlock = observer(function ColorBlock({ node, editor, nodeId })
 	const cellStore = useContext(StoreContext)?.cellStore;
 	// the cell of its words: icons are its own kind; the page's kinds (a link, an object) are not
 	// offered, since a block takes no pointer while it is read
-	const cell = useCell({ tokenList: [cardIconToken], tokenIdList: [], config });
+	// a label on a canvas is words and icons, typed as before: no styles of words (isStyled) yet
+	const cell = useCell({ tokenList: [cardIconToken], tokenIdList: [], isStyled: false, config });
 	const content = editor?.store.nodeGet(nodeId)?.data ?? node.data;
 	const itemList = content.itemList ?? [];
 	// while a label is dragged: where it would land among the labels (before that index)

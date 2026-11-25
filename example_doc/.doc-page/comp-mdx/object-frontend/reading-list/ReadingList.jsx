@@ -5,6 +5,7 @@ import { EditValueInline } from '../../../../../main/comp-doc/edit/EditValueInli
 import { CellField } from '../../../../../main/comp-doc/cell/CellField.jsx';
 import { useCell } from '../../../../../main/comp-doc/cell/use-cell.js';
 import { cellTokenDefine } from '../../../../../main/comp-doc/cell/cell-define.js';
+import { cellStyleDefine } from '../../../../../main/comp-doc/cell/cell-style-define.js';
 import { slashActionDefine } from '../../../../../main/comp-doc/slash/slash-define.js';
 import { slashEffect } from '../../../../../main/frontend/src/lib/doc-slash.js';
 import { ObjectFrontendAssetPathInput } from '../../../../../main/comp-doc/object-frontend/ObjectFrontendAssetPathInput.jsx';
@@ -38,6 +39,8 @@ import './ReadingList.css';
 // edited a click opens one in place, and its text may hold tokens beside words: a link
 // (/link), a view of any object (/object), and the list's own kind, another book of this
 // list ({{/book/sci-fi/dune}}, typed with /book or "{{"), which opens that book in the block.
+// its words may be drawn in styles ([[read first|b]]: bold, a color, a size, set from the bar
+// under the words selected), and the list adds a look of its own to them, an aside.
 //
 //   ReadingList        modes shelf (param layout: table) and cards (layout: cards); param
 //                      status filters the books, and the filter buttons write it into the block
@@ -428,8 +431,18 @@ const readingListBookToken = cellTokenDefine({
 
 // the cell of the list's texts: its own kind first, then the kinds of the page (a link, a
 // view of an object). the kinds read the list through the context, kept current each render
+// the list's own style kind: a look it names for the words of its cells ([[(a classic)|aside]]),
+// offered under "Styles" in the bar of the words selected, beside what every cell has (bold, a
+// color, a size)
+const readingListAsideStyle = cellStyleDefine({
+  name: 'aside',
+  label: 'Aside',
+  description: 'said in passing: smaller, in grey',
+  css: { color: 'var(--color-fd-muted-foreground)', fontSize: '88%' },
+});
+
 function useReadingListCell(config) {
-  return useCell({ tokenList: [readingListBookToken], context: { service: config.objectFrontend }, config });
+  return useCell({ tokenList: [readingListBookToken], styleList: [readingListAsideStyle], context: { service: config.objectFrontend }, config });
 }
 
 function bookRemarkSet(service, book, text) {

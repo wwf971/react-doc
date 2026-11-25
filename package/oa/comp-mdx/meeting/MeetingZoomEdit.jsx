@@ -30,7 +30,7 @@ export const MeetingZoomEdit = observer(function MeetingZoomEdit({ kind, Render,
 	});
 	const session = config.edit?.session ?? {};
 	const isLocked = session.status === 'submitting';
-	const cellPlain = useCell({ config, tokenIdList: [] });
+	const cellPlain = useCell({ config, tokenIdList: [], isStyled: false });
 	const cellText = useCell({ config });
 	const fieldById = Object.fromEntries(kind.fieldList.map((field) => [field.id, field]));
 	const fieldSet = (id, text) => {

@@ -51,7 +51,9 @@ export class DocHistoryStore {
   targetElement: Element | undefined = undefined;
   // the block (else the edit body) that element was in: the place of the author
   // once the element itself has left the page (a button that closed what it was
-  // part of, as the Save of a card does)
+  // part of, as the Save of a card does). a pointer in a popup of the edit layer
+  // portaled to the body (a menu, the card of a token: class doc-edit-popup) keeps
+  // the place it was opened from
   targetPlaceElement: Element | undefined = undefined;
   // the step being written, for the spinner of its button (a failure is said by
   // whoever asked: the notice of the page, DocHistoryButtons and the keys alike)
@@ -88,9 +90,10 @@ export class DocHistoryStore {
     const targetSet = (event: Event) => {
       if (!(event.target instanceof Element)) return;
       this.targetElement = event.target;
-      this.targetPlaceElement = event.target.closest('.doc-edit-block[data-block-index]')
+      const placeElement = event.target.closest('.doc-edit-block[data-block-index]')
         ?? event.target.closest('.doc-edit-body[data-edit-path]')
         ?? undefined;
+      if (placeElement || !event.target.closest('.doc-edit-popup')) this.targetPlaceElement = placeElement;
     };
     document.addEventListener('pointerdown', targetSet, true);
     document.addEventListener('focusin', targetSet, true);

@@ -61,6 +61,13 @@ test('what is wrong is reported with its place, and skips the item', () => {
 	}
 });
 
+test('a document whose template is not here (kept on one machine) is still left out of a build', () => {
+	const dir = dirCreate({ '.doc-page/playground.yaml': 'playgroundList:\n  - { id: mine, doc: ~page/mine.playground.md, template: ./mine.md }\n' });
+	const config = playgroundConfigOfDocPageListGet([inputOf(dir)], dir);
+	assert.deepEqual(config.list, []);
+	assert.deepEqual(config.docLeaveOutList, [{ doc: '~page:page/mine.playground.md', docLocal: '~page/mine.playground.md' }]);
+});
+
 test('reset writes the template and keeps what was there; delete leaves only that backup', () => {
 	const dir = dirCreate({ '.doc-page/playground.yaml': itemYaml, '.doc-page/playground/try.md': '# Template' });
 	const item = playgroundConfigOfDocPageListGet([inputOf(dir)], dir).itemByIdGet().get('page/try');

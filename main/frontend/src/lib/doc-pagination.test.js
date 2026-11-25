@@ -106,4 +106,10 @@ test('a pdf of page images: its objects where the cross-reference says', () => {
   assert.ok(text.slice(xrefAt).startsWith('xref'));
   const offsetList = text.slice(xrefAt).split('\n').slice(3, 11).map((line) => Number(line.slice(0, 10)));
   offsetList.forEach((offset, index) => assert.ok(text.slice(offset).startsWith(`${index + 1} 0 obj`), `object ${index + 1}`));
+  // a title: an Info dictionary named by the trailer, its text UTF-16BE, the objects still where the xref says
+  const titled = Buffer.from(pdfFromJpegListBuild([{ jpegBytes: jpeg, widthPx: 10, heightPx: 14 }], { title: '履歴書_A' })).toString('latin1');
+  assert.match(titled, /<< \/Title <FEFF5C656B7466F8005F0041> >>/);
+  assert.match(titled, /trailer\n<< \/Size 7 \/Root 1 0 R \/Info 6 0 R >>/);
+  const titledXrefAt = Number(/startxref\n(\d+)/.exec(titled)[1]);
+  titled.slice(titledXrefAt).split('\n').slice(3, 9).map((line) => Number(line.slice(0, 10))).forEach((offset, index) => assert.ok(titled.slice(offset).startsWith(`${index + 1} 0 obj`), `titled object ${index + 1}`));
 });

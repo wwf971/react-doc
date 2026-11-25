@@ -1,9 +1,10 @@
 import { useEffect } from 'react';
 import { observer } from 'mobx-react-lite';
-import { ArrowDown, ArrowUp, ChevronDown, ChevronUp, Copy, LoaderCircle, Move, Trash2 } from '../../frontend/UICommon.js';
+import { ArrowDown, ArrowUp, ChevronDown, ChevronUp, Copy, Move, Trash2 } from '../../frontend/UICommon.js';
 import { useDocStores } from '../../frontend/src/store/context.js';
 import { clickAfterPointerDownSuppress } from '../edit/use-edit-outside-pointer.js';
 import { ATOM_MENU_EVENT } from '../edit/surface-atom.js';
+import { DocMenuEntry } from '../edit/DocMenu.jsx';
 import '../edit/DocEdit.css';
 import './DocBlockSelect.css';
 
@@ -155,7 +156,7 @@ function actionItemListBuild(countText, blockSelectStore, isSubmitting) {
   const itemBuild = (id, Icon, text, title, reason = '', isDanger = false) => ({
     id,
     isDisabled: isSubmitting || reason !== '',
-    comp: ContextMenuItem,
+    comp: DocMenuEntry,
     compProps: { Icon, text, title: reason || title, isDanger, isBusy: false },
   });
   return [
@@ -181,7 +182,7 @@ function partItemBuild(part, isSubmitting) {
   return {
     id: 'partDelete',
     isDisabled: isSubmitting,
-    comp: ContextMenuItem,
+    comp: DocMenuEntry,
     compProps: {
       Icon: Trash2,
       text: part.isTyped ? `Delete ${name}` : `Delete ${name}…`,
@@ -197,13 +198,13 @@ function partDeleteConfirmItemListBuild(part, isSubmitting) {
     {
       id: 'partDeleteConfirm',
       isDisabled: isSubmitting,
-      comp: ContextMenuItem,
+      comp: DocMenuEntry,
       compProps: { Icon: Trash2, text: 'Delete', title: `Delete the ${part.label} from the document`, isDanger: true, isBusy: isSubmitting },
     },
     {
       id: 'partDeleteCancel',
       isDisabled: isSubmitting,
-      comp: ContextMenuItem,
+      comp: DocMenuEntry,
       compProps: { Icon: undefined, text: 'Cancel', title: `Keep the ${part.label}` },
     },
   ];
@@ -225,29 +226,16 @@ function deleteConfirmItemListBuild(count, isSubmitting) {
     {
       id: 'deleteConfirm',
       isDisabled: isSubmitting,
-      comp: ContextMenuItem,
+      comp: DocMenuEntry,
       compProps: { Icon: Trash2, text: 'Delete', title: 'Delete them from the document', isDanger: true, isBusy: isSubmitting },
     },
     {
       id: 'deleteCancel',
       isDisabled: isSubmitting,
-      comp: ContextMenuItem,
+      comp: DocMenuEntry,
       compProps: { Icon: undefined, text: 'Cancel', title: 'Keep the blocks' },
     },
   ];
-}
-
-function ContextMenuItem({ Icon, text, title, isDanger = false, isBusy = false }) {
-  return (
-    <span className="doc-edit-mode-item" title={title} data-danger={isDanger ? '' : undefined}>
-      <span className="doc-edit-mode-item-icon">
-        {isBusy
-          ? <LoaderCircle size={13} aria-hidden="true" className="doc-spin" />
-          : Icon ? <Icon size={13} aria-hidden="true" /> : null}
-      </span>
-      <span className="doc-edit-mode-item-label">{text}</span>
-    </span>
-  );
 }
 
 function MenuNote({ text, isError = false }) {

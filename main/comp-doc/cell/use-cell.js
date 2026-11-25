@@ -1,7 +1,10 @@
 import { useContext, useLayoutEffect, useMemo, useRef } from 'react';
 import { StoreContext } from '../../frontend/src/store/context.js';
-import { cellContextVersionBuild } from '../../frontend/src/store/DocCellStore.ts';
-import { cellContextAssign, cellTextParse, cellTextPlainGet, cellTokenListResolve } from '../../frontend/src/lib/doc-cell.js';
+import { cellContextVersionBuild, cellStyleCssCachedBuild, cellTokenTextBareGet } from '../../frontend/src/store/DocCellStore.ts';
+import { cellContextAssign, cellTextParse, cellTextPlainGet, cellTextStyledParse, cellTokenListResolve } from '../../frontend/src/lib/doc-cell.js';
+import { cellStyleTextBareGet } from '../../frontend/src/lib/doc-cell-style.js';
+import { cellStyleListResolve } from './cell-style-define.js';
+import { cellStyleById } from './cell-style-registry.js';
 
 // The cell a component hands its values to (doc_page_impl_edit_cell.md#using-it-in-a-component):
 // what CellValue draws a text with and CellEdit types one in. A component
@@ -15,6 +18,11 @@ import { cellContextAssign, cellTextParse, cellTextPlainGet, cellTokenListResolv
 //                                            // frontend object, the object (config.objectFrontend.ref)
 //     tokenIdList: undefined,                // the kinds of the page it accepts, by id
 //                                            // (nav/link, object/view); undefined: every one, []: none
+//     isStyled: true,                        // its words may be drawn in styles (bold, a color: the
+//                                            // default); false for a value that is no prose
+//     styleList: [noteStyle],                // its own style kinds (cellStyleDefine: a look it names)
+//     styleIdList: undefined,                // the style kinds of the page it accepts, by id
+//                                            // (text/b, text/color); undefined: every one, []: none
 //   });
 //   <CellValue cell={cell} text={book.remark} />
 //   <CellEdit cell={cell} text={draft} onTextChange={draftSet} ... />
@@ -31,7 +39,7 @@ import { cellContextAssign, cellTextParse, cellTextPlainGet, cellTokenListResolv
 //
 // outside a page (no stores: a test, a component drawn alone) it answers a
 // cell that still parses and draws its own kinds, with no slash mode.
-export function useCell({ tokenList = [], tokenIdList, context = {}, config, sourcePath, owner } = {}) {
+export function useCell({ tokenList = [], tokenIdList, context = {}, config, sourcePath, owner, isStyled = true, styleList = [], styleIdList } = {}) {
   const stores = useContext(StoreContext);
   const cellStore = stores?.cellStore;
   const contextRef = useRef(null);
@@ -49,11 +57,19 @@ export function useCell({ tokenList = [], tokenIdList, context = {}, config, sou
   const tokenListRef = useRef(tokenList);
   if (tokenListRef.current.length !== tokenList.length || tokenListRef.current.some((kind, index) => kind !== tokenList[index])) tokenListRef.current = tokenList;
   const tokenListKept = tokenListRef.current;
+  const styleIdKey = styleIdList === undefined ? '*' : styleIdList.join(',');
+  const styleListRef = useRef(styleList);
+  if (styleListRef.current.length !== styleList.length || styleListRef.current.some((kind, index) => kind !== styleList[index])) styleListRef.current = styleList;
+  const styleListKept = styleListRef.current;
   const cellTokenById = cellStore?.cellTokenById;
+  const cellStyleByIdPage = cellStore?.cellStyleById;
   const cell = useMemo(() => {
-    const spec = { tokenList: tokenListKept, tokenIdList: tokenIdKey === '*' ? undefined : tokenIdKey.split(',').filter(Boolean), context: contextRef.current, sourcePath: sourcePathUsed, owner: ownerUsed };
+    const spec = {
+      tokenList: tokenListKept, tokenIdList: tokenIdKey === '*' ? undefined : tokenIdKey.split(',').filter(Boolean), context: contextRef.current, sourcePath: sourcePathUsed, owner: ownerUsed,
+      isStyled, styleList: styleListKept, styleIdList: styleIdKey === '*' ? undefined : styleIdKey.split(',').filter(Boolean),
+    };
     return cellStore ? cellStore.cellBuild(spec) : cellAloneBuild(spec);
-  }, [cellStore, cellTokenById, sourcePathUsed, ownerUsed, tokenIdKey, tokenListKept]);
+  }, [cellStore, cellTokenById, cellStyleByIdPage, sourcePathUsed, ownerUsed, tokenIdKey, tokenListKept, isStyled, styleIdKey, styleListKept]);
   // told after the render (an observable is not changed while components render), before the
   // paint: the tokens are never seen with the values of the last render
   useLayoutEffect(() => {
@@ -68,8 +84,15 @@ export function useCell({ tokenList = [], tokenIdList, context = {}, config, sou
 function cellAloneBuild(spec) {
   const tokenList = cellTokenListResolve({ tokenOwnList: spec.tokenList, tokenById: {}, tokenIdList: [] });
   const contextVersion = cellContextVersionBuild();
+  const isStyled = spec.isStyled !== false;
+  // the package's style kinds: words are drawn in their styles without a page too
+  const styleList = isStyled ? cellStyleListResolve({ styleOwnList: spec.styleList ?? [], styleById: cellStyleById, styleIdList: spec.styleIdList }) : [];
+  const parse = (text) => (isStyled ? cellTextStyledParse(text, tokenList) : cellTextParse(text, tokenList));
   const cell = {
     tokenList,
+    isStyled,
+    styleList,
+    styleCssGet: cellStyleCssCachedBuild(styleList),
     context: spec.context,
     contextVersionGet: contextVersion.get,
     contextTouch: contextVersion.touch,
@@ -78,8 +101,10 @@ function cellAloneBuild(spec) {
     source: undefined,
     object: undefined,
     slash: undefined,
-    parse: (text) => cellTextParse(text, tokenList),
-    textGet: (text) => cellTextPlainGet(cellTextParse(text, tokenList), (part) => part.kind.textGet?.(part, cell)),
+    parse,
+    tokenParse: (text) => cellTextParse(text, tokenList),
+    bareGet: (text) => (isStyled ? cellStyleTextBareGet(text) : String(text ?? '')),
+    textGet: (text) => cellTextPlainGet(parse(text), (part) => cellTokenTextBareGet(part.kind.textGet?.(part, cell), isStyled)),
   };
   return cell;
 }

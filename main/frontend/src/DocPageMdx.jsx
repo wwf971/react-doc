@@ -81,6 +81,8 @@ import { slashActionByIdCompBuild } from '../../comp-doc/slash/slash-comp.js';
 import { slashActionByIdBuild } from '../../comp-doc/slash/slash-define.js';
 import { cellTokenById as cellTokenByIdDefault } from '../../comp-doc/cell/cell-registry.js';
 import { cellTokenByIdBuild } from '../../comp-doc/cell/cell-define.js';
+import { cellStyleById as cellStyleByIdDefault } from '../../comp-doc/cell/cell-style-registry.js';
+import { cellStyleByIdBuild } from '../../comp-doc/cell/cell-style-define.js';
 import { atomKindById as atomKindByIdDefault } from '../../comp-doc/edit/atom-kind-registry.js';
 import { pageLayerById as pageLayerByIdDefault, pageLayerListBuild } from '../../comp-doc/registry/page-layer-registry.js';
 import { atomKindRegistryBuild } from './lib/doc-edit-atom-kind.js';
@@ -133,6 +135,8 @@ import './DocPageMdx.css';
 // (doc_page_impl_edit_slash.md#the-slash-action-registry); null removes one.
 // config.cellTokenById are the host's token kinds of cells over the package's
 // (doc_page_impl_edit_cell.md#token-kinds); null removes one.
+// config.cellStyleById are the host's style kinds of cells over the package's: what
+// can be said of how words are drawn (doc_page_impl_edit_cell.md#style-kinds); null removes one.
 // config.atomKindById are the host's kinds of atoms over the package's: what a
 // text holds as a chip beside its code blocks, a formula of LaTeX
 // (doc_page_impl_edit_structure.md#atoms-of-a-kind); null removes one.
@@ -160,6 +164,7 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
     const compById = compByIdBuild(data.compMountList, config.compById);
     const slashActionById = slashActionByIdPageBuild(config.slashActionById, compById, data.configDoc);
     const cellTokenById = cellTokenByIdPageBuild(config.cellTokenById);
+    const cellStyleById = cellStyleByIdPageBuild(config.cellStyleById);
     const atomKindByName = atomKindByNamePageBuild(config.atomKindById);
     const apiById = apiByIdPageBuild(data.configDoc?.apiDeclared, config.apiById);
     // the environment of the page: how it is served, and so what it allows.
@@ -310,7 +315,7 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
     // the cell editing kit (doc_page_impl_edit_cell.md): the small values a component lets the
     // author type in place, their tokens (a link, a view of an object, a value of the
     // component's own data) and the slash mode typing them
-    const cellStore = new DocCellStore({ cellTokenById, stores: { slashStore, sourceStore, objectStore } });
+    const cellStore = new DocCellStore({ cellTokenById, cellStyleById, stores: { slashStore, sourceStore, objectStore } });
     const paletteStore = new DocPaletteStore({ apiStore });
     // find in a part of the page: the scopes components register (doc_page_impl_api.md#finding-in-a-part-of-the-page)
     const findStore = new DocFindStore();
@@ -474,6 +479,10 @@ export function DocPageMdx({ data, config = {}, onEvent }) {
   useEffect(() => {
     stores.cellStore.replaceCellTokenById(cellTokenByIdPageBuild(config.cellTokenById));
   }, [config.cellTokenById, stores]);
+
+  useEffect(() => {
+    stores.cellStore.replaceCellStyleById(cellStyleByIdPageBuild(config.cellStyleById));
+  }, [config.cellStyleById, stores]);
 
   useEffect(() => {
     stores.editStore.replaceAtomKindByName(atomKindByNamePageBuild(config.atomKindById));
@@ -690,13 +699,14 @@ function DocPageLayoutContainer({ children, ...props }) {
 //   compById            registry.js        data.compMountList             config.compById
 //   slashActionById     slash-registry.js  (none yet)                     config.slashActionById
 //   cellTokenById       cell-registry.js   (none yet)                     config.cellTokenById
+//   cellStyleById       cell-style-registry.js  (none yet)                config.cellStyleById
 //   atomKindById        atom-kind-registry.js  (none yet)                 config.atomKindById
 //   apiById             api-registry.js    configDoc.apiDeclared (yaml)   config.apiById
 //   pageLayerById       page-layer-registry.js  (none yet)                config.pageLayerById
 //
 // compById is held by DocStore (replaceCompById), slashActionById by
-// DocSlashStore (replaceSlashActionById), cellTokenById by DocCellStore
-// (replaceCellTokenById), atomKindById by DocEditStore, by name
+// DocSlashStore (replaceSlashActionById), cellTokenById and cellStyleById by
+// DocCellStore (replaceCellTokenById, replaceCellStyleById), atomKindById by DocEditStore, by name
 // (replaceAtomKindByName), apiById by DocApiStore
 // (replaceApiById; the apis of components and services join it through
 // providers at run time); pageLayerById is drawn by the page itself, the
@@ -716,6 +726,11 @@ function slashActionByIdPageBuild(slashActionByIdHost, compById, configDoc) {
 // the token kinds of cells (doc_page_impl_edit_cell.md#token-kinds)
 function cellTokenByIdPageBuild(cellTokenByIdHost) {
   return cellTokenByIdBuild(cellTokenByIdDefault, cellTokenByIdHost);
+}
+
+// the style kinds of cells (doc_page_impl_edit_cell.md#style-kinds)
+function cellStyleByIdPageBuild(cellStyleByIdHost) {
+  return cellStyleByIdBuild(cellStyleByIdDefault, cellStyleByIdHost);
 }
 
 // the kinds of atoms (doc_page_impl_edit_structure.md#atoms-of-a-kind), by name

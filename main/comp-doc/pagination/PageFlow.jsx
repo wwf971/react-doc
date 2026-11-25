@@ -1,7 +1,7 @@
 import { forwardRef, useContext, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { pageSpecNormalize, paginationPlan, pieceListKeyed } from '../../frontend/src/lib/doc-pagination.js';
 import { StoreContext } from '../../frontend/src/store/context.js';
-import { pageFlowPdfDownload, pageFlowPrint } from './page-flow-export.js';
+import { pageFlowFileNameGet, pageFlowPdfDownload, pageFlowPrint } from './page-flow-export.js';
 import './PageFlow.css';
 
 // The pagination environment (doc_page_impl_pagination.md): a flow of pieces laid out on
@@ -12,7 +12,8 @@ import './PageFlow.css';
 //   pagination   the contract: { pieceTypeById, pageClassName?, pageSpec? }
 //   pieceList    the flow: [{ type, data }] (pagination.pieceListGet(data, context))
 //   pageSpec     the page in mm, over pagination.pageSpec (A4 by default)
-//   title        the name of a printed or downloaded file
+//   title        the title of the printed or downloaded document, as a PDF reader shows it; the
+//                file is named after it (pageFlowFileNameGet: what a file name cannot hold made _)
 //   onStateChange({ status, pageCount, problemList })   status: measuring | done
 // the ref: { print(), pdfDownload(options), isPdfText }
 //   pdfDownload   a PDF without a dialog: printed by a browser of the development server's
@@ -93,7 +94,7 @@ export const PageFlow = forwardRef(function PageFlow({ pagination, pieceList, pa
 
   useImperativeHandle(ref, () => ({
     print: () => pageFlowPrint(rootRef.current, { title, pageSpec: spec }),
-    pdfDownload: (options = {}) => pageFlowPdfDownload(rootRef.current, { fileName: `${title}.pdf`, pageSpec: spec, endpoint: pdfEndpoint, ...options }),
+    pdfDownload: (options = {}) => pageFlowPdfDownload(rootRef.current, { fileName: `${pageFlowFileNameGet(title)}.pdf`, title, pageSpec: spec, endpoint: pdfEndpoint, ...options }),
     isPdfText: pdfEndpoint !== '',
   }), [title, spec, pdfEndpoint]);
 

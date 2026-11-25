@@ -45,6 +45,6 @@ function ObjectCellRender({ token, cell }) {
 // the card of a token naming an object: the object in the context panel, where it may be changed
 // (the cell is being typed, so the consumer allows it; the view and its layer decide), and closed
 // by the view when its work is done (config.objectView.close)
-function ObjectCellCard({ token, cell, close }) {
-  return <ObjectViewHost objectRef={token.data.ref} context="panel" isEditable sourcePath={cell?.sourcePath} onClose={close} />;
+function ObjectCellCard({ token, cell, close, widthSet }) {
+  return <ObjectViewHost objectRef={token.data.ref} context="panel" isEditable sourcePath={cell?.sourcePath} onClose={close} onWidthSet={widthSet} />;
 }

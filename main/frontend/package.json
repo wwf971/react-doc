@@ -9,7 +9,8 @@
     "./style.css": "./src/style.css",
     "./vite": "./plugin/doc-source.ts",
     "./asset-path": "./src/lib/doc-object-frontend-asset-path.js",
-    "./pagination": "./src/lib/doc-pagination.js"
+    "./pagination": "./src/lib/doc-pagination.js",
+    "./cell-text": "./src/lib/doc-cell-text.js"
   },
   "bin": {
     "react-doc": "./cli/doc-cli.js"

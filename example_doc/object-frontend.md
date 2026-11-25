@@ -114,7 +114,7 @@ The names and paths of the assets are edited in the **Frontend objects** tab too
 
 ## Cells, and things inside an object
 
-Two texts of a reading list are **cells** of the cell editing kit (`main/doc_page_impl_edit_cell.md`): the **remark** of a book, a cell of the shelf's table at the top of this page, and the text of a **note**. Such a text is words with **tokens** in it, and each token is drawn by the layer it belongs to:
+Two texts of a reading list are **cells** of the cell editing kit (`main/doc_page_impl_edit_cell.md`): the **remark** of a book, a cell of the shelf's table at the top of this page, and the text of a **note**. Such a text is words with **tokens** in it, each token drawn by the layer it belongs to, and its words may be drawn in **styles**:
 
 ```text
 {{/book/sci-fi/the-left-hand-of-darkness}}
@@ -125,9 +125,15 @@ Two texts of a reading list are **cells** of the cell editing kit (`main/doc_pag
     a view of an object of the registry, drawn by the view of its types
 {{@frontend:w5j7ozoijzl#/book/sci-fi/dune}}
     something inside an object, named by an inner path
+[[read first|b,color=#c0392b]]
+    words in a style: a styled segment, its words, then how they are drawn
+[[(a classic)|aside]]
+    words in a look the list names for its cells
 ```
 
 Switch the page to **Edit** and click a remark: the cell is typed where it stands, and nothing of the table moves. Type `/` for the actions of its tokens: `/book` (the list's own, also entered by typing `{{`), `/link`, and `/object`, which walks to an object a step per choice: a **type**, then an **object** of it, then **what is inside it**. The last step is answered by the object: a reading list completes the paths of its books and notes, a profile of the package cv the query paths of its values. Enter saves, Escape leaves the text as it was.
+
+**Select some words** of the open cell: a bar stands under them, with what every cell has (bold, italic, a line under or through the words, a color, a highlight, a size, a font), **Styles** for the looks the list adds (Aside), and a button taking every style away. The words are drawn in their style while typed, tokens stay written out, and the markup is nowhere in what is typed: it is only how the text is kept. With the caret where two styles meet, what is typed goes on in the style it came from, and one more press of an arrow changes sides before the caret moves (a faint ground shows the styled words it is with); Ctrl/⌘ + B, I, U set a style for what is typed next. The last button of the bar, `[ ]`, shows the text as it is kept instead (`[[words|b]]` written out), for looking into it.
 
 **Something inside an object** is named from anywhere by the object's reference, `#`, and an inner path: for a reading list, a path of one of its assets. In a line of text it is written as an inline object view, as here: <!--renderComp=ObjectView-->`frontend:w5j7ozoijzl#/book/sci-fi/dune`. In the block context it is drawn by the mode its type declares for one thing (`pathParam` of the mode `book`), given the path:
 

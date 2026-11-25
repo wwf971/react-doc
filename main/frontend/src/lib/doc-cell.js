@@ -25,6 +25,21 @@
 //
 // a text is parsed against the kinds its cell accepts, so the same text
 // reads differently in two cells: where no kind takes a token, it is text.
+//
+// words may be drawn in a style of their own, written where they stand as a
+// styled segment, [[words|b,color=#c0392b]] (doc-cell-style.js). the text
+// without that markup is its bare text, and every offset here counts in it:
+// a text holding no style is its own bare text, and nothing changes for it.
+//
+//   cellTextParse(bare text, kinds)        its words and tokens
+//   cellTextStyledParse(text, kinds)       the same of a text as kept, its words with their styles
+//   cellTextRangeReplace, cellTextSlice,   a text as kept changed or cut by bare offsets,
+//   cellTextConcat                         its styles kept whole
+
+import {
+  cellStyleIsEmpty, cellStyleSegListNormalize, cellStyleSegListRead, cellStyleSegListSlice, cellStyleSegListSplice, cellStyleSegListTextGet,
+  cellStyleTextIsStyled, cellStyleTextWrite,
+} from './doc-cell-style.js';
 
 export const CELL_BRACE_OPEN = '{{';
 export const CELL_BRACE_CLOSE = '}}';
@@ -34,7 +49,8 @@ export const CELL_PARAM_MARK = '|';
 // a brace token: no brace inside it (the pattern the CV package wrote first)
 const BRACE_REGEX = /\{\{([^{}]*)\}\}/g;
 
-// the parts of a cell text, in order, covering it whole:
+// the parts of a bare cell text (no style markup: what a cell not accepting styles keeps, what
+// is typed in a surface), in order, covering it whole:
 //   { type: 'text', text, start, end }
 //   { type: 'token', kind, name, raw, body, param, data, start, end }
 //      kind   the token kind (the definition given in tokenList)
@@ -58,6 +74,45 @@ export function cellTextParse(textInput, tokenList = []) {
   }
   if (indexLast < text.length) partList.push({ type: 'text', text: text.slice(indexLast), start: indexLast, end: text.length });
   return partList;
+}
+
+// the parts of a cell text as kept, its styles read: the parts of its bare text, a stretch of
+// words in a style being a part of its own:
+//   { type: 'text', text, start, end, style? }   style: { b: true, color: '#c0392b' }, absent for
+//                                                 plain words
+//   { type: 'token', … }                         as cellTextParse answers it
+// start and end count in the bare text. a token has no style: words styled around one are a
+// part on each side of it
+export function cellTextStyledParse(textInput, tokenList = []) {
+  const text = String(textInput ?? '');
+  if (!cellStyleTextIsStyled(text)) return cellTextParse(text, tokenList);
+  const segListRead = cellStyleSegListRead(text);
+  const partList = cellTextParse(cellStyleSegListTextGet(segListRead), tokenList);
+  const segList = cellStyleSegListNormalize(segListRead, { rangePlainList: partList.filter((part) => part.type === 'token') });
+  const styledList = [];
+  let segIndex = 0;
+  let segStart = 0;
+  for (const part of partList) {
+    if (part.type === 'token') {
+      styledList.push(part);
+      continue;
+    }
+    // the words of the part, a piece per segment they lie in
+    let at = part.start;
+    while (at < part.end) {
+      while (segIndex < segList.length && segStart + segList[segIndex].text.length <= at) {
+        segStart += segList[segIndex].text.length;
+        segIndex += 1;
+      }
+      const seg = segList[segIndex];
+      const to = Math.min(part.end, segStart + seg.text.length);
+      const piece = { type: 'text', text: seg.text.slice(at - segStart, to - segStart), start: at, end: to };
+      if (!cellStyleIsEmpty(seg.style)) piece.style = seg.style;
+      styledList.push(piece);
+      at = to;
+    }
+  }
+  return styledList;
 }
 
 function braceCandidateListGet(text, kindList) {
@@ -136,13 +191,32 @@ export function cellTokenTextBuild(part, change = {}) {
   return cellBraceTextBuild(change.body ?? part.body, part.kind.brace.sigil, param);
 }
 
-// a text with the characters from start to end replaced
+// a text as kept with a part of it replaced (bare offsets: start and end of a token, a
+// selection). the replacement is a text as kept too (a token written again, words). a styled
+// segment reached in part keeps its style on what is left of it
 export function cellTextRangeReplace(textInput, start, end, replacement) {
   const text = String(textInput ?? '');
-  return `${text.slice(0, start)}${replacement ?? ''}${text.slice(end)}`;
+  const inserted = String(replacement ?? '');
+  if (!cellStyleTextIsStyled(text) && !cellStyleTextIsStyled(inserted)) return `${text.slice(0, start)}${inserted}${text.slice(end)}`;
+  return cellStyleTextWrite(cellStyleSegListSplice(cellStyleSegListRead(text), start, end, cellStyleSegListRead(inserted)));
 }
 
-// what a range of a cell text holds: { text, isPlain }. isPlain: no token lies in the
+// a part of a text as kept, as a text of its own (bare offsets): its words keep their styles
+export function cellTextSlice(textInput, start, end = Infinity) {
+  const text = String(textInput ?? '');
+  if (!cellStyleTextIsStyled(text)) return text.slice(start, end === Infinity ? undefined : end);
+  return cellStyleTextWrite(cellStyleSegListSlice(cellStyleSegListRead(text), start, end));
+}
+
+// texts as kept joined into one: joining the strings could make a segment of the end of one
+// and the start of the next
+export function cellTextConcat(...textList) {
+  const list = textList.map((text) => String(text ?? ''));
+  if (!list.some((text) => text.includes('[['))) return list.join('');
+  return cellStyleTextWrite(list.flatMap((text) => cellStyleSegListRead(text)));
+}
+
+// what a range of a bare cell text holds: { text, isPlain }. isPlain: no token lies in the
 // range, in part or whole, so the range is words of the cell and can be made a token of
 // its own (a value kept elsewhere and named here) without cutting another one
 export function cellRangeRead(partList, start, end, textInput) {

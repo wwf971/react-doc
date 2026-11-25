@@ -14,6 +14,7 @@ import {
   Unplug,
 } from '../../frontend/UICommon.js';
 import { useDocStores } from '../../frontend/src/store/context.js';
+import { DocMenuEntry, DocMenuSeparator } from '../edit/DocMenu.jsx';
 import '../edit/DocEdit.css';
 
 // The menu of a side-panel item in edit mode (doc_page_impl_side_panel.md
@@ -210,14 +211,14 @@ function entryBuild(id, Icon, text, reason, title, action, isDanger = false) {
   return {
     id,
     isDisabled: reason !== '',
-    comp: ContextMenuItem,
+    comp: DocMenuEntry,
     compProps: { Icon, text, title: reason || title, isDanger },
     action,
   };
 }
 
 function separatorBuild(id) {
-  return { id, isContainer: true, comp: ContextMenuSeparator };
+  return { id, isContainer: true, comp: DocMenuSeparator };
 }
 
 function actionByIdBuild(itemList) {
@@ -230,17 +231,4 @@ function actionByIdBuild(itemList) {
   };
   visit(itemList);
   return actionById;
-}
-
-function ContextMenuItem({ Icon, text, title, isDanger }) {
-  return (
-    <span className="doc-edit-mode-item" title={title} data-danger={isDanger ? '' : undefined}>
-      <span className="doc-edit-mode-item-icon">{Icon ? <Icon size={13} aria-hidden="true" /> : null}</span>
-      <span className="doc-edit-mode-item-label">{text}</span>
-    </span>
-  );
-}
-
-function ContextMenuSeparator() {
-  return <span className="doc-edit-mode-separator" role="separator" />;
 }

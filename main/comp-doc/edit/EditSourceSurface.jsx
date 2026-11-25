@@ -99,6 +99,15 @@ import './DocEdit.css';
 //   surfaceRef          optional: a ref given the editable element while it is
 //                       mounted, for an editor reading or marking its text (the
 //                       cell editing kit: a token marked, cell-surface.js)
+//   codec               optional: how the text is written into the surface and read
+//                       back, for a surface drawing a part of its text instead of
+//                       writing it out (the cell editing kit: the styles of a cell,
+//                       cell-style-surface.js):
+//                         write(element, text)              the text written
+//                         read(element, { isComposing })    the text read back
+//                         insert(element, text)             a pasted text put at the caret
+//                       the offsets reported (a selection, the caret, the slash mode's)
+//                       still count in what the surface shows
 //   onFocusShiftRequest(direction, { point, rectSurface })
 //                       ArrowDown on the last line ('next') / ArrowUp on the
 //                       first line ('previous'): the author wants to go on
@@ -131,9 +140,12 @@ export function EditSourceSurface({
   atomOpenRequest,
   onAtomInsert,
   surfaceRef,
+  codec,
   ariaLabel = 'Block source',
 }) {
   const elementRef = useRef(null);
+  const codecRef = useRef(codec);
+  codecRef.current = codec;
   useLayoutEffect(() => {
     if (!surfaceRef) return undefined;
     surfaceRef.current = elementRef.current;
@@ -181,7 +193,8 @@ export function EditSourceSurface({
   useLayoutEffect(() => {
     const element = elementRef.current;
     if (!element) return;
-    surfaceContentWrite(element, text, lineSpaceListGet, atomModelRef.current, atomKindByNameRef.current);
+    if (codecRef.current) codecRef.current.write(element, text);
+    else surfaceContentWrite(element, text, lineSpaceListGet, atomModelRef.current, atomKindByNameRef.current);
     // text set by code happens when the author is already working here
     if (textVersion > 0 && document.activeElement !== element) element.focus();
     caretPlaceAtEdge(element, 'end');
@@ -345,6 +358,10 @@ export function EditSourceSurface({
     // keep the surface plain text in browsers without plaintext-only
     event.preventDefault();
     const textPasted = event.clipboardData?.getData('text/plain') ?? '';
+    if (codecRef.current?.insert) {
+      codecRef.current.insert(event.currentTarget, textPasted);
+      return;
+    }
     // the characters of atoms are typed by the chips alone
     document.execCommand('insertText', false, isAtom ? itemAtomCharStrip(textPasted) : textPasted);
   };
@@ -366,7 +383,8 @@ export function EditSourceSurface({
   const textReport = (element, isComposing) => {
     if (lineSpaceListGet && !isComposing) surfaceLineShapeKeep(element, lineSpaceListGet);
     if (isAtom && !isComposing) surfaceAtomShapeKeep(element);
-    onTextChange?.(surfaceTextGet(element));
+    // a codec reads its own text (and keeps its own shape, never during a composition)
+    onTextChange?.(codecRef.current ? codecRef.current.read(element, { isComposing }) : surfaceTextGet(element));
   };
 
   const surface = createElement(tag, {

@@ -75,6 +75,9 @@ export { EditFloatingPanel } from '../../comp-doc/edit/EditFloatingPanel.jsx';
 export { EditSourceSurface } from '../../comp-doc/edit/EditSourceSurface.jsx';
 export { EditButtonGroup, editReorderInsertionOf } from '../../comp-doc/edit/EditButtonGroup.jsx';
 export { EditValueInline } from '../../comp-doc/edit/EditValueInline.jsx';
+// the menus of the page in one look (a right click, a list of actions): the host's Menu as the edit
+// layer draws it, its entries an icon and words (comp-doc/edit/DocMenu.jsx)
+export { DocMenu, DocMenuEntry, DocMenuSeparator, DOC_MENU_CLASS, DOC_MENU_CONFIG, docMenuEntryBuild, docMenuSeparatorBuild } from '../../comp-doc/edit/DocMenu.jsx';
 export { BlockRender } from '../../../built-in/comp-mdx/text/BlockRender.jsx';
 export { TextBlockEdit } from '../../../built-in/comp-mdx/text/TextBlockEdit.jsx';
 // the slash mode of the default editors (doc_page_impl_edit_slash.md): a
@@ -99,11 +102,22 @@ export { CellValue } from '../../comp-doc/cell/CellValue.jsx';
 export { CellEdit } from '../../comp-doc/cell/CellEdit.jsx';
 export { CellField } from '../../comp-doc/cell/CellField.jsx';
 export { cellTokenDefine } from '../../comp-doc/cell/cell-define.js';
+// the styles of the words of a cell (doc_page_impl_edit_cell.md#styles): a component defines a
+// look of its own with cellStyleDefine and hands it to useCell({ styleList }); the package's
+// kinds (bold, a color, a size) are there for every cell
+export { cellStyleDefine } from '../../comp-doc/cell/cell-style-define.js';
+export { cellStyleById } from '../../comp-doc/cell/cell-style-registry.js';
 export { DocCellStore } from './store/DocCellStore.js';
 export {
-  cellBraceTextBuild, cellLinkMatchList, cellRangeRead, cellTextParse, cellTextPlainGet, cellTextRangeReplace, cellTokenListGet,
-  cellTokenSoleGet, cellTokenTextBuild,
+  cellBraceTextBuild, cellLinkMatchList, cellRangeRead, cellTextConcat, cellTextParse, cellTextPlainGet, cellTextRangeReplace, cellTextSlice,
+  cellTextStyledParse, cellTokenListGet, cellTokenSoleGet, cellTokenTextBuild,
 } from './lib/doc-cell.js';
+// a text as kept and its styled segments, for a component working on its texts itself (cutting
+// one into lines): its bare text, its segments read and written
+export {
+  cellStyleSegListNormalize, cellStyleSegListRead, cellStyleSegListSlice, cellStyleSegListTextGet, cellStyleSpecRead, cellStyleSpecWrite,
+  cellStyleTextBareGet, cellStyleTextIsStyled, cellStyleTextWrite,
+} from './lib/doc-cell-style.js';
 // the token kinds of the page, for a component composing its own cell (a kind of its own made
 // from one of them), and the slash actions writing a link and an object reference
 export { linkCellToken } from '../../comp-doc/link/link-cell.jsx';

@@ -1,17 +1,20 @@
 import { useContext, useRef } from 'react';
 import { observer } from 'mobx-react-lite';
-import { cellTextRangeReplace, cellTokenTextBuild } from '../../frontend/src/lib/doc-cell.js';
+import { cellTextRangeReplace, cellTextStyledParse, cellTokenTextBuild } from '../../frontend/src/lib/doc-cell.js';
+import { cellStyleTextIsStyled } from '../../frontend/src/lib/doc-cell-style.js';
 import { StoreContext } from '../../frontend/src/store/context.js';
 import { cellTokenCardIsOffered } from './cell-define.js';
 import { CellTokenCard } from './CellTokenCard.jsx';
+import { CELL_SEG_CLASS } from './cell-style-surface.js';
 import './Cell.css';
 
 // A cell text drawn (doc_page_impl_edit_cell.md#drawing-and-typing): its text
 // as it is, and every token drawn by its kind: a link by the navigation
 // layer, a view of an object by the view of its types, a value of the
-// component's own data as that value. It adds no element of its own, so the
-// text takes the type and the box of where it stands; with a className it is
-// one span.
+// component's own data as that value. Words written in a style (a styled
+// segment, #styles) are drawn in it, in an element of their own. It adds no
+// other element, so the text takes the type and the box of where it stands;
+// with a className it is one span.
 //
 //   cell        the cell of the component (useCell)
 //   text        the text kept in the data
@@ -31,11 +34,15 @@ export const CellValue = observer(function CellValue({ cell, text, textEmpty = n
   if (value === '') return textEmpty;
   const partList = cell.parse(value);
   const isTokenSelectable = isEditable && cellKey !== '' && typeof onTextChange === 'function';
-  const content = partList.map((part) => (part.type === 'text'
-    ? part.text
+  const content = partList.map((part) => {
+    if (part.type === 'text') {
+      // plain words are text; styled ones stand in an element drawn in their style
+      return part.style ? <span key={`seg:${part.start}`} className={CELL_SEG_CLASS} style={cell.styleCssGet?.(part.style)}>{part.text}</span> : part.text;
+    }
     // keyed by its place and kind, not by how it is written: a token changed from its card (a
     // parameter set) stays the same element, so its card stays open where it is
-    : <CellToken key={`${part.start}:${part.name}`} part={part} cell={cell} text={value} cellKey={isTokenSelectable ? cellKey : ''} onTextChange={onTextChange} />));
+    return <CellToken key={`${part.start}:${part.name}`} part={part} cell={cell} text={value} cellKey={isTokenSelectable ? cellKey : ''} onTextChange={onTextChange} />;
+  });
   return className ? <span className={className}>{content}</span> : content;
 });
 
@@ -53,7 +60,7 @@ const CellToken = observer(function CellToken({ part, cell, text, cellKey, onTex
   const isSelected = isSelectable && cellStore.tokenIsSelected(cellKey, part.start);
   if (!Render && !isSelectable) {
     const textPlain = part.kind.textGet?.(part, cell);
-    return textPlain === undefined || textPlain === null ? part.raw : String(textPlain);
+    return textPlain === undefined || textPlain === null ? part.raw : tokenTextDraw(cell, String(textPlain));
   }
   const textPlain = Render ? undefined : part.kind.textGet?.(part, cell);
   return (
@@ -73,7 +80,7 @@ const CellToken = observer(function CellToken({ part, cell, text, cellKey, onTex
         cellStore.tokenSelect(cellKey, part.start);
       } : undefined}
     >
-      {Render ? <Render token={part} cell={cell} contextVersion={contextVersion} /> : textPlain ?? part.raw}
+      {Render ? <Render token={part} cell={cell} contextVersion={contextVersion} /> : (textPlain === undefined || textPlain === null ? part.raw : tokenTextDraw(cell, String(textPlain)))}
       {isSelected ? (
         <CellTokenCard
           anchorRectGet={() => elementRef.current?.getBoundingClientRect()}
@@ -94,3 +101,12 @@ const CellToken = observer(function CellToken({ part, cell, text, cellKey, onTex
     </span>
   );
 });
+
+// the text a token reads, drawn: a value kept elsewhere (a text of a profile, typed in a cell of
+// its own) may be written in styles, and is drawn in them here too. tokens are not read in it
+function tokenTextDraw(cell, text) {
+  if (!cell.isStyled || !cellStyleTextIsStyled(text)) return text;
+  return cellTextStyledParse(text, []).map((piece) => (piece.style
+    ? <span key={`seg:${piece.start}`} className={CELL_SEG_CLASS} style={cell.styleCssGet?.(piece.style)}>{piece.text}</span>
+    : piece.text));
+}

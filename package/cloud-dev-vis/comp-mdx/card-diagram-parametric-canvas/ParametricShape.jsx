@@ -19,7 +19,8 @@ import { shapeNormalize, shapePointListOf, shapePropertyList, shapeTextSearchMat
 // empty goes (a text node without words is nothing); a shape keeps its outline
 function useWordsOf(node, editor, nodeId, isRemovedWhenEmpty) {
 	const { config } = useContext(DiagramRenderContext);
-	const cell = useCell({ tokenList: [cardIconToken], tokenIdList: [], config });
+	// a label on a canvas is words and icons, typed as before: no styles of words (isStyled) yet
+	const cell = useCell({ tokenList: [cardIconToken], tokenIdList: [], isStyled: false, config });
 	const content = editor?.store.nodeGet(nodeId)?.data ?? node.data;
 	const isEditable = Boolean(editor) && !editor.isLocked && !editor.store.isStructureFixed && !node.isDerived;
 	const commit = (text) => {

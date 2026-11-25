@@ -56,7 +56,9 @@
 //                  owner's text, or the draft being typed. what the token names (a value
 //                  kept elsewhere) is the kind's own write. close() closes the card from
 //                  inside, when the kind decides its work is done (a value saved): the
-//                  token stays, a click on it opens the card again
+//                  token stays, a click on it opens the card again. widthSet('wide')
+//                  asks for a card as wide as the place the token is typed in (a value
+//                  that is a text), widthSet('normal') for the usual width
 //     cardPlaceList   where the card is offered: ['value', 'surface'] (the default).
 //                  ['surface'] keeps a click on the drawn token doing what it does
 //   })

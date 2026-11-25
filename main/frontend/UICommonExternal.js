@@ -198,6 +198,17 @@ export {
   Puzzle,
   FileKey,
   Gauge,
+  // the styles of a cell text (comp-doc/cell/cell-style-registry.js, CellStyleBar.jsx)
+  Bold,
+  Italic,
+  Underline,
+  Strikethrough,
+  Baseline,
+  Highlighter,
+  ALargeSmall,
+  RemoveFormatting,
+  Brackets,
+  Paintbrush,
 } from 'lucide-react';
 export { FrameworkProvider, usePathname } from 'fumadocs-core/framework';
 export { default as Link } from 'fumadocs-core/link';

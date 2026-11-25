@@ -153,17 +153,21 @@ function fileDownload(bytes, fileName) {
 //           a server, its text a picture. the fallback
 // answers { code, message, data: { pageCount, kind: 'text' | 'image', reason } }; reason: why
 // the PDF is one of images, when one of text was possible to ask for
+//   fileName     the name of the file downloaded
+//   title        what a PDF reader shows as its title (the title of the printed document, the
+//                Info of a PDF of images); absent: the file name without .pdf
 //   endpoint     the pdf api of the environment; '' or absent: images
 //   isImage      images are wanted, whatever the environment offers
 //   pixelRatio   images: how many image pixels per css pixel (2: about 192 dpi)
 //   isFontEmbedded   images: fetch the page's web fonts into them (off: the system's fonts)
-export async function pageFlowPdfDownload(rootElement, { fileName = 'pages.pdf', pageSpec, endpoint = '', isImage = false, pixelRatio = 2, quality = 0.92, isFontEmbedded = false } = {}) {
+export async function pageFlowPdfDownload(rootElement, { fileName = 'pages.pdf', title, pageSpec, endpoint = '', isImage = false, pixelRatio = 2, quality = 0.92, isFontEmbedded = false } = {}) {
   const sheetList = rootElement ? [...rootElement.querySelectorAll('.doc-page-sheet')] : [];
   if (sheetList.length === 0) return { code: -1, message: 'no page to download' };
   const spec = pageSpecNormalize(pageSpec);
+  const titleUsed = String(title ?? '').trim() || fileName.replace(/\.pdf$/i, '');
   let reason = '';
   if (endpoint && !isImage) {
-    const printed = await pdfByServerGet(sheetList, { endpoint, title: fileName.replace(/\.pdf$/i, ''), pageSpec: spec });
+    const printed = await pdfByServerGet(sheetList, { endpoint, title: titleUsed, pageSpec: spec });
     if (printed.code === 0) {
       fileDownload(printed.bytes, fileName);
       return { code: 0, message: '', data: { pageCount: sheetList.length, kind: 'text', reason: '' } };
@@ -181,6 +185,14 @@ export async function pageFlowPdfDownload(rootElement, { fileName = 'pages.pdf',
     });
     pageList.push({ jpegBytes: dataUrlBytesGet(dataUrl), widthPx: Math.round(width * pixelRatio), heightPx: Math.round(height * pixelRatio) });
   }
-  fileDownload(pdfFromJpegListBuild(pageList, { widthMm: spec.width, heightMm: spec.height }), fileName);
+  fileDownload(pdfFromJpegListBuild(pageList, { widthMm: spec.width, heightMm: spec.height, title: titleUsed }), fileName);
   return { code: 0, message: '', data: { pageCount: pageList.length, kind: 'image', reason } };
+}
+
+// the name of a file made of a title: what a file name cannot hold (/ \ : * ? " < > | and controls)
+// made _, no space at its ends, not longer than a file system takes; 'pages' when nothing is left
+export function pageFlowFileNameGet(title) {
+  // eslint-disable-next-line no-control-regex
+  const name = String(title ?? '').replace(/[\\/:*?"<>|\u0000-\u001f]/g, '_').trim().slice(0, 120).trim();
+  return name || 'pages';
 }

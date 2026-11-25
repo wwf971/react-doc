@@ -54,6 +54,9 @@ export type PlaygroundConfig = {
   itemByIdGet: () => Map<string, PlaygroundItem & { docAbs: string; templateAbs: string }>;
   problemList: { alias: string; file: string; message: string }[];
   pathList: string[];
+  // the document of every entry naming one, whether the entry is whole or not (its template not
+  // found: kept on one machine, ignored by git): what a build leaves out, with its side panel item
+  docLeaveOutList: { doc: string; docLocal: string }[];
 };
 
 const mappingIs = (value: any) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -62,6 +65,7 @@ export function playgroundConfigOfDocPageListGet(docPageInputList: PlaygroundDoc
   const itemList: (PlaygroundItem & { docAbs: string; templateAbs: string })[] = [];
   const problemList: PlaygroundConfig['problemList'] = [];
   const pathList: string[] = [];
+  const docLeaveOutList: PlaygroundConfig['docLeaveOutList'] = [];
   const idSet = new Set<string>();
   for (const input of docPageInputList) {
     if (input.playground === false) continue;
@@ -101,6 +105,7 @@ export function playgroundConfigOfDocPageListGet(docPageInputList: PlaygroundDoc
       if (!DOC_NAME_PATTERN.test(docMatch[2])) return problemAdd(`${place}: the name of a playground document ends with .playground.md or .playground.mdx, which is what git ignores`);
       const docAbs = path.resolve(root.path, ...docMatch[2].split('/'));
       if (!docAbs.startsWith(`${root.path}${path.sep}`)) return problemAdd(`${place}: doc leaves its root`);
+      docLeaveOutList.push({ doc: `~${input.alias}:${docMatch[1]}/${docMatch[2]}`, docLocal: String(doc) });
       if (typeof template !== 'string' || !template) return problemAdd(`${place}: template must be a file, relative to this file`);
       const templateAbs = path.resolve(path.dirname(file), template);
       if (!fs.existsSync(templateAbs)) return problemAdd(`${place}: the template is not found: ${template}`);
@@ -125,6 +130,7 @@ export function playgroundConfigOfDocPageListGet(docPageInputList: PlaygroundDoc
     itemByIdGet: () => itemById,
     problemList,
     pathList,
+    docLeaveOutList,
   };
 }
 

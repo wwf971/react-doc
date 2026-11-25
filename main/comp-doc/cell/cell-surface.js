@@ -1,7 +1,9 @@
 // The typed text of a cell and its surface (doc_page_impl_edit_cell.md#a-token-marked-in-the-typed-text):
 // offsets into the text as positions of the DOM of a plain EditSourceSurface, and back. The
 // surface holds text nodes, and a <br> where a browser writes a line break so; both read as
-// innerText reads them (a <br> one "\n"), as the surface reads its text.
+// innerText reads them (a <br> one "\n"), as the surface reads its text. Words drawn in a style
+// stand in an element of their own (cell-style-surface.js): the offsets count their text as any
+// other, so a surface drawing styles is counted in its bare text.
 //
 // The mark of a token is drawn by the browser's highlight registry (::highlight(doc-cell-token-mark),
 // Cell.css): nothing is added to the text, so the caret, the typing and the text read back stay
@@ -23,12 +25,20 @@ function nodeLengthGet(node) {
   return node.nodeType === Node.TEXT_NODE ? node.nodeValue.length : 1;
 }
 
-// the DOM position of an offset of the text: { node, offset }
-function surfacePositionGet(element, offset) {
+// the DOM position of an offset of the text: { node, offset }. where two nodes meet (the end
+// of one is the start of the next: the edge of styled words), the end of the first, or with
+// side 'after' the start of the second, so that what is typed there goes into it
+function surfacePositionGet(element, offset, side = 'before') {
   let rest = Math.max(0, offset);
-  for (const node of surfaceNodeListGet(element)) {
+  const nodeList = surfaceNodeListGet(element);
+  for (let index = 0; index < nodeList.length; index += 1) {
+    const node = nodeList[index];
     if (node.nodeType === Node.TEXT_NODE) {
-      if (rest <= node.nodeValue.length) return { node, offset: rest };
+      if (rest <= node.nodeValue.length) {
+        const next = nodeList[index + 1];
+        if (side === 'after' && rest === node.nodeValue.length && next?.nodeType === Node.TEXT_NODE) return { node: next, offset: 0 };
+        return { node, offset: rest };
+      }
       rest -= node.nodeValue.length;
     } else {
       if (rest === 0) return { node: node.parentNode, offset: [...node.parentNode.childNodes].indexOf(node) };
@@ -71,6 +81,18 @@ export function cellSurfaceSelectionSet(element, start, end = start) {
   if (!element || !selection) return;
   selection.removeAllRanges();
   selection.addRange(cellSurfaceRangeBuild(element, start, end));
+}
+
+// the caret at an offset, on a side of it where two nodes meet there ('before' | 'after')
+export function cellSurfaceCaretSet(element, offset, side = 'before') {
+  const selection = window.getSelection?.();
+  if (!element || !selection) return;
+  const position = surfacePositionGet(element, offset, side);
+  selection.removeAllRanges();
+  const range = document.createRange();
+  range.setStart(position.node, position.offset);
+  range.collapse(true);
+  selection.addRange(range);
 }
 
 // whether a point (a click) lies on the words of a part of the text, a line at a time

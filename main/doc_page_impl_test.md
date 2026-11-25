@@ -77,7 +77,7 @@ Since a playground in a package writes only into its own document, its blocks ke
 
 ### A built page
 
-A static build has no playground at all: the document and its item are left out ([Playground documents](doc_page_impl_dir.md#playground-documents)).
+A static build has no playground at all: the document and its item are left out ([Playground documents](doc_page_impl_dir.md#playground-documents)), also for an entry whose template is not there (a template kept on one machine, ignored by git like the data it points at): the entry is reported and offers no playground, but its document is still one a build leaves out (`docLeaveOutList` of `doc-playground.ts`).
 
 ### The apis
 

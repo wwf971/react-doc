@@ -30,7 +30,8 @@ const ENUM_BUTTON_MAX = 6;
 export const AppConfigView = observer(function AppConfigView({ data = {}, config = {} }) {
 	const service = config.objectFrontend;
 	const draft = useCompState(config, { writeLayer: '', label: '', order: '', partition: '', message: '', isBusy: false });
-	const cell = useCell({ tokenIdList: [], config });
+	// a value of a config is no prose: nothing of it is read as a style
+	const cell = useCell({ tokenIdList: [], isStyled: false, config });
 	if (!service) return <p className="doc-error">AppConfigView is a mode of a config object (ObjectFrontend).</p>;
 	const section = data.param?.section === 'layers' ? 'layers' : 'final';
 	const model = appConfigModelRead(service);

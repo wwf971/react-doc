@@ -5,11 +5,13 @@
 //
 //   pageList   [{ jpegBytes: Uint8Array, widthPx, heightPx }]   the images of the pages
 //   widthMm, heightMm                                           the size of a page
+//   title                                                       what a reader shows as its title
+//                                                               (its Info dictionary); '' none
 // -> Uint8Array of a PDF 1.4 file
 
 const PT_PER_MM = 72 / 25.4;
 
-export function pdfFromJpegListBuild(pageList, { widthMm = 210, heightMm = 297 } = {}) {
+export function pdfFromJpegListBuild(pageList, { widthMm = 210, heightMm = 297, title = '' } = {}) {
   const encoder = new TextEncoder();
   const chunkList = [];
   const offsetList = [];
@@ -46,11 +48,17 @@ export function pdfFromJpegListBuild(pageList, { widthMm = 210, heightMm = 297 }
     objectBegin(numberContent);
     write(`<< /Length ${content.length} >>\nstream\n${content}\nendstream\nendobj\n`);
   });
-  const objectCount = 3 + pageList.length * 3;
+  // the title: a text string of UTF-16 (big-endian, after its byte order mark), so any script is kept
+  const infoNumber = title ? 3 + pageList.length * 3 : 0;
+  if (title) {
+    objectBegin(infoNumber);
+    write(`<< /Title ${pdfTextHexGet(title)} >>\nendobj\n`);
+  }
+  const objectCount = 3 + pageList.length * 3 + (title ? 1 : 0);
   const xrefOffset = length;
   write(`xref\n0 ${objectCount}\n0000000000 65535 f \n`);
   for (let number = 1; number < objectCount; number += 1) write(`${String(offsetList[number]).padStart(10, '0')} 00000 n \n`);
-  write(`trailer\n<< /Size ${objectCount} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF\n`);
+  write(`trailer\n<< /Size ${objectCount} /Root 1 0 R${title ? ` /Info ${infoNumber} 0 R` : ''} >>\nstartxref\n${xrefOffset}\n%%EOF\n`);
   const result = new Uint8Array(length);
   let at = 0;
   for (const chunk of chunkList) {
@@ -58,6 +66,13 @@ export function pdfFromJpegListBuild(pageList, { widthMm = 210, heightMm = 297 }
     at += chunk.length;
   }
   return result;
+}
+
+// a text of a PDF as a hexadecimal string of UTF-16BE with its byte order mark: <FEFF…>
+export function pdfTextHexGet(text) {
+  let hex = 'FEFF';
+  for (let index = 0; index < text.length; index += 1) hex += text.charCodeAt(index).toString(16).toUpperCase().padStart(4, '0');
+  return `<${hex}>`;
 }
 
 // the bytes of a data: url (data:image/jpeg;base64,...)
