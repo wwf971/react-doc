@@ -49,7 +49,9 @@ import { PORTAL_DEVICE_LIST, PORTAL_SWITCHER_PLACE_LIST } from '../../frontend/s
 //                  component can display its data; the one with isDefault
 //                  (else the first) is what a block shows until a reader
 //                  picks another
-//   editModeList   the same shape, the ways its data can be edited in place.
+//   editModeList   the same shape, the ways its data can be edited in place; a
+//                  mode may add isInPlace: an owner may keep it open in place
+//                  (config.edit.isInPlace: a card of a card diagram holding it).
 //                  the built-in mode 'source' (the lines of the block) is
 //                  added by compEditModeListGet unless meta says otherwise,
 //                  so a component never declares it
@@ -389,6 +391,9 @@ function modeListNormalize(modeList, place, idReservedList) {
       icon: iconNormalize(mode.icon, `${place}[${index}].icon`),
       isBuiltin: false,
       isDefault: mode.isDefault === true,
+      // an edit mode an owner may keep open in place while its document is edited (config.edit.isInPlace:
+      // doc_page_impl_edit.md#component-edit-mode); kept for edit modes, meaningless for view modes
+      ...(mode.isInPlace === true ? { isInPlace: true } : {}),
     };
   });
   const indexDefault = modeListNormalized.findIndex((mode) => mode.isDefault);

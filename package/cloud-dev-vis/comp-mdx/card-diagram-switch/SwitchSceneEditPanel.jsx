@@ -106,6 +106,7 @@ const ScenesBody = observer(function ScenesBody({ store }) {
 				onItemClick={key => store.focusSet(key, { isOpen: true })}
 				onCursor={key => store.focusSet(key)}
 				onItemContext={menuOpenAt}
+				onItemDelete={(key) => { store.focusSet(key); store.canvasApi?.removeAsk?.(); }}
 				dragTypeGet={(key) => { const item = modelBase.itemGet(key); return item && (item.kind === 'scene' || item.kind === 'view') ? SWITCH_SCENE_DRAG_TYPE : null; }} />
 		</div>
 		<DiagramPanelGraph diagram={graph?.diagram ?? null} camera={store.graphCamera} cameraSet={store.graphCameraSet} cameraReset={store.graphCameraReset} legend={sceneGraphLegend}

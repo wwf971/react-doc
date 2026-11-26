@@ -10,7 +10,10 @@ import { slashEffect } from '../../../../main/frontend/src/lib/doc-slash.js';
 import { useDocStores } from '../../../../main/frontend/src/store/context.js';
 import { nodeRegistrySearch } from './node-registry.js';
 import { cardCompEntryListBuild } from './CardCompEntry.js';
-import { CARD_COMP_TYPE, cardCompEntryMatch } from './CardCompData.js';
+import { CARD_COMP_TYPE, cardCompDataOfBlockSource, cardCompEntryMatch, cardCompViewIsTile } from './CardCompData.js';
+import { cardCompAssetEntryCreate } from './CardCompAsset.js';
+import { compIdResolve } from '../../../../main/comp-doc/registry/comp-registry.js';
+import { compDefinitionGet } from '../../../../main/comp-doc/registry/comp-definition.js';
 
 // The panel of a double-click on empty canvas: what can be added there
 // (the create entries of the node registry of the component, node-registry.js),
@@ -80,6 +83,17 @@ import { CARD_COMP_TYPE, cardCompEntryMatch } from './CardCompData.js';
 // list steps aside while it does; Enter on one takes it. Without the slash mode (switched off, or
 // outside a page) a `/` typed is ignored by the search. Words typed otherwise search the list.
 //
+// With the kind card-comp in the registry, the panel offers what a card may hold
+// (card-diagram-impl.md#a-component-in-a-card). In the slash mode, `/card-comp/` and then the slash
+// of a document, as it is typed there: the page's actions that put a block (an action with `block`:
+// /code, /mdx and their views, the components' /meeting-zoom-instance), the same names, parameters
+// and menu (a scope of the slash mode, doc_page_impl_edit_slash.md#scopes). The block such an action
+// answers (slashEffect.block) is taken by the field (onBlockInsert) as a card holding it
+// (cardCompDataOfBlockSource: a code block is a card of Code). Words typed without `/` find the
+// components as the insert menu of a document does (CardCompEntry.js); one whose data must be an
+// asset item (a spreadsheet) gets its item first (CardCompAsset.js), then the card holding the
+// reference.
+//
 // textTake: { label, take(text, position) } (a feature of the editor: editor.createTextGet): words
 // typed are also a thing of their own, a text at that place. The panel then lists them first,
 // highlighted, so Enter makes the text; the arrows reach what the words found.
@@ -90,6 +104,11 @@ import { CARD_COMP_TYPE, cardCompEntryMatch } from './CardCompData.js';
 // actions are the commands, under the heading given (heading), the field saying placeholder.
 const SOURCE_LIST_NONE = [];
 const ACTION_LIST_NONE = [];
+
+// the component of the page a tag name names, else undefined
+function compDefinitionFind(stores, compName) {
+	return compDefinitionGet(stores?.compById ?? {}, compIdResolve(stores?.sourceStore?.configDoc, compName));
+}
 
 export const DiagramCreatePanel = observer(function DiagramCreatePanel({ position, editor, objectService, sessionKey, sourceList = SOURCE_LIST_NONE, actionList = ACTION_LIST_NONE, actionIdInitial, actionParam, heading = 'Actions', placeholder: placeholderGiven, ariaLabel = 'Add to the diagram', isActionOnly = false, textTake }) {
 	const [query, querySet] = useState('');
@@ -122,13 +141,31 @@ export const DiagramCreatePanel = observer(function DiagramCreatePanel({ positio
 	const kindEntryList = editor.store && !editor.store.isStructureFixed && !isActionOnly ? nodeRegistrySearch(editor.store.registry, queryWords).map(({ entry }) => entry) : [];
 	const sourceEntryListOf = isBefore => source.groupList.filter(group => Boolean(group.source.isBeforeKinds) === isBefore).flatMap(group => group.entryList);
 	// the components of the page a card may hold (a registry with the card-comp kind:
-	// card-diagram-impl.md#a-component-in-a-card), each one an entry adding a card holding it; listed
-	// once something is typed, as the objects are, and named by their word in the slash mode
+	// card-diagram-impl.md#a-component-in-a-card), each one an entry adding a card holding it, listed
+	// once something is typed, as the objects are (as the insert menu of a document finds them)
 	const isCompOffered = Boolean(editor.store && !editor.store.isStructureFixed && !isActionOnly && editor.store.registry?.kindByType[CARD_COMP_TYPE]);
 	const compEntryAllList = useMemo(() => (isCompOffered ? cardCompEntryListBuild({ compById: stores?.compById, configDoc: stores?.sourceStore?.configDoc }) : []).map(compEntry => ({
-		id: `comp:${compEntry.compName}`, label: compEntry.label, description: compEntry.description, icon: compEntry.icon, compEntry, slashName: compEntry.slashName,
-		source: { choose: (entry, position, editorGiven) => editorGiven.change(() => editorGiven.store.nodeCompAdd(entry.compEntry, position)) },
-	})), [isCompOffered, stores?.compById, stores?.sourceStore?.configDoc]);
+		id: `comp:${compEntry.compName}`, label: compEntry.label, description: compEntry.description, icon: compEntry.icon, compEntry,
+		source: { choose: (entry, position, editorGiven) => compCardAdd(entry.compEntry, position, editorGiven) },
+	})), [isCompOffered, stores?.compById, stores?.sourceStore?.configDoc]); // eslint-disable-line react-hooks/exhaustive-deps
+	// a card holding a component; one whose data must be an asset item gets its item first, and what
+	// kept it from being made is said in the editor (createChoose: what the promise throws)
+	const compCardAdd = async (compEntry, positionGiven, editorGiven) => {
+		let entryCard = compEntry;
+		if (compEntry.isAssetOnly) {
+			const result = await cardCompAssetEntryCreate({ assetStore: stores?.assetStore, entry: compEntry, compById: stores?.compById, configDoc: stores?.sourceStore?.configDoc, docPath: stores?.docStore?.docCurrentPath ?? '' });
+			if (result.code !== 0) throw new Error(result.message);
+			entryCard = result.data.entry;
+		}
+		editorGiven.change(() => editorGiven.store.nodeCompAdd(entryCard, positionGiven));
+	};
+	// a card holding the block a slash action of the page answered (slashEffect.block), as it put it
+	const blockCardAdd = (blockSource, positionGiven, editorGiven) => {
+		const data = cardCompDataOfBlockSource(blockSource);
+		if (!data) throw new Error('A card holds one block of a document; this text is not one.');
+		const isTile = cardCompViewIsTile(compDefinitionFind(stores, data.comp), data.props);
+		editorGiven.change(() => editorGiven.store.nodeCompAdd({ compName: data.comp, source: { lang: data.lang, raw: data.raw, props: data.props }, isTile }, positionGiven));
+	};
 	const compEntryList = queryWords.trim() ? compEntryAllList.filter(entry => cardCompEntryMatch(entry.compEntry, queryWords)) : [];
 	const entryList = [...kindEntryList, ...compEntryList];
 	const option = editor.store && !editor.store.isStructureFixed && !isActionOnly ? objectSearchOptionGet(editor.store) : { isEnabled: false, typeList: [] };
@@ -149,20 +186,26 @@ export const DiagramCreatePanel = observer(function DiagramCreatePanel({ positio
 	const resultList = [...textEntryList, ...sourceBeforeList, ...entryList, ...objectEntryList, ...sourceAfterList];
 	const indexBase = textEntryList.length;
 	// what `/` names in the slash mode: the actions, then the kinds, one word each (an action of a
-	// name taken already is left out); taking one takes the entry of the list
+	// name taken already is left out); taking one takes the entry of the list. The kind card-comp opens
+	// a scope: after `/card-comp/` comes the slash of a document, the page's own actions that put a
+	// block (/code icon, /mdx card, /meeting-zoom-instance), unchanged; the block one answers is taken
+	// by the field (onBlockInsert) as the card's
+	const slashContext = useMemo(() => ({ sourcePath: stores?.docStore?.docCurrentPath ?? '', configValueGet: key => stores?.configStore?.valueDocGet?.(stores?.docStore?.docCurrentPath ?? '', key) }), [stores?.docStore?.docCurrentPath, stores?.configStore]);
+	const blockActionList = isCompOffered ? (slashStore?.actionList ?? []).filter(action => action.block) : [];
 	const slashActionList = useMemo(() => {
 		const nameSet = new Set();
 		const list = [];
-		const entryAllList = [...actionList.filter(action => !action.isDisabled).map(action => ({ ...action, id: `action:${action.id}`, action })), ...kindAllList, ...compEntryAllList];
+		const entryAllList = [...actionList.filter(action => !action.isDisabled).map(action => ({ ...action, id: `action:${action.id}`, action })), ...kindAllList];
 		for (const entry of entryAllList) {
 			const name = String(entry.slashName ?? (entry.action ? entry.action.id : entry.id)).replace(/^tool:/, '').replace(/[^A-Za-z0-9_-]+/g, '-').replace(/^[^A-Za-z]+/, '');
 			if (!name || nameSet.has(name)) continue;
 			nameSet.add(name);
-			list.push(slashActionDefine({ name, label: entry.label, description: entry.description ?? '', icon: entry.icon, run: () => { setTimeout(() => chooseRef.current(entry)); return slashEffect.replace(''); } }));
+			const scope = entry.id === CARD_COMP_TYPE && blockActionList.length ? { actionList: blockActionList } : undefined;
+			list.push(slashActionDefine({ name, label: entry.label, description: entry.description ?? '', icon: entry.icon, scope, run: () => { setTimeout(() => chooseRef.current(entry)); return slashEffect.replace(''); } }));
 		}
 		return list;
-	}, [actionList, kindAllList.map(entry => entry.id).join(' '), compEntryAllList]); // eslint-disable-line react-hooks/exhaustive-deps
-	const slash = useEditSlashConfig({ actionList: slashActionList, context: {} });
+	}, [actionList, kindAllList.map(entry => entry.id).join(' '), blockActionList.map(action => action.name).join(' ')]); // eslint-disable-line react-hooks/exhaustive-deps
+	const slash = useEditSlashConfig({ actionList: slashActionList, context: slashContext });
 	const highlightList = (session?.result?.tokenList ?? []).map(token => token.valueLower).filter(Boolean);
 	const wordList = queryWords.toLowerCase().split(/\s+/).filter(Boolean);
 	const placeholder = placeholderGiven ?? sourceList.find(item => item.placeholder)?.placeholder ?? (session ? 'Add a node, a connection, or an object' : 'Add a node or a connection');
@@ -260,6 +303,7 @@ export const DiagramCreatePanel = observer(function DiagramCreatePanel({ positio
 				<Search size={12} aria-hidden="true" />
 				<span className="doc-vis-create-field-box">
 					<EditSourceSurface kind="plain" className="doc-vis-create-field" text={query} textVersion={textVersion} slash={slash} isTabInserted={false} ariaLabel="Search what to add"
+						onBlockInsert={blockSource => editor.createChoose({ id: 'block', source: { choose: (entry, positionGiven, editorGiven) => blockCardAdd(blockSource, positionGiven, editorGiven) } }, position)}
 						onTextChange={text => queryChange(text.replace(/\n/g, ' '))} onKeyDownFirst={keyDownHandle} onCancelRequest={() => { if (query) queryChange('', true); else editor.createClose(); }} />
 					{query ? null : <span className="doc-vis-create-placeholder" aria-hidden="true">{placeholder}</span>}
 				</span>

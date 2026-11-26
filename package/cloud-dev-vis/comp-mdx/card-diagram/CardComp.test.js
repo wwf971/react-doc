@@ -3,7 +3,11 @@ import test from 'node:test';
 import { DiagramEditStore } from './DiagramEditStore.js';
 import { cardModelBuild } from './DiagramEditCardModel.js';
 import { cardDiagramNodeRegistry } from './card-diagram-node-registry.js';
-import { cardCompEntryMatch, cardCompSlashNameOf } from './CardCompData.js';
+import { cardCompDataOfBlockSource, cardCompEntryMatch, cardCompPropsWithView, cardCompSlashNameOf } from './CardCompData.js';
+import { cardCompAssetEntryCreate, cardCompAssetWrite } from './CardCompAsset.js';
+import { codeSlashAction } from '../../../../built-in/comp-mdx/text/code-slash.js';
+import { mdxSlashAction } from '../../../../built-in/comp-mdx/text/mdx-slash.js';
+import { codeExpose, mdxExpose } from '../../../../main/comp-doc/registry/registry-expose.js';
 
 // A card holding a component (card-diagram-impl.md#a-component-in-a-card): its commands, each a step
 // of the history or none, and what its edit card offers
@@ -79,10 +83,122 @@ test('a data of another form is refused, naming the node; the edit card offers i
   assert.equal(store.nodeGet(id).data.raw, 'title: Typed\n');
 });
 
+test('a component offering its values has them in the edit card, one field each, each typed a step', () => {
+  const store = storeMake();
+  const id = store.nodeCompAdd(meeting, { x: 0, y: 0 });
+  store.select(id);
+  // the definition of the page, as the editor resolves it: a component whose values are offered
+  const dataFields = {
+    fieldList: [{ id: 'title', label: 'Title' }, { id: 'passcode', label: 'Passcode' }],
+    valueListGet: data => ({ title: /title: (.*)/.exec(data.raw)?.[1] ?? '', passcode: /passcode: (.*)/.exec(data.raw)?.[1] ?? '' }),
+    rawWithValue: (data, fieldId, text) => `${data.raw.replace(new RegExp(`${fieldId}: .*\\n`), '')}${fieldId}: ${text}\n`,
+  };
+  const editor = { store, change: fn => fn(), navigate: () => {}, featureList: [], compDefinitionGet: () => ({ expose: { meta: { label: 'Zoom meeting instance' }, dataFields } }) };
+  const model = cardModelBuild(editor);
+  const values = model.view.sectionList.find(one => one.id === 'comp-values');
+  assert.equal(values.label, 'Zoom meeting instance');
+  assert.deepEqual(values.propertyList.map(property => [property.label, property.value]), [['Title', 'Zoom meeting'], ['Passcode', '']]);
+  const rawBefore = store.nodeGet(id).data.raw;
+  values.propertyList[1].set('1234');
+  assert.equal(store.nodeGet(id).data.raw, 'title: Zoom meeting\npasscode: 1234\n');
+  // the text of its data stays offered beside them
+  assert.equal(model.view.sectionList.find(one => one.id === 'comp-data').label, 'Its data as text');
+  store.undo();
+  assert.equal(store.nodeGet(id).data.raw, rawBefore);
+});
+
 test('a component is found by its names, its word after / and its label', () => {
   assert.equal(cardCompSlashNameOf('MeetingZoom'), 'meeting-zoom');
   assert.equal(cardCompSlashNameOf('ExcelUniver'), 'excel-univer');
   assert.ok(cardCompEntryMatch(meeting, 'zoom meet'));
   assert.ok(cardCompEntryMatch(meeting, 'meeting-zoom'));
   assert.ok(!cardCompEntryMatch(meeting, 'table'));
+});
+
+// the blocks the slash actions of a document put at the caret, taken as cards (the create panel)
+test('a block of a document is a card: a code block holds Code, an MDX block Mdx, each in its view', () => {
+  // the page's actions say they put a block, with its views
+  assert.deepEqual(codeSlashAction.block.viewList.map(view => view.id), ['card', 'plain', 'icon']);
+  assert.deepEqual(mdxSlashAction.block.viewList.map(view => view.id), ['icon', 'card']);
+  // what they answer, by default and in a view chosen
+  const sourceOf = effect => effect.source;
+  assert.deepEqual(cardCompDataOfBlockSource(sourceOf(codeSlashAction.run({}))), { comp: 'Code', lang: 'text', raw: '' });
+  const iconItem = codeSlashAction.param.itemListGet('', {}).find(item => item.id === 'icon');
+  assert.deepEqual(cardCompDataOfBlockSource(sourceOf(codeSlashAction.param.itemChoose(iconItem, '', {}))), { comp: 'Code', lang: 'text', raw: '', props: { view: 'icon' } });
+  assert.deepEqual(cardCompDataOfBlockSource(sourceOf(mdxSlashAction.run({}))), { comp: 'Mdx', lang: 'md', raw: '' });
+  const cardItem = mdxSlashAction.param.itemListGet('', {}).find(item => item.id === 'card');
+  assert.deepEqual(cardCompDataOfBlockSource(sourceOf(mdxSlashAction.param.itemChoose(cardItem, '', {}))), { comp: 'Mdx', lang: 'md', raw: '', props: { view: 'card' } });
+  // a fence with lines, its language, title and view; a longer fence holding a shorter one
+  assert.deepEqual(cardCompDataOfBlockSource('```python title="a.py" view=plain\ndef add(a, b):\n    return a + b\n```'), { comp: 'Code', lang: 'python', raw: 'def add(a, b):\n    return a + b\n', props: { view: 'plain', title: 'a.py' } });
+  assert.deepEqual(cardCompDataOfBlockSource('<!--renderComp=Mdx,title=Notes-->\n````md\n# Notes\n```sh\nls\n```\n````'), { comp: 'Mdx', lang: 'md', raw: '# Notes\n```sh\nls\n```\n', props: { title: 'Notes' } });
+  // what is not one block is no card
+  assert.equal(cardCompDataOfBlockSource('a paragraph'), null);
+  assert.equal(cardCompDataOfBlockSource('```js\nnot closed'), null);
+  assert.equal(cardCompDataOfBlockSource(undefined), null);
+});
+
+test('the view of a card is a prop of its block, chosen in its edit card; Default removes it', () => {
+  assert.deepEqual(cardCompPropsWithView({ title: 'a.py', view: 'icon' }, 'plain'), { title: 'a.py', view: 'plain' });
+  assert.deepEqual(cardCompPropsWithView({ title: 'a.py', view: 'icon' }, ''), { title: 'a.py' });
+  assert.deepEqual(cardCompPropsWithView(undefined, 'card'), { view: 'card' });
+  const store = storeMake();
+  const id = store.nodeCompAdd({ compName: 'Code', source: { lang: 'python', raw: 'print(1)\n', props: { view: 'icon' } } }, { x: 0, y: 0 });
+  store.select(id);
+  const editor = { store, change: fn => fn(), navigate: () => {}, featureList: [], compDefinitionGet: name => (name === 'Code' ? { expose: codeExpose } : { expose: mdxExpose }) };
+  const values = () => cardModelBuild(editor).view.sectionList.find(one => one.id === 'comp-values');
+  const view = values().propertyList.find(property => property.id === 'comp-view');
+  assert.equal(view.kind, 'enum');
+  assert.equal(view.value, 'icon');
+  assert.deepEqual(view.values, ['', 'card', 'plain', 'icon']);
+  view.set('plain');
+  assert.deepEqual(store.nodeGet(id).data.props, { view: 'plain' });
+  values().propertyList.find(property => property.id === 'comp-view').set('');
+  assert.equal(store.nodeGet(id).data.props, undefined);
+  store.undo();
+  assert.deepEqual(store.nodeGet(id).data.props, { view: 'plain' });
+  // a view drawing a tile makes the card as wide as the tile; another one gives it its width again
+  values().propertyList.find(property => property.id === 'comp-view').set('icon');
+  assert.equal(store.nodeGet(id).size.width, 'auto');
+  values().propertyList.find(property => property.id === 'comp-view').set('card');
+  assert.equal(store.nodeGet(id).size.width, 240);
+  // a card made in a tile view is as wide as its tile
+  const tile = store.nodeCompAdd({ compName: 'Mdx', source: { lang: 'md', raw: '' }, isTile: true }, { x: 0, y: 300 });
+  assert.equal(store.nodeGet(tile).size.width, 'auto');
+});
+
+// a component whose data must be an asset item (a spreadsheet): its item made first, the card holding
+// the reference, and what it writes going to the item
+test('a card of an asset-only component holds the reference to an item made for it, and writes into the item', async () => {
+  const callList = [];
+  const assetStore = {
+    isWritable: true,
+    writeUnavailableReason: '',
+    itemCreate: async (input) => { callList.push(['create', input.store, input.lang, input.text, input.component.name]); return { code: 0, data: { item: { itemId: 'w1item' } } }; },
+    itemGet: () => ({ lang: 'json' }),
+    itemMetaSet: async (...args) => { callList.push(['meta', ...args]); return { code: 0 }; },
+    itemUpdate: async (store, itemId, data, mode, note, dependencyList, versionMetadata) => { callList.push(['update', store, itemId, data.text, versionMetadata]); return { code: 0, message: '' }; },
+    refQuery: () => ({}),
+  };
+  const entry = { compName: 'ExcelUniver', label: 'Spreadsheet', isAssetOnly: true, source: { lang: 'json', raw: '{"sheets":{}}' } };
+  const result = await cardCompAssetEntryCreate({ assetStore, entry, compById: {}, docPath: 'example/a.md' });
+  assert.equal(result.code, 0);
+  assert.deepEqual(callList[0], ['create', 'local', 'json', '{"sheets":{}}', 'ExcelUniver']);
+  assert.deepEqual(result.data.entry.source, { lang: 'asset', raw: 'store: local\nitemId: w1item\n' });
+  const store = storeMake();
+  const id = store.nodeCompAdd(result.data.entry, { x: 0, y: 0 });
+  assert.deepEqual(store.nodeGet(id).data, { comp: 'ExcelUniver', lang: 'asset', raw: 'store: local\nitemId: w1item\n' });
+  // the edit card offers the reference, not the data
+  store.select(id);
+  const editor = { store, change: fn => fn(), navigate: () => {}, featureList: [], compDefinitionGet: () => ({ expose: { meta: { label: 'Spreadsheet', isAssetOnly: true } } }) };
+  const dataSection = cardModelBuild(editor).view.sectionList.find(one => one.id === 'comp-data');
+  assert.equal(dataSection.propertyList[0].label, 'reference');
+  // what the component saves goes into the item, in its save mode
+  const write = await cardCompAssetWrite({ assetStore, reference: store.nodeGet(id).data.raw, compName: 'ExcelUniver', raw: '{"sheets":{"a":{}}}', versionMetadata: { engine: 'univer' } });
+  assert.equal(write.code, 0);
+  assert.deepEqual(callList.at(-1), ['update', 'local', 'w1item', '{"sheets":{"a":{}}}', { engine: 'univer' }]);
+  // where the store cannot be written, nothing is made, and the reason is said
+  const refused = await cardCompAssetEntryCreate({ assetStore: { ...assetStore, isWritable: false, writeUnavailableReason: 'the store is read-only' }, entry, compById: {} });
+  assert.equal(refused.code, -1);
+  assert.match(refused.message, /read-only/);
+  assert.equal(callList.filter(call => call[0] === 'create').length, 1);
 });

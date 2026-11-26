@@ -19,25 +19,27 @@ function MeetingZoomReservationRead({ meeting, config }) {
 }
 
 // the card, from a reservation. valueRender(id): what stands in the place of a value (the editor's
-// field); without it the value as read. The day of the week is read from the time, beside it, so
-// the time typed is the time shown
-export function MeetingZoomReservationRender({ meeting, valueRender, cellText, isEditing = false }) {
+// field); without it the value as read. edit: what editing adds (MeetingZoomCard), and which values
+// stand (edit.isShown: written, or just added). The day of the week is read from the time, beside it,
+// so the time typed is the time shown
+export function MeetingZoomReservationRender({ meeting, valueRender, cellText, isEditing = false, edit = null }) {
 	const { timeText, durationText } = meetingWhenPartList(meeting);
 	const weekday = meetingTimeParse(meeting.time)?.weekday;
 	const timeShown = weekday ? timeText.slice(weekday.length + 1) : timeText;
+	const isShown = edit?.isShown ?? ((id) => Boolean(meeting[id]));
 	return (
-		<MeetingZoomCard kind="reservation" Icon={CalendarClock} isEditing={isEditing} joinUrl={meetingJoinUrl(meeting)}
+		<MeetingZoomCard kind="reservation" Icon={CalendarClock} isEditing={isEditing} joinUrl={meetingJoinUrl(meeting)} edit={edit}
 			title={valueRender ? valueRender('title') : meeting.title || 'Zoom meeting'}
-			description={meeting.description ? (valueRender ? valueRender('description') : <CellValue cell={cellText} text={meeting.description} />) : null}>
-			{meeting.time || meeting.duration ? (
+			description={isShown('description') ? (valueRender ? valueRender('description') : <CellValue cell={cellText} text={meeting.description} />) : null}>
+			{isShown('time') || isShown('duration') ? (
 				<div className="oa-meeting-zoom-line">
-					{meeting.time ? (
+					{isShown('time') ? (
 						<span className="oa-meeting-zoom-when">
 							{weekday ? <span className="oa-meeting-zoom-weekday">{weekday}</span> : null}
 							{valueRender ? valueRender('time') : timeShown}
 						</span>
 					) : null}
-					{meeting.duration ? (
+					{isShown('duration') ? (
 						<span className="oa-meeting-zoom-length">
 							{valueRender && /^\d+$/.test(meeting.duration) ? <>{valueRender('duration')} min</> : valueRender ? valueRender('duration') : durationText}
 						</span>

@@ -1,14 +1,14 @@
 import { comparer, computed, makeAutoObservable, observable } from 'mobx';
 import { parseDocument, stringify } from 'yaml';
-import { diagramLegacyConvert, diagramNormalize, cardStandaloneNormalize, endpointIsDangling, handleRoleAccepts, lineTypeList, markerTypeList, attachPolicyList } from './DiagramERData.js';
+import { diagramLegacyConvert, diagramNormalize, diagramPlacesGet, cardStandaloneNormalize, endpointIsDangling, handleRoleAccepts, lineTypeList, markerTypeList, attachPolicyList } from './DiagramERData.js';
 import { cardSchemaGet, cardRowAnchorBuild, cardFooterProperty, nodePropertyListGet } from './TableCardSchema.js';
 import { pathResolve, pathEquals, selectionPathBuild, tabPathGet, nodeLineListGet, cardTabList } from './DiagramEditPath.js';
 import { EditHistory } from './DiagramEditHistory.js';
-import { nodeSizeOfMode } from './DiagramNodeResize.js';
+import { nodeSizeModeIdListOf, nodeSizeOfMode } from './DiagramNodeResize.js';
 import { diagramArrangeRun } from './DiagramArrange.js';
 import { cardRowDisplayIdListOf, cardRowDisplayWithout, cardViewDefaultGet, cardViewListGet, cardViewListPrune, cardViewRowListGet, cardViewSourceOf } from './TableCardData.js';
 import { routeAnchorCoupleSet, routeAnchorHandleSet, routeAnchorHandlesPull, routeAnchorIdNext, routeAnchorInsertAt, routeAnchorMove, routeAnchorPlaceOf, routeAnchorRemove, routeCompact, routeEndHandleSet, routeNormalize, routeTypeFamilyGet, routeTypeHasAnchors } from './DiagramRoute.js';
-import { CARD_COMP_TYPE, cardCompDataOf, cardCompNodeCreate } from './CardCompData.js';
+import { CARD_COMP_TYPE, CARD_COMP_WIDTH, cardCompDataOf, cardCompNodeCreate } from './CardCompData.js';
 import { DEPTH_MOVE_LIST, DEPTH_MOVE_NOTHING_REASON, depthKeyOfTarget, depthRectIsOverlapping, depthTargetOfKey, diagramDepthMove, diagramDepthOrderListGet } from './DiagramDepth.js';
 
 export { cardTabList };
@@ -96,6 +96,9 @@ export class DiagramEditStore {
 	// card-diagram-impl.md#a-component-in-a-card): { nodeId, modeId, dataInitial }. Like the cell,
 	// the state of the editor, never a step; what the component reports is
 	compEdit = null;
+	// a removal waiting for the author to confirm it (DiagramRemove.js: what Delete takes away and
+	// what depends on it): the state of the editor, never a step; the removal itself is one
+	removal = null;
 	routeDraft = null;
 	cardViewIdByNode = {};
 	// a cell asked to open its menu once it is drawn (an editor opened on it): { nodeId, rowId, field }
@@ -135,7 +138,7 @@ export class DiagramEditStore {
 		this.history = new EditHistory({ isSame: (a, b) => a.valueCurrent === b.valueCurrent });
 		// what is read off the path is compared by content: a change of the draft that leaves the
 		// selection as it was notifies nobody (every node reads the selection)
-		makeAutoObservable(this, { documentDraft: false, resolve: false, registry: false, scope: false, history: false, path: observable.ref, redirectRuleList: false, routeDraft: observable.ref, shownTimer: false, itemComputedByKey: false, display: computed.struct, selection: computed.struct, arrangerUnavailableIdList: computed.struct, depthOrderList: computed.struct }, { autoBind: true });
+		makeAutoObservable(this, { documentDraft: false, resolve: false, registry: false, scope: false, history: false, path: observable.ref, redirectRuleList: false, routeDraft: observable.ref, removal: observable.ref, shownTimer: false, itemComputedByKey: false, display: computed.struct, selection: computed.struct, arrangerUnavailableIdList: computed.struct, depthOrderList: computed.struct }, { autoBind: true });
 	}
 
 	// ---------- the draft ----------
@@ -248,6 +251,22 @@ export class DiagramEditStore {
 		}, { groupKey });
 	}
 
+	// the view of the block a card holds (its props, view= written or not), one step: a view drawing a
+	// tile makes the card as wide as the tile (width auto: the kind fits its width), another one gives a
+	// card that was so its width again (card-diagram-impl.md#a-component-in-a-card)
+	nodeCompViewSet(nodeId, props = {}, { isTile = false } = {}) {
+		const node = this.nodeGet(nodeId);
+		if (!node || node.renderer?.type !== CARD_COMP_TYPE || !node.data?.comp || this.isStructureFixed) return false;
+		const nodePath = this.nodePathGet(nodeId);
+		return this.changeApply(documentNext => {
+			const widthOld = documentNext.getIn([...nodePath, 'size', 'width']);
+			if (props && Object.keys(props).length) documentNext.setIn([...nodePath, 'data', 'props'], documentNext.createNode(props));
+			else if (documentNext.hasIn([...nodePath, 'data', 'props'])) documentNext.deleteIn([...nodePath, 'data', 'props']);
+			if (isTile && widthOld !== 'auto') documentNext.setIn([...nodePath, 'size', 'width'], 'auto');
+			else if (!isTile && widthOld === 'auto') documentNext.setIn([...nodePath, 'size', 'width'], CARD_COMP_WIDTH);
+		});
+	}
+
 	// the component of a card opened in one of its edit modes, the card selected; what it held is kept,
 	// for a cancel
 	compEditStart(nodeId, modeId) {
@@ -315,7 +334,9 @@ export class DiagramEditStore {
 	get nodeSelected() { return this.selection?.nodeId ? this.nodeGet(this.selection.nodeId) : undefined; }
 	get rowSelected() { return this.selection?.rowId ? this.rowGet(this.selection.nodeId, this.selection.rowId) : undefined; }
 	get connectionSelected() { return this.selection?.connectionId ? this.connectionGet(this.selection.connectionId) : undefined; }
-	get isCardShown() { return Boolean(this.display) && !this.cell && !this.interaction && !this.create; }
+	get isCardShown() { return Boolean(this.display) && !this.cell && !this.interaction && !this.create && !this.removal; }
+	// a removal asked for and waiting for the author's word (DiagramVisualEdit.jsx: removeAsk); null: none
+	removalSet(removal) { this.removal = removal ?? null; }
 	get isStructureFixed() { return Boolean(this.scope?.isStructureFixed); }
 
 	// the definition of a value of a node (rowId null) or of one of its rows: a field, a property
@@ -999,18 +1020,54 @@ export class DiagramEditStore {
 		return isChanged;
 	}
 
-	// a node goes alone: the connections on its handles stay, their ends
-	// dangling where the handles were
-	nodeRemove(nodeId, positionGet) {
+	// a node goes alone: the connections on its handles stay, their ends dangling where the handles
+	// were; a background drawn around it (around) no longer frames it, and one that framed it alone
+	// keeps the box it has (boxGet(nodeId): its box as drawn, else estimated from the sizes written)
+	nodeRemove(nodeId, positionGet, { boxGet } = {}) {
 		if (this.kind !== 'diagram') return false;
-		const isChanged = this.changeApply(documentNext => {
-			this.endpointsDetach(documentNext, endpoint => endpoint.nodeId === nodeId, positionGet);
-			documentNext.deleteIn(this.nodePathGet(nodeId));
-		});
+		const isChanged = this.changeApply(documentNext => this.nodeRemoveWrite(documentNext, nodeId, { positionGet, boxGet }));
 		// the node is the principal of the card it was removed from; another
 		// card's path is only re-resolved (its lines may have come loose)
 		if (isChanged && !(this.display?.nodeId && this.display.nodeId !== nodeId)) this.selectionClear();
 		return isChanged;
+	}
+
+	// the backgrounds drawn around a node (their around names it): [{ node, isAlone }], isAlone when
+	// it is the only one they frame
+	nodeAroundListOf(nodeId) {
+		return this.nodes.filter(node => node.around?.nodeIdList?.includes(nodeId)).map(node => ({ node, isAlone: node.around.nodeIdList.length === 1 }));
+	}
+
+	// what taking a node away writes, inside a change (nodeRemove, and a feature removing a node of
+	// its own: a member of a parametric group): its lines detached, the backgrounds around it told,
+	// the node deleted. The backgrounds first: deleting the node shifts the places of those after it
+	nodeRemoveWrite(documentNext, nodeId, { positionGet, boxGet } = {}) {
+		const aroundList = this.nodeAroundListOf(nodeId);
+		let estimate = null;
+		const boxOf = (id) => {
+			const drawn = boxGet?.(id);
+			if (drawn && Number.isFinite(drawn.x) && Number.isFinite(drawn.width)) return drawn;
+			if (!estimate) {
+				const graph = diagramNormalize(this.value, this.registry, this.resolve);
+				estimate = diagramPlacesGet(graph.nodes, graph.layout, {});
+			}
+			return { ...(estimate.positions.get(id) ?? { x: 0, y: 0 }), ...(estimate.sizeById.get(id) ?? { width: 200, height: 120 }) };
+		};
+		for (const { node, isAlone } of aroundList) {
+			const path = this.nodePathGet(node.id);
+			if (!isAlone) {
+				documentNext.setIn([...path, 'around', 'nodeIdList'], documentNext.createNode(node.around.nodeIdList.filter(id => id !== nodeId)));
+				continue;
+			}
+			// framing nothing any more: it stands where it is drawn, at its size, as a block of its own
+			const box = boxOf(node.id);
+			const sizeMin = this.registry?.kindByType[node.renderer?.type]?.contract.sizeMin ?? {};
+			documentNext.deleteIn([...path, 'around']);
+			documentNext.setIn([...path, 'position'], documentNext.createNode({ x: Math.round(box.x), y: Math.round(box.y) }));
+			documentNext.setIn([...path, 'size'], documentNext.createNode({ width: Math.max(sizeMin.width ?? 1, Math.round(box.width)), height: Math.max(sizeMin.height ?? 1, Math.round(box.height)) }));
+		}
+		this.endpointsDetach(documentNext, endpoint => endpoint.nodeId === nodeId, positionGet);
+		documentNext.deleteIn(this.nodePathGet(nodeId));
 	}
 
 	positionRememberSet(nodeId, isRemembered, position) {
@@ -1073,7 +1130,7 @@ export class DiagramEditStore {
 		const node = this.nodeGet(nodeId);
 		if (!node) return false;
 		const contract = this.registry?.kindByType[node.renderer?.type]?.contract;
-		if (!contract?.sizeModeList?.includes(mode)) {
+		if (!nodeSizeModeIdListOf(contract).includes(mode)) {
 			this.message = `A ${node.renderer?.type ?? 'node'} node does not take its box that way.`;
 			return false;
 		}

@@ -10,14 +10,8 @@ import { lineLabelOf } from './ParametricReferencePoint.js';
 const AXIS_WORDS = { x: { one: 'vertical line', many: 'Vertical lines' }, y: { one: 'horizontal line', many: 'Horizontal lines' } };
 const round = value => Math.round(value * 100) / 100;
 
-// how many members stand on a line (name it in their constraint)
-function lineUseCountOf(session, groupId, memberId, axis, lineId) {
-	const key = axis === 'x' ? 'lineX' : 'lineY';
-	const group = session.groupModelGet(groupId);
-	// on its axis: the line a locate constraint names (or runs from, or to), or a reference point of the locator on it
-	const isOn = (name, value) => Boolean(value) && typeof value === 'object' && (name === key ? value.line === lineId || value.from === lineId || value.to === lineId : value.format === 'line' && value[key] === lineId);
-	return group.memberList.filter(member => member.parentIdList.includes(memberId) && member.constraint && Object.entries(member.constraint).some(([name, value]) => isOn(name, value))).length;
-}
+// how many members stand on a line (ParametricEditStore.locatorLineUseCountOf)
+const lineUseCountOf = (session, groupId, memberId, axis, lineId) => session.locatorLineUseCountOf(groupId, memberId, axis, lineId);
 
 // the sections of the edit card of a locator: per axis, its lines with their places (typed there),
 // and the way to the list where they are named and removed; then where its chevrons stand

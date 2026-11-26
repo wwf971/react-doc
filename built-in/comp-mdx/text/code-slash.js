@@ -20,9 +20,11 @@ const CODE_VIEW_DESCRIPTION_BY_ID = {
   plain: 'lines that stand like text, in a thin frame',
   icon: 'a tile in the line; its lines open in a dialog',
 };
-const CODE_VIEW_SLASH_LIST = codeViewEntryListBuild('')
+// (also the views the component Code declares, expose.blockViewList: a card of a diagram holding it)
+export const CODE_VIEW_SLASH_LIST = codeViewEntryListBuild('')
   .filter((entry) => entry.id !== '')
-  .map((entry) => ({ id: entry.id, label: entry.label, description: CODE_VIEW_DESCRIPTION_BY_ID[entry.id] ?? '' }));
+  // isTile: the view draws a tile, not the lines (what holds the block may size itself to it)
+  .map((entry) => ({ id: entry.id, label: entry.label, description: CODE_VIEW_DESCRIPTION_BY_ID[entry.id] ?? '', ...(entry.id === 'icon' ? { isTile: true } : {}) }));
 
 export const codeSlashAction = slashBlockActionDefine({
   name: 'code',

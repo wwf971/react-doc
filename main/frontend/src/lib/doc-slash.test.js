@@ -359,3 +359,63 @@ test('the commands of a place are listed by what is typed of their name', () => 
   assert.deepEqual(slashCommandItemListGet(commandList, 'value').map((item) => item.name), ['new']);
   assert.deepEqual(slashCommandItemListGet(commandList, 'zz'), []);
 });
+
+// a scope: an action whose name followed by "/" hands what comes after to actions of its own, read by
+// the same grammar (the kind card-comp of a card diagram, its scope the blocks of a document)
+test('a scope: "/" after the name of an action opening one reads the rest with its actions, as anywhere', () => {
+  const actionComp = slashActionDefine({ name: 'card-comp', label: 'Component', run: () => slashEffect.replace('empty'), scope: { actionList: [codeSlashAction, mdxSlashAction, actionLink] } });
+  const actionNote = slashActionDefine({ name: 'note', label: 'Note', run: () => slashEffect.replace('note') });
+  const byName = slashActionByNameBuild({ comp: actionComp, note: actionNote });
+  const get = (name) => byName.get(name.toLowerCase());
+  // the grammar
+  assert.deepEqual(slashTextParse('/card-comp', get), { mode: SLASH_MODE_ACTION, query: 'card-comp' });
+  const inScope = slashTextParse('/card-comp/', get);
+  assert.equal(inScope.mode, SLASH_MODE_ACTION);
+  assert.equal(inScope.query, '');
+  assert.equal(inScope.prefix, '/card-comp');
+  assert.equal(inScope.scopeActionList.length, 3);
+  const param = slashTextParse('/card-comp/code ic', get);
+  assert.equal(param.mode, SLASH_MODE_PARAM);
+  assert.equal(param.action, codeSlashAction);
+  assert.equal(param.param, 'ic');
+  assert.equal(param.prefix, '/card-comp');
+  // a name opening no scope, a name the scope lacks, two spaces: ended as anywhere
+  assert.equal(slashTextParse('/note/x', get).mode, SLASH_MODE_END);
+  assert.equal(slashTextParse('/card-comp/nothing x', get).mode, SLASH_MODE_END);
+  assert.equal(slashTextParse('/card-comp/code a  ', get).mode, SLASH_MODE_END);
+  // a text rewritten inside a scope keeps its prefix
+  assert.deepEqual(slashEffectApplyGet(slashEffect.paramSet('docs/'), 'link', undefined, '/card-comp'), { textNew: '/card-comp/link docs/', isEnded: false });
+
+  // the store: the scope's actions listed, chosen as in a document
+  const store = new DocSlashStore({ slashActionById: {} });
+  store.isOnSet(true);
+  const start = () => store.slashStart('panel', { anchor: { lineIndex: 0, column: 0 }, context: {}, actionOwnList: [actionNote, actionComp], isPageActionIncluded: false });
+  start();
+  store.slashUpdate('panel', { lineIndex: 0, lineBefore: '/card' });
+  // Enter runs it (an empty card), Tab enters its scope
+  assert.deepEqual(store.itemChoose(undefined, { isParamOpen: true }), { textNew: '/card-comp/', isEnded: false, lengthOld: 5 });
+  store.slashUpdate('panel', { lineIndex: 0, lineBefore: '/card-comp/' });
+  assert.deepEqual(store.itemList.map((item) => item.id), ['code', 'mdx', 'link']);
+  store.slashUpdate('panel', { lineIndex: 0, lineBefore: '/card-comp/co' });
+  assert.deepEqual(store.itemList.map((item) => item.id), ['code']);
+  // Tab: the views of /code, its param mode written with the prefix
+  assert.deepEqual(store.itemChoose(undefined, { isParamOpen: true }), { textNew: '/card-comp/code ', isEnded: false, lengthOld: 13 });
+  store.slashUpdate('panel', { lineIndex: 0, lineBefore: '/card-comp/code ic' });
+  assert.deepEqual(store.itemList.map((item) => item.id), ['icon']);
+  // the block of a document, in the view chosen: the whole slash text goes
+  const applied = store.itemChoose();
+  assert.equal(applied.textNew, '');
+  assert.equal(applied.isEnded, true);
+  assert.equal(applied.lengthOld, 18);
+  assert.equal(applied.blockSource, '```text view=icon\n```');
+  // a view chosen on the row of /mdx inside the scope
+  start();
+  store.slashUpdate('panel', { lineIndex: 0, lineBefore: '/card-comp/mdx' });
+  const rowIndex = store.itemList.findIndex((item) => item.id === 'mdx');
+  const choiceIndex = store.rowChoiceListGet(store.itemList[rowIndex].action).findIndex((choice) => choice.id === 'card');
+  assert.match(store.rowChoiceChoose(rowIndex, choiceIndex).blockSource, /renderComp=Mdx,view=card/);
+  // Enter on the action itself runs it
+  start();
+  store.slashUpdate('panel', { lineIndex: 0, lineBefore: '/card-comp' });
+  assert.deepEqual(store.itemChoose(), { textNew: 'empty', isEnded: true, lengthOld: 10 });
+});

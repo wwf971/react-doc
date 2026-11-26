@@ -689,9 +689,10 @@ export class ParametricEditStore {
 		});
 	}
 
-	// a member goes: its node stays, free, where it stands (isNodeRemoved: goes with it, its lines
-	// left with a free end); what followed it follows its parent, where it stands
-	memberRemove(groupId, memberId, { isNodeRemoved = false, positionGet } = {}) {
+	// a member goes: its node stays, free, where it stands (isNodeRemoved: goes with it, as a node goes:
+	// its lines left with a free end, the backgrounds around it told; DiagramEditStore.nodeRemoveWrite);
+	// what followed it follows its parent, where it stands
+	memberRemove(groupId, memberId, { isNodeRemoved = false, positionGet, boxGet } = {}) {
 		const solved = this.solve();
 		const member = this.memberGet(groupId, memberId);
 		const group = this.groupModelGet(groupId);
@@ -708,10 +709,7 @@ export class ParametricEditStore {
 				this.sizeDictatedKeepWrite(documentNext, groupId, memberId, solved);
 			}
 			documentNext.deleteIn(this.memberPathOf(groupId, memberId));
-			if (member.node && isNodeRemoved) {
-				this.store.endpointsDetach(documentNext, endpoint => endpoint.nodeId === member.node, positionGet);
-				documentNext.deleteIn(this.store.nodePathGet(member.node));
-			}
+			if (member.node && isNodeRemoved) this.store.nodeRemoveWrite(documentNext, member.node, { positionGet, boxGet });
 		});
 		if (isChanged && this.focus?.memberId === memberId) this.focus = null;
 		return isChanged;
@@ -874,6 +872,103 @@ export class ParametricEditStore {
 				if (documentNext.getIn(path)?.items?.length === 0) documentNext.deleteIn(path);
 			}
 		});
+	}
+
+	// ---------- removing what is selected (DiagramVisualEdit.jsx: a session's removalGet) ----------
+
+	// what Delete takes away of what the layer has selected (DiagramRemove.js: a removal), and what
+	// depends on it: in a mode of a member, the thing open in it (a reference point, a line of a
+	// locator; nothing while only the list is shown); a group or a layout member focused; a node a
+	// group places, as a member goes with its node. undefined: not the layer's (base, the engine's
+	// removal of what the path selects, stands)
+	removalGet(base, editor, { positionGet, boxGet } = {}) {
+		const plural = (count, one, many = `${one}s`) => `${count} ${count === 1 ? one : many}`;
+		// what becomes of one, or of several
+		const verb = (count, one, many) => (count === 1 ? one : many);
+		const removalOf = (fields, rectGet) => ({ dependentList: [], ...fields, ...(rectGet ? { rectGet } : {}) });
+		const mode = this.modeShown;
+		if (mode) {
+			const names = this.memberLabelOf(mode.groupId, mode.memberId);
+			if (mode.kind === 'referencePoint' && mode.pointId) {
+				const member = this.groupModelGet(mode.groupId).memberById.get(mode.memberId);
+				const declared = member.referencePointList.find(item => item.id === mode.pointId);
+				if (!declared) return null;
+				const isDefault = member.referencePointDefault?.format === 'own' && member.referencePointDefault.id === declared.id;
+				const useCount = new Set(this.referencePointUseListOf(mode.groupId, mode.memberId).filter(use => (use.definition?.format === 'own' && use.definition.id === declared.id) || (isDefault && (!use.definition || use.definition.format === 'default'))).map(use => use.memberId)).size;
+				return removalOf({
+					key: `reference-point:${mode.groupId}/${mode.memberId}/${declared.id}`, kind: 'referencePoint',
+					what: `the reference point "${declared.name || referencePointLabelOf(declared.point, member, this.formatList)}" of "${names.label}"`,
+					dependentList: [
+						...(useCount ? [{ id: 'measured', count: useCount, label: plural(useCount, 'thing measured from it', 'things measured from it'), effect: verb(useCount, 'is measured from the same place of the box: nothing moves', 'are measured from the same place of the box: nothing moves') }] : []),
+						...(isDefault ? [{ id: 'default', count: 1, label: 'Its default reference point', effect: 'becomes the same place of the box, written out' }] : []),
+					],
+					run: () => this.memberReferencePointRemove(mode.groupId, mode.memberId, declared.id),
+				});
+			}
+			if (mode.kind === 'locatorLine' && mode.lineId) {
+				const lineList = this.locatorLineListOf(mode.groupId, mode.memberId, mode.axis);
+				const line = lineList.find(item => item.id === mode.lineId);
+				if (!line) return null;
+				const layout = this.groupModelGet(mode.groupId).memberById.get(mode.memberId).layout;
+				const useCount = this.locatorLineUseCountOf(mode.groupId, mode.memberId, mode.axis, line.id);
+				return removalOf({
+					key: `locator-line:${mode.groupId}/${mode.memberId}/${mode.axis}/${line.id}`, kind: 'locatorLine',
+					what: `the ${mode.axis === 'x' ? 'vertical' : 'horizontal'} line "${line.name || line.id}" of "${names.label}"`,
+					...(layout.xList.length + layout.yList.length <= 1 ? { reason: 'A locator keeps at least one line.' } : {}),
+					dependentList: useCount ? [{ id: 'on-it', count: useCount, label: plural(useCount, 'thing stands', 'things stand') + ' on it', effect: verb(useCount, 'and stays where it stands, measured from the lines left', 'and stay where they stand, measured from the lines left') }] : [],
+					run: () => this.locatorLineRemove(mode.groupId, mode.memberId, mode.axis, line.id),
+				}, () => focusRectGet(this, { kind: 'member', groupId: mode.groupId, memberId: mode.memberId }, editor));
+			}
+			// a mode showing its list: what is in it is chosen first, the thing itself is not taken
+			return null;
+		}
+		const focus = this.focusShown;
+		if (focus?.kind === 'group') {
+			const group = this.groupModelGet(focus.groupId);
+			const nodeCount = group.memberList.filter(member => member.nodeId).length;
+			const layoutCount = group.memberList.length - nodeCount;
+			return removalOf({
+				key: `group:${focus.groupId}`, kind: 'group', what: `the group "${this.groupGet(focus.groupId)?.name || 'Group'}"`,
+				dependentList: [
+					...(nodeCount ? [{ id: 'members', count: nodeCount, label: plural(nodeCount, 'member'), effect: verb(nodeCount, 'stays where it stands, as a free element', 'stay where they stand, as free elements') }] : []),
+					...(layoutCount ? [{ id: 'layouts', count: layoutCount, label: plural(layoutCount, 'layout or locator', 'layouts and locators'), effect: verb(layoutCount, 'goes with it', 'go with it') }] : []),
+				],
+				run: () => this.groupRemove(focus.groupId),
+			}, () => focusRectGet(this, focus, editor));
+		}
+		if (focus?.kind === 'member') {
+			const group = this.groupModelGet(focus.groupId);
+			const member = group.memberById.get(focus.memberId);
+			const layoutType = this.catalog.layoutTypeByType[member.layout.type];
+			const childCount = group.childListOf(member.id).length;
+			const followerCount = group.memberList.filter(other => other.parentIdList[0] !== member.id && other.parentIdList.includes(member.id)).length;
+			return removalOf({
+				key: `member:${focus.groupId}/${focus.memberId}`, kind: 'layout', what: `the ${layoutType.label.toLowerCase()} "${this.memberLabelOf(focus.groupId, focus.memberId).label}"`,
+				dependentList: [
+					...(childCount ? [{ id: 'children', count: childCount, label: layoutType.isChildConstrained ? `${plural(childCount, 'thing stands', 'things stand')} on its lines` : plural(childCount, 'thing it arranges', 'things it arranges'), effect: verb(childCount, (layoutType.isChildConstrained ? 'and stays' : 'stays') + ' where it stands, following what it followed', (layoutType.isChildConstrained ? 'and stay' : 'stay') + ' where they stand, following what it followed') }] : []),
+					...(followerCount ? [{ id: 'followers', count: followerCount, label: plural(followerCount, 'thing placed from it', 'things placed from it'), effect: verb(followerCount, 'stays where it stands', 'stay where they stand') }] : []),
+				],
+				run: () => this.memberRemove(focus.groupId, focus.memberId),
+			}, () => focusRectGet(this, focus, editor));
+		}
+		// a node a group places: it goes with its member, what followed it following its parent
+		if (base?.kind === 'node') {
+			const at = this.memberOfNode(base.nodeId);
+			if (!at) return undefined;
+			const group = this.groupModelGet(at.groupId);
+			const followerCount = group.memberList.filter(member => member.id !== at.memberId && member.parentIdList.includes(at.memberId)).length;
+			const boundCount = group.memberList.filter(member => ['width', 'height'].some(axis => member.sizeBinding?.[axis]?.memberId === at.memberId)).length;
+			return {
+				...base,
+				dependentList: [
+					...base.dependentList,
+					...(followerCount ? [{ id: 'followers', count: followerCount, label: plural(followerCount, 'thing placed from it', 'things placed from it'), effect: verb(followerCount, 'follows what it followed, where it stands', 'follow what it followed, where they stand') }] : []),
+					...(boundCount ? [{ id: 'bound', count: boundCount, label: plural(boundCount, 'thing sized by it', 'things sized by it'), effect: verb(boundCount, 'keeps the size it has', 'keep the size they have') }] : []),
+				],
+				run: () => this.memberRemove(at.groupId, at.memberId, { isNodeRemoved: true, positionGet, boxGet }),
+			};
+		}
+		return undefined;
 	}
 
 	// ---------- reference points (ParametricReferencePoint.js) ----------
@@ -1069,6 +1164,14 @@ export class ParametricEditStore {
 		});
 		if (isChanged && this.mode?.kind === 'locatorLine' && this.mode.lineId === lineId) this.mode = { ...this.mode, lineId: null };
 		return isChanged;
+	}
+
+	// how many members stand on a line of a locator: name it in their constraint (a line, a span from
+	// or to it), or measure from a reference point of the locator on it
+	locatorLineUseCountOf(groupId, memberId, axis, lineId) {
+		const key = axis === 'x' ? 'lineX' : 'lineY';
+		const isOn = (name, value) => Boolean(value) && typeof value === 'object' && (name === key ? value.line === lineId || value.from === lineId || value.to === lineId : value.format === 'line' && value[key] === lineId);
+		return (this.groupModelGet(groupId)?.memberList ?? []).filter(member => member.parentIdList.includes(memberId) && member.constraint && Object.entries(member.constraint).some(([name, value]) => isOn(name, value))).length;
 	}
 
 	// one axis of a size a constraint dictates, written as the size of the node

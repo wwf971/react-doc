@@ -14,7 +14,7 @@ import {
   codeTextViewGet, codeTextViewSet,
 } from '../lib/doc-edit-code.js';
 import { itemAtomKindAdd, itemAtomKindTextRemove, itemAtomValueSet, itemAtomModelBuild, itemAtomOffsetDisplayGet, itemAtomTextBuild, itemPartGet, itemPartTextWrite } from '../lib/doc-edit-item-atom.js';
-import { embedHistoryHashGet, embedPathParse, embedTextHashGet } from '../lib/doc-edit-embed.js';
+import { docHostPathGet, embedHistoryHashGet, embedPathParse, embedTextHashGet, heldPathParse } from '../lib/doc-edit-embed.js';
 import { textChangeOperationListGet } from '../lib/doc-text-merge';
 import { keyedComputedCreate } from '../lib/keyed-computed.js';
 import { lineOperationApply, lineOperationListApply } from '../lib/doc-line-operation';
@@ -314,6 +314,20 @@ export type EditDocState = {
 
 export type EditResult = { code: number; data?: any; message: string };
 
+// the holder of a document held by a component (heldPathBuild: the text of an MDX block a card of a
+// card diagram holds): how its text is read and written, and why it cannot be written now ('' when
+// it can). registered by the component drawing it (DocEditStore.heldDocSet)
+export type HeldDoc = {
+  textGet: () => string;
+  textWrite: (text: string) => Promise<EditResult | undefined> | EditResult | undefined;
+  writeReason: string;
+};
+
+// a held text as it is compared and written: its trailing line breaks, which a holder may keep or drop, left out
+function heldTextNormalize(text: string): string {
+  return String(text ?? '').replace(/\r\n/g, '\n').replace(/\n+$/, '');
+}
+
 // what a write says of the action it belongs to, recorded by the server with
 // the write (plugin/doc-edit-history.ts HistoryMeta)
 //   label      what an undo button says ("Move block"); made from the
@@ -396,6 +410,13 @@ export class DocEditStore {
   isEditMode = false;
   isBlockSelectMode = false;
   sourceByPath: Record<string, EditSource> = {};
+  // the documents held by components, by their path (heldPathBuild), with how they are read and written
+  heldDocByPath: Record<string, HeldDoc> = {};
+  // the held document whose holder is writing it now, with the texts before and after: the write it
+  // makes of the page's document (a card writing its diagram's block) is made for the session being
+  // saved in it, which it must not wait to leave, and is an entry of the page's history made in that
+  // document (found by its popup as the entries of an MDX block are)
+  heldWriting: { path: string; hashBefore: string; hashAfter: string; label: string } | undefined = undefined;
   docEditByPath: Record<string, EditDocState> = {};
   // computed values per key, made on first use (lib/keyed-computed.js)
   keyedGet = keyedComputedCreate();
@@ -487,6 +508,8 @@ export class DocEditStore {
       atomKindByName: observable.ref,
       blockTextPrepare: false,
       sourceByPath: observable.shallow,
+      heldDocByPath: observable.shallow,
+      heldWriting: false,
       compilePendingByPath: false,
       leavePromise: false,
       sidePanelTextStartOwnerId: false,
@@ -661,6 +684,8 @@ export class DocEditStore {
     // a document embedded in a block of another one: as its host
     const embed = embedPathParse(path);
     if (embed) return this.docIsEditable(embed.hostPath);
+    // a document held by a component: as its holder says
+    if (heldPathParse(path)) return this.heldDocByPath[path]?.writeReason === '';
     if (this.sourceStore.pathReadOnlyReasonGet(path) !== '') return false;
     const entry = this.sourceStore.entryByInternalPath.get(path);
     return Boolean(entry) && (entry.ext === 'md' || entry.ext === 'mdx');
@@ -696,6 +721,10 @@ export class DocEditStore {
     if (!this.api) return;
     if (embedPathParse(path)) {
       await this.embedEnsure(path);
+      return;
+    }
+    if (heldPathParse(path)) {
+      await this.heldEnsure(path);
       return;
     }
     const sourceKnown = this.sourceByPath[path];
@@ -757,8 +786,8 @@ export class DocEditStore {
   }
 
   private async docEditCompile(path: string, text: string, hash: string): Promise<void> {
-    // an embedded document is written in the dialect of its host
-    const entry = this.sourceStore.entryByInternalPath.get(embedPathParse(path)?.hostPath ?? path);
+    // an embedded (or held) document is written in the dialect of its host
+    const entry = this.sourceStore.entryByInternalPath.get(docHostPathGet(path));
     const format = entry?.ext === 'mdx' ? 'mdx' : 'md';
     const compileConfig = this.sourceStore.compileConfig ?? {};
     let blockListCompiled: any[] = [];
@@ -881,6 +910,7 @@ export class DocEditStore {
     }
     const historyMeta: EditHistoryMeta = { ...history, label: history?.label || this.historyLabelDerive(path, operation) };
     if (embedPathParse(path)) return this.embedOperationApply(path, operation, { messageFailure, onApplied, stateRemapList, history: historyMeta });
+    if (heldPathParse(path)) return this.heldOperationApply(path, operation, { onApplied, stateRemapList, label: historyMeta.label });
     const result = await this.api.sourceApply(path, source.hash, operation, filePathDeleteList, historyMeta);
     if (result.code !== 0) {
       return { code: result.code, message: result.code === -2 ? messageConflict : result.message || messageFailure };
@@ -2681,6 +2711,88 @@ export class DocEditStore {
     return { code: 0, message: '', data: { text, hash } };
   }
 
+  // ---------- documents held by a component ----------
+  // (doc_page_impl_mdx_embed.md#held-by-another-component) the text of an MDX block a card of a card
+  // diagram holds is no fence of a file: the component registers how it is read and written, and
+  // every operation is applied here and handed to it (heldPathBuild). Its history is the holder's: the
+  // page writes no file for it, so its steps are undone where it is held.
+
+  heldDocSet(path: string, holder: HeldDoc) {
+    this.heldDocByPath = { ...this.heldDocByPath, [path]: holder };
+  }
+
+  // the holder gone (the component unmounted): only the one registered, not a later one
+  heldDocRemove(path: string, holder: HeldDoc) {
+    if (this.heldDocByPath[path] !== holder) return;
+    const { [path]: removed, ...rest } = this.heldDocByPath;
+    this.heldDocByPath = rest;
+  }
+
+  // why a held document cannot be written now, '' when it can
+  heldDocReasonGet(path: string): string {
+    const holder = this.heldDocByPath[path];
+    return holder ? holder.writeReason : 'what holds this document is not shown any more';
+  }
+
+  // the holder's text changed (a step undone where it is held, its text typed elsewhere): the
+  // document is read again, unless it is the text it holds already
+  heldDocTextChanged(path: string, text: string) {
+    const source = this.sourceByPath[path];
+    if (!source || source.status !== 'done' || heldTextNormalize(source.text ?? '') === heldTextNormalize(text)) return;
+    void this.sourceAccept(path, text, embedTextHashGet(text));
+  }
+
+  private async heldEnsure(path: string): Promise<void> {
+    const holder = this.heldDocByPath[path];
+    if (!holder) {
+      runInAction(() => {
+        this.sourceByPath[path] = { status: 'error', message: 'what holds this document is not shown any more: open it again from there' };
+      });
+      return;
+    }
+    const text = holder.textGet();
+    await this.sourceAccept(path, text, embedTextHashGet(text));
+  }
+
+  // an operation on a held document: applied to its text here, the text handed to its holder, then
+  // accepted as the new text of the document
+  private async heldOperationApply(
+    path: string,
+    operation: any,
+    { onApplied, stateRemapList, label = '' }: { onApplied?: () => void; stateRemapList?: { lineFrom: number; lineTo: number | undefined }[]; label?: string },
+  ): Promise<EditResult> {
+    const holder = this.heldDocByPath[path];
+    if (!holder) return { code: -1, message: this.heldDocReasonGet(path) };
+    if (holder.writeReason !== '') return { code: -1, message: holder.writeReason };
+    const source = this.sourceByPath[path];
+    let textAfter: string;
+    try {
+      textAfter = Array.isArray(operation) ? lineOperationListApply(source.text ?? '', operation) : lineOperationApply(source.text ?? '', operation);
+    } catch (error: any) {
+      return { code: -1, message: String(error?.message ?? error) };
+    }
+    // the text is unchanged in its holder since it was read: else it changed elsewhere
+    if (heldTextNormalize(holder.textGet()) !== heldTextNormalize(source.text ?? '')) return { code: -2, message: messageConflict };
+    let result: EditResult | undefined;
+    this.heldWriting = { path, hashBefore: embedHistoryHashGet(source.text ?? ''), hashAfter: embedHistoryHashGet(textAfter), label };
+    try {
+      result = await holder.textWrite(heldTextNormalize(textAfter));
+    } catch (error: any) {
+      result = { code: -1, message: String(error?.message ?? error) };
+    } finally {
+      this.heldWriting = undefined;
+    }
+    if (!result || result.code !== 0) return { code: result?.code || -1, message: result?.message || 'The document was not written where it is held.' };
+    if (this.compStateStore) {
+      if (stateRemapList) this.compStateStore.docLineRemap(path, stateRemapList);
+      else this.compStateStore.docLineShift(path, lineShiftListGet(operation, 0));
+    }
+    if (onApplied) runInAction(onApplied);
+    const hash = embedTextHashGet(textAfter);
+    await this.sourceAccept(path, textAfter, hash);
+    return { code: 0, message: '', data: { text: textAfter, hash } };
+  }
+
   // a new item of the local store holding the lines of a code block, as a
   // block of the component Code reads them; the item of a list item too
   // (DocEditStructStore.itemCodeAssetMove)
@@ -3227,11 +3339,16 @@ export class DocEditStore {
       ? event.data.dependencyList
       : this.blockDependencyListGet(block, raw, path);
 
-    const isLeft = await this.sessionLeaveForIndexAction(path);
+    // made for the session of a held document being saved (its holder writing this block): that
+    // session is not left, it is waiting for this write
+    const heldWriting = this.heldWriting;
+    const isForHeldSession = heldWriting !== undefined && this.session?.path === heldWriting.path;
+    const isLeft = isForHeldSession || await this.sessionLeaveForIndexAction(path);
     if (!isLeft) return { code: -1, message: 'the open edit session was not left' };
     const text = componentBlockTextBuild(block, lang !== undefined ? { raw, lang } : { raw });
     return this.operationApply(path, blockReplaceOperationBuild(block, text), {
       messageFailure: 'The data of the block was not replaced.',
+      ...(heldWriting ? { history: { ...(heldWriting.label ? { label: heldWriting.label } : {}), docPath: heldWriting.path, embed: { line: 0, hashBefore: heldWriting.hashBefore, hashAfter: heldWriting.hashAfter } } } : {}),
       onApplied: () => {
         this.blockTextPending = { path, blockIndex, text };
       },

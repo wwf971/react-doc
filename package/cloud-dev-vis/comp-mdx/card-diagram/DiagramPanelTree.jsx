@@ -17,6 +17,8 @@ import { TREE_PAGE_SIZE_LIST, treeWordListOf } from './DiagramPanelTreeData.js';
 //   markedKey        an item marked another way (the scene edited)
 //   onItemClick(key, event), onItemContext(key, event)   a click; a right-click (a menu of the tab)
 //   onCursor(key)    the keys moved to an item (the tab says what that does: select, focus)
+//   onItemDelete(key, event)   Delete or Backspace on the item of the cursor: the tab takes it away
+//                    (the removal of the editor, with its question: card-diagram-impl.md#removing-what-is-selected)
 //   dragTypeGet(key) the type of data a row dragged out carries, null when it is not dragged; the
 //                    data is the key
 export const TREE_ROW_HEIGHT = 22;
@@ -26,7 +28,7 @@ const ROW_OVERSCAN = 8;
 const rowHeightOf = row => (row.type === 'pager' ? TREE_PAGER_HEIGHT : TREE_ROW_HEIGHT);
 const INDENT = 14;
 
-export const DiagramPanelTree = observer(function DiagramPanelTree({ tree, model, selectedKey = null, markedKey = null, onItemClick, onItemContext, onCursor, dragTypeGet, emptyText, ariaLabel }) {
+export const DiagramPanelTree = observer(function DiagramPanelTree({ tree, model, selectedKey = null, markedKey = null, onItemClick, onItemContext, onCursor, onItemDelete, dragTypeGet, emptyText, ariaLabel }) {
 	const hostRef = useRef(null);
 	const rowList = tree.rowListGet(model, selectedKey);
 	const wordList = tree.wordList;
@@ -99,6 +101,10 @@ export const DiagramPanelTree = observer(function DiagramPanelTree({ tree, model
 		} else if (event.key === 'Enter' && row) {
 			event.preventDefault();
 			onItemClick?.(row.key, event);
+		} else if ((event.key === 'Delete' || event.key === 'Backspace') && row && onItemDelete && !event.ctrlKey && !event.metaKey && !event.altKey) {
+			event.preventDefault();
+			event.stopPropagation();
+			if (!event.repeat) onItemDelete(row.key, event);
 		} else if (event.key === 'Escape' && tree.search) {
 			event.preventDefault();
 			event.stopPropagation();

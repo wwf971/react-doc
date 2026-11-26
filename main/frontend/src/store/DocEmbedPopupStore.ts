@@ -1,5 +1,5 @@
 import { makeAutoObservable, observable, runInAction } from 'mobx';
-import { embedPathBuild } from '../lib/doc-edit-embed.js';
+import { embedPathBuild, heldPathParse } from '../lib/doc-edit-embed.js';
 
 // The popup of an MDX block (doc_page_impl_mdx_embed.md#the-popup): the
 // document written in the block, read, or edited in edit mode. One per page,
@@ -20,6 +20,11 @@ import { embedPathBuild } from '../lib/doc-edit-embed.js';
 //       title      what the marker says
 //       raw        the text of the embedded document, as the block last drew it
 //       Renderer   the renderer of the page: the document in View
+//       path       optional: the path of its document when the block is held by another
+//                  component (heldPathBuild: an MDX block in a card of a diagram), else
+//                  the embedded path of its host and line
+//       titleWrite optional (title) -> result: how the title is written by such a block,
+//                  which has no marker in a file
 //       mode       'view' | 'edit' }
 export type EmbedPopup = {
   key: string;
@@ -28,9 +33,11 @@ export type EmbedPopup = {
   title: string;
   raw: string;
   Renderer: any;
+  path?: string;
+  titleWrite?: (title: string) => Promise<any> | any;
   mode: 'view' | 'edit';
 };
-type EmbedPopupContent = Pick<EmbedPopup, 'title' | 'raw' | 'line' | 'Renderer'>;
+type EmbedPopupContent = Pick<EmbedPopup, 'title' | 'raw' | 'line' | 'Renderer' | 'titleWrite'>;
 
 export class DocEmbedPopupStore {
   popup: EmbedPopup | undefined = undefined;
@@ -48,7 +55,8 @@ export class DocEmbedPopupStore {
   // the path of the embedded document shown (lib/doc-edit-embed.js)
   get path(): string {
     const popup = this.popup;
-    return popup ? embedPathBuild(popup.hostPath, popup.line) : '';
+    if (!popup) return '';
+    return popup.path ?? embedPathBuild(popup.hostPath, popup.line);
   }
 
   isOpenFor(key: string): boolean {
@@ -59,6 +67,8 @@ export class DocEmbedPopupStore {
   get editReason(): string {
     const popup = this.popup;
     if (!popup) return '';
+    // held by another component: as its holder says
+    if (popup.path && heldPathParse(popup.path)) return this.editStore?.docIsEditable?.(popup.path) ? '' : this.editStore?.heldDocReasonGet?.(popup.path) || 'it cannot be written here';
     if (!Number.isInteger(popup.line) || popup.line < 1) return 'the line of the block in its document is not known';
     if (this.editStore?.docIsEditable?.(popup.hostPath)) return '';
     return this.editStore?.isAvailable ? 'this document cannot be written from the page' : 'editing is available on the development server only';
@@ -82,7 +92,7 @@ export class DocEmbedPopupStore {
   update(key: string, content: EmbedPopupContent) {
     const popup = this.popup;
     if (!popup || popup.key !== key) return;
-    if (popup.title === content.title && popup.raw === content.raw && popup.line === content.line && popup.Renderer === content.Renderer) return;
+    if (popup.title === content.title && popup.raw === content.raw && popup.line === content.line && popup.Renderer === content.Renderer && popup.titleWrite === (content.titleWrite ?? popup.titleWrite)) return;
     this.popup = { ...popup, ...content };
   }
 
@@ -124,7 +134,7 @@ export class DocEmbedPopupStore {
     this.titleMessage = '';
     let result: any;
     try {
-      result = await this.editStore.mdxEmbedTitleSet(popup.hostPath, popup.line, title);
+      result = popup.titleWrite ? await popup.titleWrite(title) : await this.editStore.mdxEmbedTitleSet(popup.hostPath, popup.line, title);
     } catch (error: any) {
       result = { code: -1, message: String(error?.message ?? error) };
     }

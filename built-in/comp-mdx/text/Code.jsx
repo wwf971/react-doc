@@ -53,8 +53,12 @@ export const Code = observer(function Code({ data = {}, config = {}, onEvent }) 
   const title = typeof data.title === 'string' ? data.title : '';
   const isFromAsset = Boolean(config.assetInfo?.isFromAsset);
   let editReason = '';
+  // lines written inline are written where the block is: the document it is in says whether that
+  // can be now (config.docState: a document of the page, or what holds the block, a card of a
+  // diagram, which is written only while its diagram is edited)
+  const isHolderWritable = config.docState ? config.docState.isEditAvailable : editStore?.docIsEditable(docPath);
   if (isFromAsset && !assetStore?.isWritable) editReason = 'the asset service layer cannot be written here';
-  else if (!isFromAsset && !editStore?.docIsEditable(docPath)) editReason = envStore?.reasonGet?.('edit') || 'this document cannot be written from the page';
+  else if (!isFromAsset && !isHolderWritable) editReason = envStore?.reasonGet?.('edit') || config.docState?.editReason || 'this document cannot be written from the page';
   // what the dialog of the lines needs, in every view (the icon view opens it
   // from its tile, another view from the chip of the block in the editor of a list item)
   const dialogProps = {

@@ -24,7 +24,7 @@ import { CardGraph } from './CardGraph.jsx';
 import { cardGraphNormalize, cardGraphSearchMatch, cardGraphSizeGet } from './CardGraphData.js';
 import { parametricCanvasFeature } from '../card-diagram-parametric-canvas/ParametricFeature.jsx';
 import { CardComp } from './CardComp.jsx';
-import { CARD_COMP_TYPE, cardCompNodeCreate, cardCompNormalize } from './CardCompData.js';
+import { CARD_COMP_SIZE_MODE_LIST, CARD_COMP_TYPE, cardCompNodeCreate, cardCompNormalize, cardCompSectionListBuild } from './CardCompData.js';
 
 // The node kinds of the base series (card-diagram-impl.md#node-registries): a
 // generic table card with authored fields and rows, without any limit on
@@ -269,18 +269,20 @@ export const cardCompNodeKind = {
 	label: 'Component',
 	contract: {
 		...compactContract({ width: 240, height: 64 }, []),
+		// a card whose width is auto is as wide as what its component draws: its own size, a height
+		// alone, a block in a view drawing a tile (the icon of a code block) (CardCompData.js)
+		isWidthFit: true,
+		// its own size, or a width, a height or both given, what is beyond scrolling; the handles
+		// resize what its mode gives (DiagramNodeResize.js)
+		sizeModeList: CARD_COMP_SIZE_MODE_LIST,
 		dataNormalize: cardCompNormalize,
-		resizeAxisList: ['width'],
 		// no words of its own (a label, a description): the component says what it is
 		propertyList: [],
 		// found by the name of its component and the words of its data
 		searchMatch: (node, helper) => ([node.data?.comp, node.data?.raw].some(value => helper.test(value)) ? { partList: [], childList: [], isWhole: true } : null),
-		cardSectionListGet: ({ nodeId, node, store, change }) => (node.data?.comp ? [{
-			id: 'comp-data', label: 'Its data',
-			note: `What a block of ${node.data.comp} holds in a document, in ${node.data.lang ?? 'yaml'}. The component edits it in its own modes: the buttons over the card.`,
-			propertyList: [{ id: 'comp-raw', label: node.data.lang ?? 'yaml', kind: 'text', isMultiline: true, value: node.data.raw ?? '', set: value => change(() => store.nodeCompDataSet(nodeId, { raw: value }, { groupKey: `comp-raw:${nodeId}` })) }],
-			actionList: [],
-		}] : []),
+		// its values one by one, when its component offers them, and its data as text (CardCompData.js);
+		// the definition of its component is the page's, asked of the editor
+		cardSectionListGet: ({ nodeId, node, store, editor, change }) => cardCompSectionListBuild({ nodeId, node, store, change, definition: node.data?.comp ? editor?.compDefinitionGet?.(node.data.comp) ?? null : null }),
 	},
 	schema: null,
 	Card: CardComp,

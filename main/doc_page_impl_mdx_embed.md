@@ -95,6 +95,29 @@ operationApply(embedded path, operation)   DocEditStore.embedOperationApply
 - **A write leaves no session.** The session of a document that is not the page's (in a popup, in a block of the page) is left when the page goes to another document, never because a file was written: every edit in the popup writes the host, and the edit that writes it (a split, a join, a new item) keeps its session open on the item it leads to (`DocEditStore.init`, the reaction to the page).
 - **The path names the block now.** The line of the path moves with every edit above the block. The popup reads it again from the block each time it renders, so it always names the block it was opened from; an open edit of a block that moved is refused as moved, and is opened again from there.
 
+## Held by another component
+
+An MDX block another component holds, with no line of a file of its own (a card of a card diagram: [Blocks of a document](../package/cloud-dev-vis/doc/card-diagram-impl.md#blocks-of-a-document)), is edited in its popup as one written in a document. Its text is the holder's, so the block **holds its document for the edit layer**: it registers how the text is read and written (`DocEditStore.heldDocSet(path, { textGet, textWrite, writeReason })`) under a path of its own, `{host}::held@{key}` (`heldPathBuild`, `lib/doc-edit-embed.js`), and opens the popup with that path.
+
+<!--renderComp=DiagramText-->
+```text
+docEditEnsure(held path)                  DocEditStore.heldEnsure: the text the holder gives
+operationApply(held path, operation)      DocEditStore.heldOperationApply
+  the operation applied to the text here  lib/doc-line-operation.ts
+  the holder still gives the text it was  else: a conflict, read again
+  made on?
+  the new text handed to it               textWrite: the block's dataReplaceRequest, which
+                                          its holder answers (a card: its node, written
+                                          into the block of its diagram)
+  its text accepted again                 the compiled body follows
+```
+
+- **Editable as its holder says.** `docIsEditable` of the path is `writeReason === ''`; the block takes it from the state of the document it is in, which its holder hands it (`config.docState`: a card hands the page's while its diagram is read). Its Edit is greyed with that reason otherwise.
+- **One session.** The page holds one edit session: entering a block in the popup leaves the one open in the page, the editor of a diagram included, so the writes of the popup are made with the diagram read, each one a write of the page's document. That write is made for the session being saved in the popup, which it does not wait to leave (`heldWriting`).
+- **Its history** is the host's, as an MDX block's: every write is an entry of the page's document tagged with the held path and the texts before and after (`docPath`, `embed`), so the popup undoes the edits made in it ([The popup of an MDX block](doc_page_impl_edit_history.md#the-popup-of-an-mdx-block)). A change made while the diagram is edited (its title, in the popup's header) is a step of the diagram's draft.
+- **Its title** is a prop the holder writes (`blockPropSetRequest { props: { title } }`), not a marker of a file: `titleWrite` of `open`, handed again when the block is drawn anew elsewhere.
+- **Drawn anew elsewhere.** The block lets its document go a moment after it unmounts, so a block drawn again (the diagram going from its editor to its view while the popup edits its document) holds it first, and the popup stays in Edit. When its holder's text changes otherwise (an undo of the page, a text typed in the edit card), the block says so (`heldDocTextChanged`) and the document is read again.
+
 ## In the text of a list item
 
 An MDX block among the text of a list item is a **chip of the text**, as a code block is ([Code blocks in the text of an item](doc_page_impl_edit_structure.md#code-blocks-in-the-text-of-an-item)): one character the caret steps over, selected by a first Backspace and deleted by a second. A double click on the chip opens the popup. A right click on it, on its tile or its card in an item not being edited, deletes it (`Delete MDX Block…`); at the root an MDX block is a block, deleted by the menu of the block ([Deleting a thing](doc_page_impl_edit_structure.md#deleting-a-thing)). Unlike a code block, an MDX block is a chip even when it is the whole text of its item, since its lines are never edited in the item (`isEmbed` in the table of blocks, `lib/doc-edit-item-atom.js`), and it cannot be turned into text: its document is not one line.
@@ -149,7 +172,8 @@ comp-doc/registry/registry-expose.js        mdxExpose: "MDX block" in the insert
 frontend/src/lib/doc-edit-embed.js          the path of an embedded document (embedPathBuild, embedPathParse), the hash
                                             of its text; doc-edit-embed.test.js
 frontend/src/lib/doc-line-operation.ts      the line operations, shared by the browser and the backend
-frontend/src/store/DocEditStore.ts          embedTextGet, embedEnsure, embedOperationApply, codeFenceLocate, mdxEmbedTitleSet
+frontend/src/store/DocEditStore.ts          embedTextGet, embedEnsure, embedOperationApply, codeFenceLocate, mdxEmbedTitleSet;
+                                            heldDocSet, heldEnsure, heldOperationApply, heldDocTextChanged
 frontend/src/lib/doc-edit-code.js           codeMarkerPropsSet: the props of the marker of a block written
 frontend/src/lib/doc-slash.js               slashEffect.block, slashBlockTextInsert
 comp-doc/link/link-slash.js                 /inline (linkSlashActionBuild({ isPopup }))

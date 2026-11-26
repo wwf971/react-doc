@@ -251,7 +251,7 @@ Everything the layer changes goes through `DiagramEditStore.changeApply`, so eve
 | reference points of a member | *Edit reference points* of its card, *Reference points…* of its right-click | its reference points listed (that of its outline, those it declares; the default marked); one added or removed; one opened: its name, its format and parameters (those of its outline), whether it is the default | every reference point of the member, with its name; a click on one opens it |
 | lines of a locator | *Name, remove…* of an axis in its card, a click on a chevron | the lines of that axis listed with their places and how many things stand on each; one opened: its name, its place, its removal | the locator focused |
 
-Its path bar leads back: the member, the list, the thing open. A mode is state of the editor, like the selection: never a step of the history, while everything changed in it is.
+Its path bar leads back: the member, the list, the thing open. A mode is state of the editor, like the selection: never a step of the history, while everything changed in it is. **Delete** takes away the thing open in a mode (the reference point, the line), and nothing while the mode shows its list; outside a mode, the group or layout member focused, or a node of a group with its member ([Removing what is selected](card-diagram-impl.md#removing-what-is-selected): what was placed from it, what stands on a line, what is measured from a reference point is said first).
 
 ### On the canvas
 

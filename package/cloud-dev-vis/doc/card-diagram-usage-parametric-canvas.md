@@ -96,7 +96,7 @@ parametric:
 | find something in a large drawing | the tree of the panel: its search, and a long level shown a page at a time, with a filter of its own |
 | color a node | its edit card, **Style**: a tone, none, or a color of your own ([The style of a node](card-diagram-impl.md#the-style-of-a-node)) |
 
-Escape or a right-click lets an armed tool go; Ctrl/⌘ + Z takes back any step.
+Escape or a right-click lets an armed tool go; Ctrl/⌘ + Z takes back any step. **Delete** (or Backspace) takes away what is selected: a card, a line, a group or a layout focused, the line of a locator or the reference point open in its card, a row of the tree of the panel. When other things depend on it (members of a group, things placed from a card, things standing on a line), it says first what becomes of them, and waits for Enter or *Delete*; Escape gives up.
 
 ## Groups placed by rules
 

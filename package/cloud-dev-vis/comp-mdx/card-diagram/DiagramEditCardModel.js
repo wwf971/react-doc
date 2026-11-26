@@ -3,7 +3,7 @@ import { cardSchemaGet, cardRowAnchorBuild, fieldValuesOf, fieldValueLabelsOf, n
 import { cardRowDisplayIdListOf, CARD_VIEW_MODE_LABEL, cardViewLabelOf, cardViewListGet, cardViewSourceOf, cardViewSwitcherIsShown, cardFooterIsShown, cardFooterTextOf } from './TableCardData.js';
 import { strokeDashList } from './DiagramEditStore.js';
 import { LINE_STROKE_SWATCH_LIST, nodeStyleKeyListOf, nodeStyleLabelOf, nodeStyleSwatchListOf } from './DiagramNodeStyle.js';
-import { NODE_SIZE_MODE_BY_ID, nodeSizeModeOf } from './DiagramNodeResize.js';
+import { nodeSizeModeListOf, nodeSizeModeOf } from './DiagramNodeResize.js';
 import { DEPTH_MOVE_LABEL, DEPTH_MOVE_LIST } from './DiagramDepth.js';
 import { cardTabList, tabPathGet, pathLabelListGet, rowNameGet, selectionPathBuild } from './DiagramEditPath.js';
 import { routeAnchorPointGet, routeDirectionFacingList, routeEndPointGet, routeResolve, routeTypeHasAnchors, routeTypeIsBezier, ROUTE_DIRECTION_LIST } from './DiagramRoute.js';
@@ -117,23 +117,24 @@ export function cardModelBuild(editor) {
 			set: (value, option) => change(() => store.nodeStyleSet(id, key, value || undefined, option)),
 		})), actionList: [] };
 	};
-	// how the node takes its box, for a kind with several size modes (DiagramNodeResize.js), and the
-	// width it wraps at
+	// how the node takes its box, for a kind with several size modes (DiagramNodeResize.js, in the
+	// kind's words), and the axes its mode gives: the width, the height, or both
 	const sizeSectionOf = (id) => {
 		const nodeSized = store.nodeGet(id);
 		const contract = store.registry?.kindByType[nodeSized?.renderer?.type]?.contract;
-		if (!(contract?.sizeModeList?.length > 1)) return null;
-		const mode = nodeSizeModeOf(nodeSized);
+		const modeList = nodeSizeModeListOf(contract);
+		if (modeList.length < 2) return null;
+		const mode = modeList.find(item => item.id === nodeSizeModeOf(nodeSized)) ?? modeList[0];
 		const propertyList = [{
-			id: 'size-mode', label: 'Box', kind: 'enum', value: mode, values: contract.sizeModeList,
-			valueLabels: Object.fromEntries(contract.sizeModeList.map(item => [item, NODE_SIZE_MODE_BY_ID[item].label])),
+			id: 'size-mode', label: 'Box', kind: 'enum', value: mode.id, values: modeList.map(item => item.id),
+			valueLabels: Object.fromEntries(modeList.map(item => [item.id, item.label])),
 			set: value => change(() => store.nodeSizeModeSet(id, value, editor.nodeSizeGet?.(id))),
 		}];
-		if (mode !== 'fit') propertyList.push({
-			id: 'size-width', label: 'Width', kind: 'number', value: nodeSized.size.width, min: contract.sizeMin?.width ?? 12, step: 1,
-			set: value => change(() => store.nodeResize(id, { width: Number(value), isMoved: false, axisList: ['width'] })),
+		for (const axis of mode.axisList) propertyList.push({
+			id: `size-${axis}`, label: axis === 'width' ? 'Width' : 'Height', kind: 'number', value: nodeSized.size[axis], min: contract.sizeMin?.[axis] ?? 12, step: 1,
+			set: value => change(() => store.nodeResize(id, { [axis]: Number(value), isMoved: false, axisList: [axis] })),
 		});
-		return { id: 'size', label: 'Size', propertyList, note: mode === 'fit' ? 'The box follows the words; Shift + Enter breaks a line.' : '', actionList: [] };
+		return { id: 'size', label: 'Size', propertyList, note: mode.note ?? '', actionList: [] };
 	};
 	// what a node or a line is drawn over and under (DiagramDepth.js): its depth as a number, and the
 	// four moves, each greyed with why when the order alone says it has nothing to do. target:
@@ -500,7 +501,8 @@ export function cardModelBuild(editor) {
 			sectionList.push({ id: 'node-actions', label: '', propertyList: [], actionList: [
 				...(schema ? [rowInsertAction('row-add', `Add ${labelRowLower}`)] : []),
 				...(schema ? [columnInsertAction('column-add', `Add ${labelFieldLower}`)] : []),
-				...(store.kind === 'diagram' ? [{ id: 'node-remove', label: 'Remove node', kind: 'danger', act: () => change(() => store.nodeRemove(nodeId, positionGet)) }] : []),
+				// as Delete does: what depends on it said first, a node a feature places taken away its way
+				...(store.kind === 'diagram' ? [{ id: 'node-remove', label: 'Remove node', kind: 'danger', act: () => (editor.removeAsk ? editor.removeAsk() : change(() => store.nodeRemove(nodeId, positionGet))) }] : []),
 			] });
 			model.view = { type: 'detail', sectionList };
 			return model;

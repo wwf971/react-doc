@@ -18,9 +18,9 @@ export function mdxViewGet(viewAuthored) {
   return MDX_VIEW_LIST.includes(viewAuthored) ? viewAuthored : MDX_VIEW_DEFAULT;
 }
 
-// the views as the slash action /mdx offers them (mdx-slash.js)
+// the views as the slash action /mdx offers them (mdx-slash.js); isTile: the view draws a tile
 export const MDX_VIEW_ENTRY_LIST = [
-  { id: 'icon', label: 'Icon', description: 'a tile in the line; a click opens the document' },
+  { id: 'icon', label: 'Icon', description: 'a tile in the line; a click opens the document', isTile: true },
   { id: 'card', label: 'Card', description: 'the document drawn in place, in a quiet frame' },
 ];
 

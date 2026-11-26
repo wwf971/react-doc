@@ -33,6 +33,8 @@ export function slashActionByIdCompBuild({ compById = {}, configDoc } = {}) {
       label: meta.label ?? compName,
       description: meta.description,
       icon: compIconGet(definition),
+      // it puts a block at the caret: a surface that is not a document may take it in a form of its own
+      block: {},
       run: (context = {}) => {
         const docPath = String(context.sourcePath ?? '');
         const source = compSourceDefaultGet(definition, { compName, docPath, docFormat: docPath.endsWith('.mdx') ? 'mdx' : 'md', compConfig: {} });

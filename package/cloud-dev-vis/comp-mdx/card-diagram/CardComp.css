@@ -17,8 +17,46 @@
 }
 
 /* the component draws its own card: as wide as the node */
-.doc-card-comp > :not(.doc-card-comp-float, .doc-card-comp-bar) {
+.doc-card-comp > :not(.doc-card-comp-float, .doc-card-comp-bar),
+.doc-card-comp-body > * {
 	max-width: none;
+}
+
+/* its box (CardComp.jsx, its size mode): the body holds the component; with an axis given it cuts
+   what is beyond the box, and scrolls it when it is more than a few pixels (data-overflow, the rule
+   of the box of a node: DiagramNodeOverflow.js); its own size (fit) cuts nothing */
+.doc-card-comp-body {
+	position: relative;
+	box-sizing: border-box;
+	width: 100%;
+	min-width: 0;
+}
+
+.doc-card-comp:not([data-size-mode='fit']) > .doc-card-comp-body {
+	overflow: hidden;
+}
+
+.doc-card-comp:not([data-size-mode='fit']) > .doc-card-comp-body[data-overflow='scroll'] {
+	overflow: auto;
+	overscroll-behavior: contain;
+}
+
+/* a height given: the card is as high as its node, the body takes it all */
+.doc-card-comp:is([data-size-mode='tall'], [data-size-mode='box']) {
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+}
+
+.doc-card-comp:is([data-size-mode='tall'], [data-size-mode='box']) > .doc-card-comp-body {
+	flex: 1 1 auto;
+	min-height: 0;
+}
+
+/* a height alone: as wide as the component, with room kept for the scrollbar, so a scrollbar
+   appearing takes no width from it */
+.doc-card-comp[data-size-mode='tall'] > .doc-card-comp-body {
+	scrollbar-gutter: stable;
 }
 
 .doc-card-comp.is-empty,
@@ -94,4 +132,15 @@
 
 .doc-card-comp-empty.is-unknown > svg {
 	color: #d97706;
+}
+
+/* why the component chosen could not be held (its asset item not made) */
+.doc-card-comp-message {
+	max-width: 18rem;
+	padding: 0.15rem 0.45rem;
+	border-radius: 6px;
+	background: var(--color-fd-popover);
+	color: var(--color-fd-error, #b91c1c);
+	font-size: 0.72rem;
+	line-height: 1.3;
 }

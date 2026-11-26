@@ -19,30 +19,32 @@ function MeetingZoomInstanceRead({ meeting, config }) {
 }
 
 // the card, from an instance. valueRender(id): what stands in the place of a value (the editor's
-// field); without it the value as read
-export function MeetingZoomInstanceRender({ meeting, valueRender, cellText, isEditing = false }) {
+// field); without it the value as read. edit: what editing adds (MeetingZoomCard), and which values
+// stand (edit.isShown: written, or just added)
+export function MeetingZoomInstanceRender({ meeting, valueRender, cellText, isEditing = false, edit = null }) {
 	const value = (id, text) => (valueRender ? valueRender(id) : text);
+	const isShown = edit?.isShown ?? ((id) => Boolean(meeting[id]));
 	return (
-		<MeetingZoomCard kind="instance" Icon={Video} isEditing={isEditing} joinUrl={meetingJoinUrl(meeting)}
+		<MeetingZoomCard kind="instance" Icon={Video} isEditing={isEditing} joinUrl={meetingJoinUrl(meeting)} edit={edit}
 			title={value('title', meeting.title || 'Zoom meeting')}
-			description={meeting.description ? (valueRender ? valueRender('description') : <CellValue cell={cellText} text={meeting.description} />) : null}>
-			{meeting.meetingId || meeting.passcode ? (
+			description={isShown('description') ? (valueRender ? valueRender('description') : <CellValue cell={cellText} text={meeting.description} />) : null}>
+			{isShown('meetingId') || isShown('passcode') ? (
 				<dl className="oa-meeting-zoom-code-list">
-					{meeting.meetingId ? (
+					{isShown('meetingId') ? (
 						<>
 							<dt>ID</dt>
 							<dd>
 								<span className="oa-meeting-zoom-code">{value('meetingId', meetingIdFormat(meeting.meetingId))}</span>
-								<MeetingZoomCopy text={meeting.meetingId.replace(/\D/g, '') || meeting.meetingId} label="Copy the meeting ID" />
+								{meeting.meetingId ? <MeetingZoomCopy text={meeting.meetingId.replace(/\D/g, '') || meeting.meetingId} label="Copy the meeting ID" /> : null}
 							</dd>
 						</>
 					) : null}
-					{meeting.passcode ? (
+					{isShown('passcode') ? (
 						<>
 							<dt>Passcode</dt>
 							<dd>
 								<span className="oa-meeting-zoom-code">{value('passcode', meeting.passcode)}</span>
-								<MeetingZoomCopy text={meeting.passcode} label="Copy the passcode" />
+								{meeting.passcode ? <MeetingZoomCopy text={meeting.passcode} label="Copy the passcode" /> : null}
 							</dd>
 						</>
 					) : null}

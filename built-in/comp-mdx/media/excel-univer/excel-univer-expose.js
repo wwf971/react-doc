@@ -30,4 +30,6 @@ export const excelUniverExpose = {
     },
   ],
   sourceDefaultCreate: () => ({ lang: 'json', raw: excelUniverWorkbookTextBuild(excelUniverWorkbookDefaultCreate()) }),
+  // a card of a card diagram holding it starts this wide: a sheet shows its columns, not one and a half
+  nodeSizeDefault: { width: 480 },
 };

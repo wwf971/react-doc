@@ -127,6 +127,8 @@ What the [parametric canvas](../package/cloud-dev-vis/doc/card-diagram-parametri
 
 ## MDX components
 
+- <a id="card-asset-item-orphan"></a>**The asset item of a card never saved.** A card of an asset-only component (a spreadsheet) gets its item when it is made ([Data in an asset item](../package/cloud-dev-vis/doc/card-diagram-impl.md#data-in-an-asset-item)); a diagram whose edit is canceled, or a card undone, leaves the item in the store with nothing using it. The insert menu of a document deletes an item whose block was not written; the editor of a diagram could do the same for the items made in a session its Cancel throws away.
+
 - <a id="pagination-layout"></a>**Layout beyond a column of pieces.** Pagination places the pieces of a flow one after another down a page and cuts them where their types say ([Pagination](doc_page_impl_pagination.md)). On the same flow, measures and plan, a richer layout: floating elements placed beside or around the flow (a figure, a sidebar), elements fixed to every page (a header, a footer, the page number drawn on the sheet), keeping a piece with the next one (a heading with its paragraph), several columns, a page of another size inside the flow; and a block of a document that is a pagination environment for the blocks inside it, so that any component declaring the contract is paginated in a document, not only by the component that draws the environment itself (the CV's view Pages). Each is a new kind of thing the planner places, decided by the same measures, so a component's pieces stay as they are.
 
 ## Events and component state

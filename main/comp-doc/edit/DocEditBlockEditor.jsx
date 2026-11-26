@@ -7,7 +7,7 @@ import { COMP_EDIT_MODE_SOURCE_ID, compBlockLabelGet, compMetaGet } from '../reg
 import { RegisteredComp } from '../registry/RegisteredComp.jsx';
 import { useDocEditDoc } from './DocEditDocContext.js';
 import { assetRefLangIs } from '../../frontend/src/lib/doc-asset-ref.js';
-import { embedPathParse } from '../../frontend/src/lib/doc-edit-embed.js';
+import { docHostPathGet } from '../../frontend/src/lib/doc-edit-embed.js';
 import { CODE_PLACE_IN_LIST_ITEM } from '../../frontend/src/lib/rehype-code-view.js';
 
 // The editor of the open session, chosen by the edit mode the session was
@@ -133,7 +133,7 @@ export const DocEditBlockEditor = observer(function DocEditBlockEditor({ block, 
         source: sourceStore.sourceService,
         object: objectStore,
         place: isItem ? CODE_PLACE_IN_LIST_ITEM : undefined,
-        configValueGet: (key) => configStore?.valueDocGet?.(embedPathParse(path)?.hostPath ?? path, key),
+        configValueGet: (key) => configStore?.valueDocGet?.(docHostPathGet(path), key),
       },
     };
   }

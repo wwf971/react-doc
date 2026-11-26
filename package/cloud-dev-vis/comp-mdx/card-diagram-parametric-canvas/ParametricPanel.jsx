@@ -68,7 +68,8 @@ const StructureBody = observer(function StructureBody({ session, editorGet }) {
 		<DiagramPanelTree tree={session.tree} model={model} selectedKey={selectedKey} ariaLabel="The scene" emptyText="The scene is empty. Pick a tool and click the canvas."
 			onItemClick={key => (key === 'free' ? session.tree.toggle(key, undefined, model) : session.treeItemSelect(key, editor))}
 			onCursor={key => { if (key !== 'free') session.treeItemSelect(key, editor); }}
-			onItemContext={menuOpen} />
+			onItemContext={menuOpen}
+			onItemDelete={(key) => { if (key !== 'free') { session.treeItemSelect(key, editor); editor.removeAsk?.(); } }} />
 		<DiagramPanelGraph diagram={graph?.diagram ?? null} camera={session.graphCamera} cameraSet={session.graphCameraSet} cameraReset={session.graphCameraReset}
 			onNodeClick={nodeId => session.treeItemSelect(graph?.targetById[nodeId] ?? {}, editor)}
 			emptyText="Select something: what it follows and what follows it are drawn here." />

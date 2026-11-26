@@ -49,3 +49,15 @@ test('a value typed is kept as the card reads it, so entering the edit mode move
 	assert.equal(meetingFieldNormalize('title', '  Sync '), 'Sync');
 	assert.equal(meetingFieldNormalize('description', '  indented\nline  \n'), '  indented\nline');
 });
+
+test('the values are offered one by one: read as the card reads them, one written as typed', async () => {
+	const { meetingDataFieldsOf } = await import('./MeetingZoomData.js');
+	const fields = meetingDataFieldsOf(MEETING_ZOOM_INSTANCE);
+	assert.deepEqual(fields.fieldList.map(field => field.id), ['title', 'meetingId', 'passcode', 'url', 'description']);
+	assert.equal(fields.fieldList.find(field => field.id === 'description').isMultiline, true);
+	const data = { raw: 'title: Team room\nmeetingId: 812 3456 7890\n' };
+	assert.equal(fields.valueListGet(data).meetingId, '812 3456 7890');
+	// a value typed keeps its last space (it is being typed); an emptied one goes
+	assert.equal(fields.rawWithValue(data, 'passcode', 'ab '), 'title: Team room\nmeetingId: 812 3456 7890\npasscode: "ab "\n');
+	assert.equal(fields.rawWithValue(data, 'title', ''), 'meetingId: 812 3456 7890\n');
+});

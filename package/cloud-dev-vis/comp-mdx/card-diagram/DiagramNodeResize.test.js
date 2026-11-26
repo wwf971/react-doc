@@ -3,7 +3,8 @@ import test from 'node:test';
 import { cardDiagramNodeRegistry } from './card-diagram-node-registry.js';
 import { diagramNormalize } from './DiagramERData.js';
 import { DiagramEditStore } from './DiagramEditStore.js';
-import { nodeResizeAxisListOf, nodeResizeHandlePointListOf, nodeSizeModeOf } from './DiagramNodeResize.js';
+import { nodeResizeAxisListOf, nodeResizeHandlePointListOf, nodeSizeModeListOf, nodeSizeModeOf, nodeSizeOfMode } from './DiagramNodeResize.js';
+import { cardModelBuild } from './DiagramEditCardModel.js';
 
 const registry = cardDiagramNodeRegistry;
 const nodeOf = (id, type, extra = {}) => ({ id, renderer: { type }, position: { x: 0, y: 0 }, handles: [], ...extra });
@@ -77,4 +78,56 @@ test('a text takes its box by its size mode: fitting its words, or a width it wr
 	// a mode the kind does not list is refused, and so is a size written in it
 	assert.equal(store.nodeSizeModeSet('text', 'box', { width: 100, height: 40 }), false);
 	assert.throws(() => diagramNormalize(diagramOf([nodeOf('text', 'text', { size: { width: 100, height: 40 }, data: { text: 'words' } })]), registry), /no size \(fits the words\) or a width alone/);
+});
+
+// a component in a card takes its box in any of the four modes, in its own words; the handles resize
+// what its mode gives, and the edit card offers the axes of its mode
+test('the four size modes: read from the size, in the words of a kind, each resizing what it gives', () => {
+	assert.equal(nodeSizeModeOf({ size: { width: 'auto', height: 'auto' } }), 'fit');
+	assert.equal(nodeSizeModeOf({ size: { width: 240, height: 'auto' } }), 'wrap');
+	assert.equal(nodeSizeModeOf({ size: { width: 'auto', height: 160 } }), 'tall');
+	assert.equal(nodeSizeModeOf({ size: { width: 240, height: 160 } }), 'box');
+	assert.equal(nodeSizeModeOf({}), 'fit');
+	assert.deepEqual(nodeSizeOfMode('tall', { width: 99.2, height: 120.4 }), { height: 122 });
+	assert.deepEqual(nodeSizeOfMode('box', { width: 99.2, height: 120.4 }), { width: 101, height: 122 });
+	// a kind's own words over the defaults, an unknown mode left out
+	const contract = registry.kindByType['card-comp'].contract;
+	assert.deepEqual(nodeSizeModeListOf(contract).map(mode => [mode.id, mode.label]), [['fit', 'Its own size'], ['wrap', 'A width, its height follows'], ['tall', 'A height, its width follows'], ['box', 'A width and a height']]);
+	assert.deepEqual(nodeSizeModeListOf({ sizeModeList: ['fit', 'nothing', { id: 'wrap', label: 'Wrapped' }] }).map(mode => mode.label), ['Fits the words', 'Wrapped']);
+	const comp = (id, size) => nodeOf(id, 'card-comp', { ...(size ? { size } : {}), data: { comp: 'Code', lang: 'text', raw: 'a' } });
+	const graph = diagramNormalize(diagramOf([
+		comp('fit'), comp('wrap', { width: 240, height: 'auto' }), comp('tall', { height: 160 }), comp('box', { width: 240, height: 160 }),
+	]), registry);
+	assert.deepEqual(['fit', 'wrap', 'tall', 'box'].map(id => axisOf(graph, id)), [[], ['width'], ['height'], ['width', 'height']]);
+	// a text lists no height alone: refused, naming what it takes
+	assert.throws(() => diagramNormalize(diagramOf([nodeOf('text', 'text', { size: { height: 40 }, data: { text: 'w' } })]), registry), /no size \(fits the words\) or a width alone/);
+});
+
+test('the edit card switches the box of a card and offers the axes its mode gives, each a step', () => {
+	const store = new DiagramEditStore(`version: 1
+nodes:
+  - id: code
+    renderer: { type: card-comp }
+    size: { width: 240, height: auto }
+    data: { comp: Code, lang: text, raw: "a" }
+`, 'diagram', () => undefined, registry);
+	store.select('code');
+	const editor = { store, change: fn => fn(), navigate: () => {}, featureList: [], nodeSizeGet: () => ({ width: 240, height: 90 }) };
+	const sizeOf = () => cardModelBuild(editor).view.sectionList.find(section => section.id === 'size');
+	assert.deepEqual(sizeOf().propertyList.map(property => property.id), ['size-mode', 'size-width']);
+	assert.equal(sizeOf().note, 'What it holds takes the width; what is wider scrolls.');
+	sizeOf().propertyList[0].set('box');
+	assert.deepEqual(store.nodeGet('code').size, { width: 241, height: 91 });
+	assert.deepEqual(sizeOf().propertyList.map(property => property.id), ['size-mode', 'size-width', 'size-height']);
+	sizeOf().propertyList.find(property => property.id === 'size-height').set(300);
+	assert.equal(store.nodeGet('code').size.height, 300);
+	sizeOf().propertyList[0].set('tall');
+	assert.equal(nodeSizeModeOf(store.nodeGet('code')), 'tall');
+	assert.deepEqual(sizeOf().propertyList.map(property => property.id), ['size-mode', 'size-height']);
+	sizeOf().propertyList[0].set('fit');
+	assert.equal(nodeSizeModeOf(store.nodeGet('code')), 'fit');
+	assert.deepEqual(sizeOf().propertyList.map(property => property.id), ['size-mode']);
+	// each switch a step of its own
+	store.undo();
+	assert.equal(nodeSizeModeOf(store.nodeGet('code')), 'tall');
 });

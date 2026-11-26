@@ -311,3 +311,54 @@ test('the edit card of a locator lists its lines; its mode names and removes the
 	// how a member stands on it reads by the names of its lines
 	assert.equal(session.memberSummaryOf('g', 'ma'), 'on x1–Split × y1–y2');
 });
+
+test('Delete in the layer: a member card goes with its member, a group, a locator, a line or a reference point open in a mode', async () => {
+	const { diagramRemovalOf } = await import('../card-diagram/DiagramRemove.js');
+	const removalOf = (store, session) => { const base = diagramRemovalOf(store); const own = session.removalGet(base, {}); return own === undefined ? base : own; };
+	// a node a group places: what follows it is said, and it goes with its member
+	{
+		const { store, session } = sessionOf(pointValue);
+		store.select('a');
+		const removal = removalOf(store, session);
+		assert.deepEqual(removal.dependentList.map(item => [item.id, item.count]), [['followers', 1]]);
+		const before = { c: placesOf(store).positionOf('c') };
+		assert.equal(removal.run(), true);
+		assert.equal(store.nodeGet('a'), undefined);
+		assert.equal(memberOf(store, 'm1'), undefined);
+		// b follows the origin now, where it stood; c did not move
+		assert.equal(memberOf(store, 'm2').parent, undefined);
+		assert.deepEqual(placesOf(store).positionOf('c'), before.c);
+	}
+	// a locator focused: what stands on it is said; in its mode with a line open, the line
+	{
+		const { store, session } = sessionOf(blocksValue);
+		session.focusSet({ kind: 'member', groupId: 'g', memberId: 'loc' });
+		const locator = removalOf(store, session);
+		assert.equal(locator.kind, 'layout');
+		assert.deepEqual(locator.dependentList.map(item => [item.id, item.count]), [['children', 4]]);
+		session.locatorLineModeEnter('g', 'loc', 'x');
+		assert.equal(removalOf(store, session), null, 'a mode showing its list takes nothing');
+		session.locatorLineModeEnter('g', 'loc', 'x', '2');
+		const line = removalOf(store, session);
+		assert.equal(line.kind, 'locatorLine');
+		assert.deepEqual(line.dependentList.map(item => [item.id, item.count]), [['on-it', 3]]);
+		assert.equal(line.run(), true);
+		assert.deepEqual(memberOf(store, 'loc').layout.xList.map(item => item.id), ['1', '3', 'end']);
+		session.focusSet({ kind: 'group', groupId: 'g' });
+		const group = removalOf(store, session);
+		assert.deepEqual(group.dependentList.map(item => [item.id, item.count]), [['members', 4], ['layouts', 1]]);
+	}
+	// a reference point open in its mode: what is measured from it is said
+	{
+		const { store, session } = sessionOf(pointValue);
+		const id = session.memberReferencePointAdd('g', 'm1', { point: session.referencePointReadOf({ side: 'right', index: 1, count: 2 }) });
+		session.memberConstraintParamSet('g', 'm2', 'pointParent', id);
+		session.referencePointModeEnter('g', 'm1', id);
+		const removal = removalOf(store, session);
+		assert.equal(removal.kind, 'referencePoint');
+		assert.deepEqual(removal.dependentList.map(item => [item.id, item.count]), [['measured', 1]]);
+		const placeBefore = placesOf(store).positionOf('b');
+		assert.equal(removal.run(), true);
+		assert.deepEqual(placesOf(store).positionOf('b'), placeBefore);
+	}
+});

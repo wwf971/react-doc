@@ -484,6 +484,14 @@ body:has(.doc-block-popup .doc-vis-edit) .prop-editor-color-popover {
 	z-index: calc(var(--doc-vis-modal-z-index, 100000) + 3);
 }
 
+/* a dialog of the page opened from the diagram being edited (the lines of a code block a card holds,
+   in View and Edit: PanelPopup) stands over the edit card, which goes under its dimmed layer (the
+   overlay of the page's dialogs: z-index 210, DocPanelStandalone.css). Not the block popup, which may
+   hold the diagram being edited itself (above); a :has() cannot hold another, so it is told by its class */
+body:has(.text-panel.is-popup[aria-modal='true']:not(.doc-block-popup)) .doc-vis-card-panel.doc-edit-panel {
+	z-index: 200;
+}
+
 .doc-vis-card-head {
 	flex-wrap: nowrap;
 	gap: 0.4rem;
@@ -1435,3 +1443,61 @@ body:has(.doc-block-popup .doc-vis-edit) .prop-editor-color-popover {
 .react-flow__resize-control.line.doc-vis-resize-edge.top,
 .react-flow__resize-control.line.doc-vis-resize-edge.bottom { height: calc(8px / var(--doc-vis-zoom, 1)); }
 .doc-vis-node:has(> .doc-vis-resize-edge) > .react-flow__handle { z-index: 4; }
+
+/* ---------- the question Delete asks (DiagramRemoveConfirm.jsx) ----------
+   beside the thing to take away, over the edit card's place (the card hides meanwhile) */
+.doc-vis-remove-confirm.doc-edit-popup {
+	position: fixed;
+	z-index: 1600;
+	box-sizing: border-box;
+	width: max-content;
+	max-width: min(340px, calc(100vw - 16px));
+	padding: 0.5rem 0.75rem 0.45rem;
+	border: 1px solid var(--color-fd-border);
+	border-left: 3px solid var(--color-fd-destructive, #dc2626);
+	border-radius: 6px;
+	background: var(--color-fd-popover, var(--color-fd-background));
+	box-shadow: 0 6px 20px rgb(15 23 42 / 16%);
+	color: var(--color-fd-foreground);
+	font-family: ui-sans-serif, system-ui, sans-serif;
+	font-size: 0.76rem;
+	line-height: 1.4;
+	text-align: left;
+}
+
+body:has(.doc-block-popup .doc-vis-edit) .doc-vis-remove-confirm.doc-edit-popup {
+	z-index: calc(var(--doc-vis-modal-z-index, 100000) + 2);
+}
+
+.doc-vis-remove-confirm-question {
+	display: flex;
+	align-items: center;
+	gap: 0.4rem;
+	font-weight: 600;
+}
+
+.doc-vis-remove-confirm-question > svg {
+	flex: none;
+	color: var(--color-fd-destructive, #dc2626);
+}
+
+.doc-vis-remove-confirm-list {
+	margin: 0.3rem 0 0.15rem;
+	padding: 0 0 0 1.1rem;
+	list-style: disc;
+	color: var(--color-fd-muted-foreground);
+}
+
+.doc-vis-remove-confirm-list strong {
+	color: var(--color-fd-foreground);
+	font-weight: 600;
+}
+
+.doc-vis-remove-confirm .doc-vis-card-actions {
+	align-items: center;
+}
+
+.doc-vis-remove-confirm-hint {
+	margin-left: 0.2rem;
+	font-size: 0.7rem;
+}

@@ -5,6 +5,7 @@ import { RegisteredComp } from '../../../../main/comp-doc/registry/RegisteredCom
 import { nodeRegistryBuild } from '../card-diagram/node-registry.js';
 import { diagramNormalize } from '../card-diagram/DiagramERData.js';
 import { DiagramNodeContent, DiagramRenderContext, useDiagramSearchMark } from '../card-diagram/DiagramRender.jsx';
+import { useScrollWheelTake } from '../card-diagram/CanvasWheelGuard.js';
 import { nodeStyleVarsOf } from '../card-diagram/DiagramNodeStyle.js';
 import { SwitchContext, SwitchStaticScene } from './SwitchStatic.jsx';
 import { SwitchViewSwitcher, SwitchViewTabs } from './SwitchViewSwitcher.jsx';
@@ -36,7 +37,6 @@ import { CardCell } from '../card-diagram/TableCard.jsx';
 // A registry of a series becomes the registry of its switching component with
 // switchRegistryBuild, as a diagram component is bound to its registry.
 const sideAllList = ['left', 'right', 'top', 'bottom'];
-const WHEEL_GESTURE_MS = 180;
 
 export const SceneEmbedCard = observer(function SceneEmbedCard({ node, nodeId }) {
 	const context = useContext(SwitchContext);
@@ -246,26 +246,7 @@ export const SceneStackCard = observer(function SceneStackCard({ node, nodeId, a
 	// scrollbar still works). in a stack's own scene it scrolls the stack while the stack
 	// can scroll, and the end of that gesture stops here; then it is the canvas's again.
 	// a pinch is always the canvas's. never the page's (card-diagram.md#the-wheel-over-a-canvas)
-	useLayoutEffect(() => {
-		const element = scrollRef.current;
-		if (!element || isStatic || isEmbedded) return undefined;
-		let timeScrolled = 0;
-		const onWheel = (event) => {
-			if (event.ctrlKey) return;
-			const isScrollable = event.deltaY > 0 ? element.scrollTop + element.clientHeight < element.scrollHeight - 1 : element.scrollTop > 0;
-			const now = performance.now();
-			if (isScrollable) {
-				timeScrolled = now;
-				event.stopPropagation();
-			} else if (now - timeScrolled < WHEEL_GESTURE_MS) {
-				timeScrolled = now;
-				event.preventDefault();
-				event.stopPropagation();
-			}
-		};
-		element.addEventListener('wheel', onWheel, { passive: false });
-		return () => element.removeEventListener('wheel', onWheel);
-	}, [isStatic, isEmbedded]);
+	useScrollWheelTake(scrollRef, !isStatic && !isEmbedded);
 	useLayoutEffect(() => {
 		const element = scrollRef.current;
 		if (!element || !store) return undefined;

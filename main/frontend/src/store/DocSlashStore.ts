@@ -164,7 +164,7 @@ export class DocSlashStore {
   get itemList(): any[] {
     const parsed = this.parsed;
     if (parsed.mode === SLASH_MODE_ACTION) {
-      return slashActionMatchList(this.actionListOpen, parsed.query).map((action) => ({ id: action.name, action }));
+      return slashActionMatchList(parsed.scopeActionList ?? this.actionListOpen, parsed.query).map((action) => ({ id: action.name, action }));
     }
     if (parsed.mode === SLASH_MODE_PARAM && this.slash) {
       try {
@@ -237,24 +237,29 @@ export class DocSlashStore {
   // an item chosen (Enter, Tab, a click): in the action mode, an action with
   // a parameter becomes "/name " (its param mode) and one without runs; one
   // whose parameter is optional runs, unless the param mode is asked for
-  // (isParamOpen: Tab). in the param mode the action answers. the answer is
-  // what the surface does
+  // (isParamOpen: Tab). an action opening a scope becomes "/name/" (its
+  // actions listed), or runs when it can and Tab is not pressed. in the param
+  // mode the action answers. inside a scope the text keeps its prefix. the
+  // answer is what the surface does
   itemChoose(index?: number, { isParamOpen = false }: { isParamOpen?: boolean } = {}): SlashApply | undefined {
     const slash = this.slash;
     if (!slash) return undefined;
     const item = this.itemList[index ?? slash.itemIndexActive];
     if (!item) return undefined;
     const parsed = this.parsed;
+    const prefix = parsed.prefix ?? '';
     if (parsed.mode === SLASH_MODE_ACTION) {
       const action = item.action;
-      if (action.param && (!action.param.isOptional || isParamOpen)) return { textNew: `/${action.name} `, isEnded: false, lengthOld: slash.text.length };
-      return this.effectApply(this.effectRun(action, () => action.run(slash.context)), action.name);
+      if (action.scope && (!action.run || isParamOpen)) return { textNew: `${prefix}/${action.name}/`, isEnded: false, lengthOld: slash.text.length };
+      if (action.param && (!action.param.isOptional || isParamOpen)) return { textNew: `${prefix}/${action.name} `, isEnded: false, lengthOld: slash.text.length };
+      return this.effectApply(this.effectRun(action, () => action.run(slash.context)), action.name, undefined, prefix);
     }
     if (parsed.mode !== SLASH_MODE_PARAM) return undefined;
     return this.effectApply(
       this.effectRun(parsed.action, () => parsed.action.param.itemChoose(item, parsed.param, slash.context)),
       parsed.actionName,
       parsed.trigger,
+      prefix,
     );
   }
 
@@ -273,7 +278,7 @@ export class DocSlashStore {
     const action = this.itemList[index]?.action;
     const choice = this.rowChoiceListGet(action)[choiceIndex];
     if (!slash || !choice) return undefined;
-    return this.effectApply(this.effectRun(action, () => action.param.itemChoose(choice, '', slash.context)), action.name);
+    return this.effectApply(this.effectRun(action, () => action.param.itemChoose(choice, '', slash.context)), action.name, undefined, this.parsed.prefix ?? '');
   }
 
   // what Enter does on an action with an optional parameter, said in the
@@ -308,7 +313,7 @@ export class DocSlashStore {
       item: this.itemActive,
       context: slash.context,
     }));
-    return effect ? this.effectApply(effect, parsed.actionName, parsed.trigger) : undefined;
+    return effect ? this.effectApply(effect, parsed.actionName, parsed.trigger, parsed.prefix ?? '') : undefined;
   }
 
   effectRun(action: any, run: () => any) {
@@ -320,10 +325,10 @@ export class DocSlashStore {
     }
   }
 
-  effectApply(effect: any, actionName: string, trigger?: SlashTrigger): SlashApply | undefined {
+  effectApply(effect: any, actionName: string, trigger?: SlashTrigger, prefix = ''): SlashApply | undefined {
     const slash = this.slash;
     if (!slash || !effect) return undefined;
-    const apply = slashEffectApplyGet(effect, actionName, trigger);
+    const apply = slashEffectApplyGet(effect, actionName, trigger, prefix);
     if (apply.isEnded) this.slashEnd();
     return { ...apply, lengthOld: slash.text.length };
   }

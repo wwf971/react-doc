@@ -738,6 +738,58 @@ connections:
     style: { stroke: "#dc2626", strokeWidth: 3 }
 ```
 
+## Blocks of a document in cards
+
+A card can hold what a document holds as a block. Press **Edit**, double-click the empty canvas and type `/card-comp/`: what follows is the slash of a document, `/card-comp/code icon`, `/card-comp/mdx card`, `/card-comp/meeting-zoom-instance`. A click on the MDX card opens its document, edited there as in a page.
+
+Each card takes its box in the edit card, **Size** › **Box**: *Its own size*, *A width, its height follows*, *A height, its width follows*, *A width and a height*. What does not fit a width or a height scrolls: by its scrollbar, or the wheel while there is more to scroll.
+
+<!--renderComp=CardDiagram,title=Blocks in cards-->
+```yaml
+version: 1
+viewport:
+  size: { height: 360 }
+nodes:
+  - id: code
+    renderer: { type: card-comp }
+    position: { x: 0, y: 0 }
+    size: { width: 240, height: auto }
+    data:
+      comp: Code
+      lang: python
+      raw: |
+        def add(a, b):
+            return a + b
+    handles: []
+  - id: code-icon
+    renderer: { type: card-comp }
+    position: { x: 0, y: 150 }
+    data:
+      comp: Code
+      lang: sql
+      raw: |
+        select id, name from customer
+      props: { view: icon, title: customer.sql }
+    handles: []
+  - id: notes
+    renderer: { type: card-comp }
+    position: { x: 300, y: 0 }
+    size: { width: 240, height: 140 }
+    data:
+      comp: Mdx
+      lang: md
+      raw: |
+        ## Notes
+
+        A box of a width and a height: what does not fit scrolls.
+
+        A second paragraph, lower than the box.
+
+        A third one, the last.
+      props: { view: card, title: Notes }
+    handles: []
+```
+
 ## Add your own
 
 Everything above is ordinary content: copy a block, or add one from the insert menu in edit mode.

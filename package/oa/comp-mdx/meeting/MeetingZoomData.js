@@ -61,14 +61,30 @@ export function meetingRead(kind, data = {}) {
 	return meeting;
 }
 
-// the yaml of a meeting: the fields written, in their order; an empty one left out
-export function meetingRawBuild(kind, meeting) {
+// the yaml of a meeting: the fields written, in their order; an empty one left out. isTrimmed false:
+// a value written as it is (a field being typed elsewhere keeps the space typed last)
+export function meetingRawBuild(kind, meeting, { isTrimmed = true } = {}) {
 	const value = {};
 	for (const { id } of kind.fieldList) {
-		const text = String(meeting[id] ?? '').trim();
-		if (text) value[id] = id === 'duration' && /^\d+$/.test(text) ? Number(text) : text;
+		const written = String(meeting[id] ?? '');
+		const text = written.trim();
+		if (text) value[id] = id === 'duration' && /^\d+$/.test(text) ? Number(text) : isTrimmed ? text : written;
 	}
 	return Object.keys(value).length ? yamlStringify(value) : '';
+}
+
+// the fields of a kind as a component offers them to whoever edits its data value by value without
+// drawing it (expose.dataFields, main/doc_page_impl_mdx_comp.md#what-a-component-exposes: the edit card
+// of a card of a card diagram holding it)
+//   fieldList                  [{ id, label, placeholder, isMultiline? }]
+//   valueListGet(data)         { id: text }: what each holds, as the card reads it
+//   rawWithValue(data, id, text)   the yaml with one value changed, written as typed
+export function meetingDataFieldsOf(kind) {
+	return {
+		fieldList: kind.fieldList.map(({ id, label, placeholder, isMultiline }) => ({ id, label, placeholder, ...(isMultiline ? { isMultiline } : {}) })),
+		valueListGet: (data) => meetingRead(kind, data),
+		rawWithValue: (data, id, text) => meetingRawBuild(kind, { ...meetingRead(kind, data), [id]: String(text ?? '') }, { isTrimmed: false }),
+	};
 }
 
 // a number grouped as the app shows it (3-4-4 for eleven digits, 3-3-4 for ten, 3-3-3 for nine);

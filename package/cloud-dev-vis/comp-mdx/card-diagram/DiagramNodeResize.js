@@ -34,26 +34,48 @@ export function nodeResizeHandlePointListOf(box, axisList) {
 	return pointList.map(([fx, fy]) => ({ x: box.x + box.width * fx, y: box.y + box.height * fy }));
 }
 
-// The size modes of a node: how its box is taken, for a kind whose box follows what it says (a
-// text). contract.sizeModeList lists the modes of the kind, the first being that of a node with no
-// size written; the edit card switches between them (Box) when there are several. The mode is read
-// from the size as written, never written beside it, so the two cannot disagree:
+// The size modes of a node: how its box is taken, for a kind whose box follows what it holds (a
+// text, a component in a card). contract.sizeModeList lists the modes of the kind (an id, or
+// { id, label, note } in the kind's own words), the first being that of a node with no size
+// written; the edit card switches between them (Box) when there are several. The mode is read from
+// the size as written, never written beside it, so the two cannot disagree:
 //
-//   fit    no size: as wide and as high as its words, lines broken only where they say; nothing
-//          to resize (the box is derived from the words)
-//   wrap   a width alone: its words wrap within it (a long word too), its height follows them;
-//          its width resized
-//   box    a width and a height (no kind lists it yet: a text whose words overflow or shrink)
+//   fit    no size: as wide and as high as what it holds (a text: its words, lines broken only
+//          where they say); nothing to resize (the box is derived from what it holds)
+//   wrap   a width alone: what it holds takes that width (a text wraps within it, a long word
+//          too), its height follows; its width resized
+//   tall   a height alone: as wide as what it holds, its height given; its height resized
+//   box    a width and a height; both resized
+// what does not fit an axis given is the kind's to show: a component in a card scrolls it
+// (card-diagram-impl.md#a-component-in-a-card)
 export const NODE_SIZE_MODE_BY_ID = {
-	fit: { id: 'fit', label: 'Fits the words', sizeText: 'no size', axisList: [] },
-	wrap: { id: 'wrap', label: 'A width, the words wrap', sizeText: 'a width alone', axisList: ['width'] },
-	box: { id: 'box', label: 'A width and a height', sizeText: 'a width and a height', axisList: ['width', 'height'] },
+	fit: { id: 'fit', label: 'Fits the words', note: 'The box follows the words; Shift + Enter breaks a line.', sizeText: 'no size', axisList: [] },
+	wrap: { id: 'wrap', label: 'A width, the words wrap', note: '', sizeText: 'a width alone', axisList: ['width'] },
+	tall: { id: 'tall', label: 'A height, the width follows', note: '', sizeText: 'a height alone', axisList: ['height'] },
+	box: { id: 'box', label: 'A width and a height', note: '', sizeText: 'a width and a height', axisList: ['width', 'height'] },
 };
+
+// the modes a kind lists, each with its words: [{ id, label, note, sizeText, axisList }]
+export function nodeSizeModeListOf(contract) {
+	return (Array.isArray(contract?.sizeModeList) ? contract.sizeModeList : []).map((item) => {
+		const id = typeof item === 'string' ? item : item?.id;
+		const mode = NODE_SIZE_MODE_BY_ID[id];
+		if (!mode) return null;
+		return typeof item === 'string' ? mode : { ...mode, label: item.label ?? mode.label, note: item.note ?? mode.note };
+	}).filter(Boolean);
+}
+
+// the ids of the modes a kind lists
+export function nodeSizeModeIdListOf(contract) {
+	return nodeSizeModeListOf(contract).map(mode => mode.id);
+}
 
 // the mode of a node as normalized (size: { width, height }, each a number or 'auto')
 export function nodeSizeModeOf(node) {
-	if (node.size?.width === 'auto' || node.size?.width === undefined) return node.size?.height === 'auto' || node.size?.height === undefined ? 'fit' : 'box';
-	return node.size?.height === 'auto' || node.size?.height === undefined ? 'wrap' : 'box';
+	const isWidth = typeof node.size?.width === 'number';
+	const isHeight = typeof node.size?.height === 'number';
+	if (isWidth) return isHeight ? 'box' : 'wrap';
+	return isHeight ? 'tall' : 'fit';
 }
 
 // the size a node takes in a mode, from the box it has now (as measured, else as written): the
@@ -63,5 +85,8 @@ export function nodeSizeModeOf(node) {
 export function nodeSizeOfMode(mode, boxNow) {
 	if (mode === 'fit') return undefined;
 	const width = Math.max(1, Math.ceil(boxNow.width) + 1);
-	return mode === 'wrap' ? { width } : { width, height: Math.max(1, Math.ceil(boxNow.height) + 1) };
+	const height = Math.max(1, Math.ceil(boxNow.height) + 1);
+	if (mode === 'wrap') return { width };
+	if (mode === 'tall') return { height };
+	return { width, height };
 }

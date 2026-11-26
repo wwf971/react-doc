@@ -16,7 +16,8 @@ import { Waypoints } from '../../../../main/frontend/UICommon.js';
 //                 what the diagram may assume about the node (DiagramERData.js). resizeAxisList: what
 //                 its resize handles change, where the rule of DiagramNodeResize.js (read from the
 //                 node) is wrong for the kind; sizeModeList: the ways its box is taken (fit, wrap,
-//                 box; DiagramNodeResize.js), the first the default, switched in the edit card;
+//                 tall, box, each an id or { id, label, note } in the kind's words;
+//                 DiagramNodeResize.js), the first the default, switched in the edit card;
 //                 styleList: the keys of node.style its card draws (DiagramNodeStyle.js);
 //                 outlineOf(node): the shape of its boundary, { kind: rect | ellipse | polygon,
 //                 pointList? } (a box when absent), for whoever reads points on it (the reference

@@ -20,6 +20,8 @@
 	color: var(--color-fd-card-foreground);
 	font-size: var(--doc-card-font-size, 0.875em);
 	line-height: 1.35;
+	/* what only editing draws (the + in its corner) stands over the card */
+	position: relative;
 }
 
 /* on a dark page the blue of Zoom is lighter, so the mark and Join keep their contrast */
@@ -110,8 +112,62 @@
 	background: color-mix(in srgb, var(--oa-meeting-zoom-accent) 15%, transparent);
 }
 
-.oa-meeting-zoom[data-editing] .oa-meeting-zoom-join {
+/* while edited, Join is a button typing the link (MeetingZoomEdit.jsx); a link drawn as such does nothing */
+.oa-meeting-zoom[data-editing] a.oa-meeting-zoom-join {
 	pointer-events: none;
+}
+
+button.oa-meeting-zoom-join {
+	font-family: inherit;
+	cursor: text;
+}
+
+/* the + of a card edited: the values not written yet. In its bottom right corner, over the card (it
+   takes no room). Seen the whole time the card is edited, so what can be added is found, not guessed:
+   faint, and full while the pointer is on the card or something in it is focused; at the size of the
+   screen on a canvas, as every floating group (--doc-vis-zoom) */
+.oa-meeting-zoom-add {
+	position: absolute;
+	right: 0.3em;
+	bottom: 0.3em;
+	z-index: 2;
+	opacity: 0.6;
+	transform: scale(calc(1 / var(--doc-vis-zoom, 1)));
+	transform-origin: right bottom;
+	transition: opacity 0.12s;
+	--doc-button-group-height: 1.4rem;
+}
+
+.oa-meeting-zoom:hover > .oa-meeting-zoom-add,
+.oa-meeting-zoom:focus-within > .oa-meeting-zoom-add {
+	opacity: 1;
+}
+
+/* the field of the link, floating under Join (AnchoredPopover: never cut by what holds the card) */
+.oa-meeting-zoom-link-popover {
+	display: flex;
+	align-items: baseline;
+	gap: 0.5em;
+	min-width: 18rem;
+	max-width: 28rem;
+	padding: 0.35rem 0.55rem;
+	border: 1px solid var(--color-fd-border);
+	border-radius: 0.5rem;
+	background: var(--color-fd-popover);
+	box-shadow: 0 4px 14px rgb(15 23 42 / 12%);
+	font-size: 0.8rem;
+}
+
+.oa-meeting-zoom-link-name {
+	flex: none;
+	color: var(--color-fd-muted-foreground);
+}
+
+.oa-meeting-zoom-link-popover > .oa-meeting-zoom-field {
+	flex: 1;
+	min-width: 0;
+	font-family: var(--font-mono, ui-monospace, 'SF Mono', Menlo, monospace);
+	overflow-wrap: anywhere;
 }
 
 /* the lines under the title: what is typed in the app, in a monospace face */
@@ -132,7 +188,8 @@
 	color: var(--color-fd-foreground);
 }
 
-.oa-meeting-zoom-length::before {
+/* the dot between a time and its length; a length alone has none */
+.oa-meeting-zoom-when + .oa-meeting-zoom-length::before {
 	content: '·';
 	margin-right: 0.5em;
 	color: var(--color-fd-muted-foreground);

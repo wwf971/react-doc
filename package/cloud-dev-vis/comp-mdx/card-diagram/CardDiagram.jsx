@@ -1,4 +1,4 @@
-import { useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { reaction } from 'mobx';
 import { observer } from 'mobx-react-lite';
 import {
@@ -16,6 +16,7 @@ import '@xyflow/react/dist/style.css';
 import { Copy, Search } from '../../../../main/frontend/UICommon.js';
 import { BlockPopupSurface } from '../../../../main/comp-doc/popup/BlockPopupSurface.jsx';
 import { DiagramERStore, DiagramCopyStore, diagramViewStateGet } from './DiagramERStore.js';
+import { DiagramEditStore } from './DiagramEditStore.js';
 import { DiagramNode, DiagramPointNode, DiagramCreateNode, DiagramEdge, DiagramConnectionLine, DiagramRenderContext } from './DiagramRender.jsx';
 import { DiagramPinLayer } from './DiagramPinLayer.jsx';
 import { useDocStores } from '../../../../main/frontend/src/store/context.js';
@@ -72,11 +73,12 @@ export const DiagramERView = observer(function DiagramERView({ data = {}, config
 	// the camera remembered for this block, kept for now under the identity of sourceStore: a host gives
 	// the canvases that replace each other one source store object (DiagramERStore.js: diagramViewStateGet)
 	const [viewState] = useState(() => diagramViewStateGet(sourceStore, config));
-	const [store] = useState(() => new DiagramERStore(sourceDiagram, (name, placement) => {
+	const resolve = (name, placement) => {
 		const definition = compDefinitionNormalize(compById[compIdResolve(sourceStore.configDoc, name)]);
 		if (!definition?.placementList?.includes(placement)) return undefined;
 		return definition.expose?.[placement];
-	}, heightGet(data.height ?? config.height), registry));
+	};
+	const [store] = useState(() => new DiagramERStore(sourceDiagram, resolve, heightGet(data.height ?? config.height), registry));
 	const edgeGeometry = useRef(new Map());
 	const viewportRef = useRef(null);
 	useCanvasWheelGuard(viewportRef);
@@ -93,7 +95,19 @@ export const DiagramERView = observer(function DiagramERView({ data = {}, config
 	// canvasStore: the canvas model itself, for a layer of a feature drawn over the canvas (what its placer answered: store.placed)
 	// one object while none of its parts changes: every node and line reads it, so a new one each
 	// time the host draws this view (a word typed in the editor) would draw all of them again
-	const context = useMemo(() => ({ config, registry, editor, measurementSet: store.measurementSet, edgeGeometry: edgeGeometry.current, search, canvasStore: store }), [config, registry, editor, store, search]);
+	// a change of the diagram made while it is read, by what a card holds (a component writing its own
+	// data, as a block of a document does in reading mode: the document of an MDX block edited in its
+	// popup): the command of the edit store applied to the text of the diagram, which the block writes
+	// as its data (dataReplaceRequest). card-diagram-impl.md#a-component-in-a-card
+	const onEventRef = useRef(onEvent);
+	onEventRef.current = onEvent;
+	const readChangeWrite = useCallback(async (command) => {
+		const draft = new DiagramEditStore(store.source, 'diagram', resolve, registry);
+		if (!command(draft)) return { code: -1, message: 'Nothing of the diagram was changed.' };
+		return (await onEventRef.current?.('dataReplaceRequest', { raw: draft.rawDraft })) ?? { code: -1, message: 'This diagram cannot be written here.' };
+	}, [store, registry]); // eslint-disable-line react-hooks/exhaustive-deps
+	const isReadWritable = !editor && typeof onEvent === 'function';
+	const context = useMemo(() => ({ config, registry, editor, measurementSet: store.measurementSet, edgeGeometry: edgeGeometry.current, search, canvasStore: store, ...(isReadWritable ? { readChangeWrite } : {}) }), [config, registry, editor, store, search, isReadWritable, readChangeWrite]);
 
 	useEffect(() => {
 		if (store.source !== sourceDiagram) store.sourceLoad(sourceDiagram, Boolean(editor));

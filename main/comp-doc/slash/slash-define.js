@@ -19,6 +19,14 @@
 //     label        'Link': how the menu names it
 //     description  one line under the label
 //     icon         a component drawing its icon
+//     block        optional { viewList }: it puts a block at the caret, in one of
+//                  these views (set by slashBlockActionDefine, and by the actions
+//                  of the components, slash-comp.js)
+//     scope        optional { actionList }: a "/" right after its name enters the
+//                  scope, whose slash text these actions read by the same grammar
+//                  (/card-comp/code icon: the create panel of a card diagram).
+//                  chosen, it enters the scope; with run too, Enter runs it and
+//                  Tab enters the scope
 //
 //     run(context) -> effect
 //                  an action without a parameter: called when it is chosen
@@ -96,8 +104,8 @@ export function slashActionDefine(options = {}) {
     if (typeof param?.itemListGet !== 'function' || typeof param?.itemChoose !== 'function') {
       throw new Error(`slashActionDefine: param of ${name} needs itemListGet and itemChoose.`);
     }
-  } else if (!isRunnable) {
-    throw new Error(`slashActionDefine: ${name} needs run(context), or a param.`);
+  } else if (!isRunnable && !options.scope) {
+    throw new Error(`slashActionDefine: ${name} needs run(context), a param, or a scope.`);
   }
   return Object.freeze({
     name,
@@ -105,6 +113,11 @@ export function slashActionDefine(options = {}) {
     label: String(options.label ?? name),
     description: String(options.description ?? ''),
     icon: options.icon,
+    // an action putting a block at the caret says so, with the views of the block
+    // (slashBlockActionDefine): a surface that is not a document may take the block
+    // in a form of its own (the create panel of a card diagram: a card holding it)
+    block: options.block ? Object.freeze({ viewList: Object.freeze([...(options.block.viewList ?? [])]) }) : undefined,
+    scope: options.scope ? Object.freeze({ actionList: Object.freeze([...(options.scope.actionList ?? [])]) }) : undefined,
     run: isRunnable ? options.run : undefined,
     param: param === undefined ? undefined : Object.freeze({
       isOptional: isRunnable,
@@ -142,6 +155,7 @@ export function slashBlockActionDefine({ viewList, viewDefaultGet, sourceBuild, 
   };
   return slashActionDefine({
     ...options,
+    block: { viewList },
     run: (context) => slashEffect.block(sourceBuild(undefined, context)),
     param: {
       label: 'view',

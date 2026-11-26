@@ -53,8 +53,17 @@ In edit mode, type `/meeting-zoom` in a paragraph: both are listed (`/meeting-zo
 
 ## Editing one
 
-A click on the card opens its edit mode **Fields**: every value is typed where it stands, and the values not written yet are listed under the floating bar with the link, so entering moves nothing. Enter keeps a value (in the description Enter breaks the line and Ctrl/⌘ + Enter keeps it), Escape gives it up; *Save* writes the block, *Cancel* leaves it as it was. A time is kept as the card shows it (`2026-11-25T10:00+09:00` becomes `2026-11-25 10:00 +09`), a number in its groups.
+A click on the card opens its edit mode **Fields**, where everything is done on the card itself ([Editability](../../../main/doc_page_impl_edit.md#editability-everything-a-reader-sees-is-edited-where-it-stands)):
+
+| To | Do |
+| --- | --- |
+| change a value | click it and type; Enter keeps it (in the description Enter breaks the line and Ctrl/⌘ + Enter keeps it), Escape gives it up |
+| add a value not written yet (a time, a length, a meeting ID, a passcode, a link, a description) | the **+** in the bottom right corner of the card (there while the card is edited, faint until the pointer is on it), then the value: it stands in its place at once, its field open; given up empty, it goes again |
+| remove a value | keep it empty, or right-click it: **Delete** |
+| change the link | click **Join**: the link is typed in a field under it (Join opens nothing while the card is edited) |
+
+Nothing moves as the mode opens: the +, the field of the link and the menu float. *Save* in the floating bar writes the block, *Cancel* leaves it as it was. A time is kept as the card shows it (`2026-11-25T10:00+09:00` becomes `2026-11-25 10:00 +09`), a number in its groups.
 
 ## In a card diagram
 
-A card of a diagram can hold one component of the page ([A component in a card](../../cloud-dev-vis/doc/card-diagram-usage.md#a-component-in-a-card)): a reservation beside the room it is held in, a line between them. Double-click the canvas in the editor and type `meeting-zoom`. In a diagram the cards are drawn at the size of the cards around them.
+A card of a diagram can hold one component of the page ([A component in a card](../../cloud-dev-vis/doc/card-diagram-usage.md#a-component-in-a-card)): a reservation beside the room it is held in, a line between them. Double-click the canvas in the editor and type `meeting-zoom`. In a diagram the cards are drawn at the size of the cards around them. While the diagram is edited, the card is edited as in a document, on the card (the mode *Fields* kept open in place, `isInPlace`): a click on a value types it, the **+** adds a missing one, a right click removes one, **Join** types the link; each value is written as a step of the diagram's history. The edit card of the card repeats the values (`expose.dataFields`) as a second way; it is not where they are added.

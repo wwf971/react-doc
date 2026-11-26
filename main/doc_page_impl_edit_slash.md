@@ -117,6 +117,10 @@ An action is defined with `slashActionDefine` (`comp-doc/slash/slash-define.js`)
 slashActionDefine({
   name: 'link', aliasList: ['ln'],             typed after "/"; one word each
   label, description, icon,                    how the menu shows it
+  block: { viewList }                          it puts a block at the caret, in these views (set by
+                                               slashBlockActionDefine, below, and by the components' actions)
+  scope: { actionList }                        a "/" right after its name enters a scope of these actions
+                                               (below, Scopes)
   run(context) -> effect                       an action without a parameter
   param: {                                     an action with a parameter
     placeholder                                shown while the parameter is empty
@@ -157,7 +161,7 @@ effect  = slashEffect.replace(text, { isMarked }) | slashEffect.paramSet(text) |
   "ca" Enter  the block in the view card
 ```
 
-**A block and its view.** The actions that put a block at the caret are defined with `slashBlockActionDefine({ name, …, viewList, viewDefaultGet(context), sourceBuild(view, context) })` (`slash-define.js`): `run` answers the block in its default view, and the parameter is the view, optional and listed on the row. The default is the view the block gets where the caret is (`viewDefaultGet`: a code block reads the config of its place, `context.place`), and choosing it writes no view, so the block goes on following that default; another view is written in the block. Any later kind of block that has views is added the same way.
+**A block and its view.** The actions that put a block at the caret are defined with `slashBlockActionDefine({ name, …, viewList, viewDefaultGet(context), sourceBuild(view, context) })` (`slash-define.js`): `run` answers the block in its default view, and the parameter is the view, optional and listed on the row. The default is the view the block gets where the caret is (`viewDefaultGet`: a code block reads the config of its place, `context.place`), and choosing it writes no view, so the block goes on following that default; another view is written in the block. Any later kind of block that has views is added the same way. Such an action says it puts a block (`block: { viewList }` of the action; the actions of the components say so too, `block` with no views), so a surface that is not a document can offer it and take the block in a form of its own: the create panel of a card diagram offers these actions in a [scope](#scopes), `/card-comp/code icon`, and makes a card holding the block ([Blocks of a document](../package/cloud-dev-vis/doc/card-diagram-impl.md#blocks-of-a-document)).
 
 **Going on after a part of the parameter.** An action whose parameter is a path chosen a part at a time (a folder, then what is in it) answers a folder chosen with `paramSet`: the parameter becomes the folder followed by `/`, the menu lists what is inside, and the author goes on choosing, never leaving the slash mode until a leaf is chosen and `replace` writes it. `/link ~example/`, a CV's `/query name/jp/` and `/object` (a type, then an object, then what is inside it) work so; the menu shows such an item with a folder icon (`kind: 'dir'`). An action whose parameter does not read as a path while it is walked (a reference holding an id) says what it has reached with `hintGet`. An item an action lists only to say something (why a list is empty, that it is still asked for) is chosen to no effect: `itemChoose` answers nothing.
 
@@ -180,6 +184,20 @@ A parameter walked as a path has **places**, and something may be done at a plac
 ```
 
 An empty segment is no part of any path, so `//` can mean nothing else, and a command needs no key of its own. The slash mode knows no command: the action lists them when `slashParamCommandRead(param)` answers (`{ base, query }`: the place, and what is typed of the name), as items of the kind `command` (`slashCommandItemListGet(commandList, query)`), and answers one chosen with an effect, usually `actionSet`. The package cv does so in the walk of a profile (`@cv-dev/cv/doc/cv-query.md#a-new-value-where-it-is-named`); `/new` there is also an action of its own, typed at the start.
+
+### Scopes
+
+An action may open a **scope**: other actions reached through it (`scope: { actionList }` of the action). A `/` typed right after its name enters the scope, and what follows is read as a slash text of the scope's actions, by the same grammar: their names and aliases, their parameters, their optional parameters with the choices on the row, Tab and Enter, the same effects. The menu says where it is in its head (`/card-comp/`); a text an effect rewrites keeps what stands before the scope (`slashEffectApplyGet(…, prefix)`), and an effect that ends the slash mode (a block put, a text written) takes the whole slash text away.
+
+<!--renderComp=DiagramText-->
+```text
+/card-comp              Enter: the action itself (an empty card) · Tab or "/": what it holds
+/card-comp/             the scope's actions listed: /code, /mdx, /meeting-zoom-instance …
+/card-comp/code ic      the param mode of /code in the scope, as "/code ic" in a document
+/note/x                 ended: /note opens no scope
+```
+
+An action with a scope and `run` runs when it is chosen and enters its scope by Tab, as an optional parameter does; one without `run` enters it when chosen. The create panel of a card diagram is the use: its kind **Component** (`card-comp`) opens a scope of the page's actions that put a block, so what comes after `/card-comp/` is the slash of a document, unchanged ([Blocks of a document](../package/cloud-dev-vis/doc/card-diagram-impl.md#blocks-of-a-document)).
 
 **The kinds of an item** the default row draws an icon for: `dir` (a folder: choosing goes on inside it), `file`, `new` (something made by choosing it), `command`. An item of another kind has no icon, and an action drawing more brings its `ItemRender`.
 
@@ -228,7 +246,7 @@ compDefine(MeetingZoomInstance, { expose: {
 
 The actions are built from the components of the page, those of the packages included (`slashActionByIdCompBuild`, `comp-doc/slash/slash-comp.js`), and rebuilt when they change. They form a layer between the package's actions and the host's: a host's action of the same name wins. A component left out of documents (`isNotInDoc`) or whose data is only an asset item (`isAssetOnly`) is not offered, and one with no default source cancels the slash mode.
 
-The create panel of a card diagram lists the same names: `/meeting-zoom-instance` there makes a card holding the component ([A component in a card](../package/cloud-dev-vis/doc/card-diagram-impl.md#a-component-in-a-card)).
+The create panel of a card diagram offers the same actions in the scope of its kind Component: `/card-comp/meeting-zoom-instance` there makes a card holding the component ([A component in a card](../package/cloud-dev-vis/doc/card-diagram-impl.md#a-component-in-a-card)).
 
 ## Which blocks offer it
 

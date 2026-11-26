@@ -25,6 +25,8 @@ import {
   PanelsTopLeft,
   Rows3,
 } from '../../frontend/UICommon.js';
+import { CODE_VIEW_SLASH_LIST } from '../../../built-in/comp-mdx/text/code-slash.js';
+import { MDX_VIEW_ENTRY_LIST } from '../../../built-in/comp-mdx/text/MdxData.js';
 
 // What the components registered in registry.js expose about themselves
 // (compDefine expose, doc_page_impl_mdx_comp.md#what-a-component-exposes),
@@ -150,9 +152,14 @@ export const multiLangExpose = {
 // (doc_page_impl_mdx_code.md#the-lines-in-the-asset-service-layer): made by
 // "to asset" on a code block, not offered by the insert menu (a fenced code
 // block is the block to start from)
+// blockViewList: the views a block of it is drawn in, written on its marker as view=… (not view
+// modes, which are the reader's: doc_page_impl_mdx_code.md#the-views-of-a-code-block); the first is
+// the default where nothing decides another. What holds such a block offers the choice (a card of a
+// card diagram: package/cloud-dev-vis/doc/card-diagram-impl.md#a-component-in-a-card)
 export const codeExpose = {
   meta: { label: 'Code', description: 'Lines of code or text drawn as a fenced code block, from data: the lines of a code block moved into the asset service layer.' },
   icon: FileCode,
+  blockViewList: CODE_VIEW_SLASH_LIST,
 };
 
 export const mdxExpose = {
@@ -162,6 +169,7 @@ export const mdxExpose = {
     isInsertCommon: true,
   },
   icon: FileText,
+  blockViewList: MDX_VIEW_ENTRY_LIST,
   sourceDefaultCreate: () => ({ lang: 'md', raw: '', props: { view: 'icon' } }),
 };
 

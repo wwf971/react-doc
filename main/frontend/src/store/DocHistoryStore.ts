@@ -1,7 +1,7 @@
 import { makeAutoObservable, observable, runInAction } from 'mobx';
 import type { DocEditStore, EditHistoryEntrySummary, EditResult } from './DocEditStore.js';
 import type { DocStore } from './DocStore.js';
-import { embedHistoryHashGet, embedPathParse } from '../lib/doc-edit-embed.js';
+import { docHostPathGet, embedHistoryHashGet, heldPathParse } from '../lib/doc-edit-embed.js';
 import { historyChangeBlockListGet, historyChangeReveal } from '../lib/doc-history-reveal.js';
 
 // Undo and redo of the page (design: doc_page_impl_edit_history.md). The history
@@ -137,12 +137,15 @@ export class DocHistoryStore {
 
   // what an undo and a redo of a document take now. an embedded document takes the
   // entries of its host made in it: the last whose text after is its text now
-  // (undo), the one undone last whose text before is its text now (redo)
+  // (undo), the one undone last whose text before is its text now (redo). a
+  // document held by a component (an MDX block in a card) takes the entries of the
+  // document its holder wrote, made in it (its docPath)
   scopeStateGet(path: string): HistoryScopeState {
-    const embed = embedPathParse(path);
-    const summary = this.editStore.historySummaryByPath[embed ? embed.hostPath : path];
+    const hostPath = docHostPathGet(path);
+    const isHeld = Boolean(heldPathParse(path));
+    const summary = this.editStore.historySummaryByPath[hostPath];
     if (!summary) return { path };
-    if (!embed) {
+    if (hostPath === path) {
       return {
         path,
         undo: summary.entryList.find((entry) => entry.entryId === summary.undoEntryId),
@@ -155,7 +158,7 @@ export class DocHistoryStore {
     let undo: EditHistoryEntrySummary | undefined;
     let redo: EditHistoryEntrySummary | undefined;
     for (const entry of summary.entryList) {
-      if (!entry.embed) continue;
+      if (!entry.embed || (isHeld ? entry.docPath !== path : Boolean(heldPathParse(entry.docPath)))) continue;
       if (entry.state === 'done' && entry.embed.hashAfter === hash) undo = entry;
       if (entry.state === 'undone' && entry.embed.hashBefore === hash && (!redo || entry.undoSeq > redo.undoSeq)) redo = entry;
     }
@@ -166,7 +169,7 @@ export class DocHistoryStore {
   // from its host, says so
   entryLabelGet(path: string, entry: EditHistoryEntrySummary | undefined): string {
     if (!entry) return '';
-    const isFromEmbed = Boolean(entry.embed) && !embedPathParse(path);
+    const isFromEmbed = Boolean(entry.embed) && docHostPathGet(path) === path;
     return isFromEmbed ? `${entry.label} (in an MDX block)` : entry.label;
   }
 
@@ -224,23 +227,26 @@ export class DocHistoryStore {
   }
 
   private async stepRun(direction: HistoryDirection, path: string): Promise<EditResult> {
-    const embed = embedPathParse(path);
+    const hostPath = docHostPathGet(path);
+    const isInner = hostPath !== path;
     const scope = this.scopeStateGet(path);
     const entry = direction === 'undo' ? scope.undo : scope.redo;
-    // an embedded document has no history of its own: it needs an entry of its host
-    if (embed && !entry) return { code: -1, message: `Nothing to ${direction} in this MDX block.` };
+    // an embedded (or held) document has no history of its own: it needs an entry of its host
+    // made in it. one held by a card while its diagram is edited writes the draft of the diagram,
+    // undone in its editor
+    if (isInner && !entry) return { code: -1, message: heldPathParse(path) ? `Nothing to ${direction} in this MDX block here (a change made while its diagram is edited is undone in the editor of the diagram).` : `Nothing to ${direction} in this MDX block.` };
     const textBefore = this.editStore.sourceByPath[path]?.text;
     const stepState = { path, direction };
     runInAction(() => {
       this.stepState = stepState;
     });
-    const result = await this.editStore.historyStepApply(embed ? embed.hostPath : path, direction, entry?.entryId ?? '');
+    const result = await this.editStore.historyStepApply(hostPath, direction, entry?.entryId ?? '');
     runInAction(() => {
       if (this.stepState === stepState) this.stepState = undefined;
     });
     if (result.code !== 0) {
       // what the page knew of the history may be old (another tab wrote): read it again
-      void this.editStore.historyRead(embed ? embed.hostPath : path);
+      void this.editStore.historyRead(hostPath);
       if (result.code === -1 && !entry) return { code: -1, message: `Nothing to ${direction} in this document.` };
       return result;
     }

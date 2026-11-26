@@ -193,8 +193,17 @@ const ColorValueComp = observer(function ColorValueComp({ data, config }) {
 	return <DiagramColorValue label={config.label} value={data ?? ''} swatchList={config.swatchList} isDefaultOffered={config.isDefaultOffered} defaultLabel={config.defaultLabel} isNoneOffered={config.isNoneOffered} isLocked={config.isReadOnly} onChange={(value, option) => config.set(value, option)} />;
 });
 
+// a text of several lines in a card: written when it is left (as a text of one line of the card is),
+// one step of the history. Written at every keystroke, the card drawn again by each write took the
+// control's words and caret from under it: each key typed replaced what was typed before
 const TextMultilineComp = observer(function TextMultilineComp({ data, config, itemRef }) {
-	return <TextValue label={config.label} value={data ?? ''} isMultiline isLocked={config.isReadOnly} onChange={value => itemRef.onValueChangeAttempt?.(value)} />;
+	const draftRef = useRef(null);
+	const commit = () => {
+		const draft = draftRef.current;
+		draftRef.current = null;
+		if (draft !== null && draft !== (data ?? '')) itemRef.onValueChangeAttempt?.(draft);
+	};
+	return <TextValue label={config.label} value={data ?? ''} isMultiline isLocked={config.isReadOnly} onChange={(value) => { draftRef.current = value; }} onEnd={commit} />;
 });
 
 // the actions of a section: a disabled one keeps its reason as its title

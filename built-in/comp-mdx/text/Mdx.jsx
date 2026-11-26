@@ -1,9 +1,10 @@
-import { useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { observer } from 'mobx-react-lite';
 import { FileText } from '../../../main/frontend/UICommon.js';
 import { useDocStores } from '../../../main/frontend/src/store/context.js';
 import { useCodeLinesOpener } from '../../../main/comp-doc/code-editor/code-lines-open.js';
 import { CODE_PLACE_IN_LIST_ITEM, CODE_PLACE_LIST_ITEM } from '../../../main/frontend/src/lib/rehype-code-view.js';
+import { heldPathBuild } from '../../../main/frontend/src/lib/doc-edit-embed.js';
 import { mdxViewGet } from './MdxData.js';
 import './code-fence.css';
 
@@ -29,9 +30,14 @@ import './code-fence.css';
 //   data.raw       the text of the embedded document
 //   data.view      icon | card
 //   data.title     what the tile and the popup say
-//   config.sourceLine  the line of its marker: the embedded document's path
+//   config.sourceLine  the line of its marker: the embedded document's path; none
+//                      when another component holds the block (a card of a diagram):
+//                      the block then registers itself as the holder of its document
+//                      (heldPathBuild, DocEditStore.heldDocSet), written as its data
+//                      (dataReplaceRequest) while what holds it can be written
+//                      (config.docState of the holder), and the popup edits it there
 export const Mdx = observer(function Mdx({ data = {}, config = {}, onEvent }) {
-  const { configStore, embedPopupStore } = useDocStores();
+  const { configStore, editStore, embedPopupStore } = useDocStores();
   const view = mdxViewGet(data.view);
   const title = typeof data.title === 'string' ? data.title : '';
   const raw = String(data.raw ?? '').replace(/\n$/, '');
@@ -42,14 +48,48 @@ export const Mdx = observer(function Mdx({ data = {}, config = {}, onEvent }) {
   const isEditing = Boolean(config.docState?.isEditing);
   const MdxRenderer = config.MdxRenderer;
   const isOpen = Boolean(embedPopupStore?.isOpenFor(key));
-  const open = () => embedPopupStore?.open({ key, hostPath: docPath, line, title, raw, Renderer: MdxRenderer });
+  // a block with no line of its own is not written in a document: another component holds it (a
+  // card of a diagram, config.docState being that card's). It holds its document for the edit
+  // layer, writing it as its data, which the holder writes where it keeps it
+  const isInDoc = Number.isInteger(line) && line > 0;
+  const heldPath = !isInDoc && editStore ? heldPathBuild(docPath, key) : undefined;
+  const rawRef = useRef(raw);
+  rawRef.current = raw;
+  const onEventRef = useRef(onEvent);
+  onEventRef.current = onEvent;
+  const writeReason = config.docState?.isEditAvailable ? '' : (config.docState?.editReason || 'what holds this block cannot be written here');
+  useEffect(() => {
+    if (!heldPath) return undefined;
+    const holder = {
+      textGet: () => rawRef.current,
+      textWrite: async (text) => (await onEventRef.current?.('dataReplaceRequest', { raw: `${text}\n` })) ?? { code: -1, message: 'what holds this block does not write it' },
+      writeReason,
+    };
+    editStore.heldDocSet(heldPath, holder);
+    // let go a moment later: a block drawn again elsewhere (the diagram going from its editor to its
+    // view while the popup edits its document) holds it again first, and the document stays editable
+    return () => { setTimeout(() => editStore.heldDocRemove(heldPath, holder), 0); };
+  }, [editStore, heldPath, writeReason]);
+  // its text changed where it is held (a step undone there, its text typed in the edit card): the
+  // document is read again
+  useEffect(() => {
+    if (heldPath) editStore.heldDocTextChanged(heldPath, raw);
+  }, [editStore, heldPath, raw]);
+  // the title of a held block is a prop the holder writes (blockPropSetRequest), not a marker of a file;
+  // one function per mount, handed to the popup again when the block is drawn anew elsewhere (the
+  // diagram going from its editor to its view), so the popup writes through what holds it now
+  const [titleWrite] = useState(() => async (titleNew) => {
+    const result = await onEventRef.current?.('blockPropSetRequest', { props: { title: titleNew || null } });
+    return result?.code === 0 ? { code: 0, data: { title: titleNew } } : (result ?? { code: -1, message: 'what holds this block does not write its title' });
+  });
+  const open = () => embedPopupStore?.open({ key, hostPath: docPath, line, title, raw, Renderer: MdxRenderer, ...(heldPath ? { path: heldPath, titleWrite } : {}) });
   // the editor of a list item opens it from its chip (a double click)
   useCodeLinesOpener(config.stateKey, open);
   // open: the popup follows what the block says now (a write of the host,
   // an edit made in the popup itself, a new title)
   useEffect(() => {
-    if (isOpen) embedPopupStore.update(key, { title, raw, line, Renderer: MdxRenderer });
-  }, [embedPopupStore, isOpen, key, title, raw, line, MdxRenderer]);
+    if (isOpen) embedPopupStore.update(key, { title, raw, line, Renderer: MdxRenderer, ...(heldPath ? { titleWrite } : {}) });
+  }, [embedPopupStore, isOpen, key, title, raw, line, MdxRenderer, heldPath, titleWrite]);
   const contentRead = MdxRenderer ? (
     <MdxRenderer
       data={{ source: raw }}

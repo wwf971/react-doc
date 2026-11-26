@@ -1,6 +1,6 @@
 import { switchPathLast } from './SwitchData.js';
 import { switchRefIs, switchRefSplit } from './SwitchRef.js';
-import { sceneKeyOf } from './SwitchSceneEditTree.js';
+import { sceneKeyOf, sceneTreeKeyRead } from './SwitchSceneEditTree.js';
 
 // The switch layer as a feature of the visual editor (card-diagram-flexible-switch.md#the-switch-layer-as-a-feature-of-the-editor):
 // while a diagram is edited for a block session (config.sceneEdit: SwitchSceneEdit.jsx), the scenes
@@ -15,6 +15,8 @@ import { sceneKeyOf } from './SwitchSceneEditTree.js';
 //   dropAccept, drop       a row of the tree of scenes dropped on the canvas: a link to it (Alt: embedded)
 //   focusClear             something selected on the canvas: the focus of the panel lets go
 //   editorAttach           the editor, for what the panel asks of the canvas (sceneEdit.canvasApi)
+//   removalGet             Delete in the tree of scenes: the scene, view, mount or tab focused there,
+//                          what names it said first (asked of this session alone: sessionId)
 export const SWITCH_SCENE_FEATURE_ID = 'scene-switch';
 export const SWITCH_SCENE_DRAG_TYPE = 'application/x-doc-switch-scene';
 const SCENE_EMBED_SIZE = { width: 480, height: 340 };
@@ -33,7 +35,7 @@ export class SwitchSceneEditSession {
 	constructor({ store, sceneEdit }) {
 		this.store = store;
 		this.sceneEdit = sceneEdit;
-		this.api = { sceneRefPlace: (ref, options) => this.sceneRefPlace(ref, options), select: what => this.select(what) };
+		this.api = { sceneRefPlace: (ref, options) => this.sceneRefPlace(ref, options), select: what => this.select(what), removeAsk: () => this.editorGet()?.removeAsk?.({ sessionId: this.id }) };
 	}
 
 	editorAttach(editorGet) {
@@ -47,6 +49,45 @@ export class SwitchSceneEditSession {
 	dispose() { if (this.sceneEdit.canvasApi === this.api) this.sceneEdit.canvasApiSet(null); }
 
 	focusClear() { this.sceneEdit.focusClear(); }
+
+	// what Delete takes away of the tree of scenes (DiagramRemove.js: a removal), the item focused there:
+	// a scene (what is below it stays; what names it then names nothing), a view, a mount, a tab. Asked
+	// of this session alone, from the tree; a block or a folder takes nothing
+	removalGet(base, editor, { sessionId } = {}) {
+		if (sessionId !== this.id) return undefined;
+		const sceneEdit = this.sceneEdit;
+		const key = sceneEdit.focusKey;
+		const item = key ? sceneEdit.treeModel.itemGet(key) : null;
+		if (!item) return null;
+		const { kind, path, viewId } = sceneTreeKeyRead(key);
+		const plural = (count, one, many = `${one}s`) => `${count} ${count === 1 ? one : many}`;
+		const rectGet = () => document.querySelector(`.doc-switch-scene-tree [data-key="${CSS.escape(key)}"]`)?.getBoundingClientRect() ?? null;
+		const undoHint = 'Ctrl/⌘ + Z in the tree of scenes takes it back';
+		const refCountOf = (viewIdOnly = '') => (sceneEdit.refIndex.inByPath.get(path) ?? []).filter(ref => !viewIdOnly || ref.suffix.startsWith(`@${viewIdOnly}`) || ref.kind === 'embed').length;
+		const namedBy = count => (count ? [{ id: 'named-by', count, label: plural(count, 'link or embedded scene', 'links and embedded scenes') + ' naming it', effect: count === 1 ? 'stays, and says it names nothing' : 'stay, and say they name nothing' }] : []);
+		if (kind === 'scene' && !item.isMounted) {
+			const belowCount = [...(sceneEdit.spec?.sceneByPath.keys() ?? [])].filter(other => other !== path && other.startsWith(`${path}/`)).length;
+			return {
+				key: `scene:${path}`, kind: 'scene', what: `the scene "${item.label}"`, rectGet, undoHint,
+				dependentList: [
+					...namedBy(refCountOf()),
+					...(belowCount ? [{ id: 'below', count: belowCount, label: plural(belowCount, 'scene') + ' below it', effect: belowCount === 1 ? 'stays where it is' : 'stay where they are' }] : []),
+					...(sceneEdit.treeIndex.root === path ? [{ id: 'root', count: 1, label: 'It is the first scene', effect: 'the block opens on another one' }] : []),
+				],
+				run: () => Boolean(sceneEdit.sceneRemove(path)),
+			};
+		}
+		if (kind === 'view') {
+			const viewCount = sceneEdit.sceneEntryOf(path)?.scene?.viewList?.length ?? 0;
+			return { key: `view:${path}@${viewId}`, kind: 'view', what: `the view "${item.label}"`, rectGet, undoHint, ...(viewCount <= 1 ? { reason: 'A scene of views keeps one.' } : {}), dependentList: namedBy(refCountOf(viewId)), run: () => Boolean(sceneEdit.viewRemove(path, viewId)) };
+		}
+		if (kind === 'mount') {
+			const shownCount = sceneEdit.treeModel.childKeyListGet(key).length;
+			return { key: `mount:${path}`, kind: 'mount', what: `the mount "${item.label}"`, rectGet, undoHint, dependentList: shownCount ? [{ id: 'shown', count: shownCount, label: plural(shownCount, 'scene') + ' it shows here', effect: shownCount === 1 ? 'is shown no more (where it is held, it stays)' : 'are shown no more (where they are held, they stay)' }] : [], run: () => Boolean(sceneEdit.mountRemove(path)) };
+		}
+		if (kind === 'tab') return { key: `tab:${key}`, kind: 'tab', what: `the tab "${item.label}"`, rectGet, undoHint, dependentList: [], run: () => Boolean(sceneEdit.tabMemberRemove(item.owner, item.memberId)) };
+		return null;
+	}
 
 	select(what) {
 		const editor = this.editorGet();

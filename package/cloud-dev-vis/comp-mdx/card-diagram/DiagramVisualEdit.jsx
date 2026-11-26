@@ -3,6 +3,7 @@ import { observer } from 'mobx-react-lite';
 import { BringToFront, ChevronDown, ChevronUp, Plus, SendToBack, Undo2, Waypoints } from '../../../../main/frontend/UICommon.js';
 import { useDocStores } from '../../../../main/frontend/src/store/context.js';
 import { compDefinitionNormalize, compIdResolve } from '../../../../main/comp-doc/registry/comp-registry.js';
+import { compDefinitionGet } from '../../../../main/comp-doc/registry/comp-definition.js';
 import { EditActions } from '../../../../main/comp-doc/edit/EditActions.jsx';
 import { EditFloatingPanel } from '../../../../main/comp-doc/edit/EditFloatingPanel.jsx';
 import { DiagramEditStore } from './DiagramEditStore.js';
@@ -13,6 +14,8 @@ import { DiagramPanelStore } from './DiagramPanelStore.js';
 import { DiagramPanel, panelCardHeadActionListGet } from './DiagramPanel.jsx';
 import { cardModelBuild } from './DiagramEditCardModel.js';
 import { endpointIsDangling, pointNodeIdBuild } from './DiagramERData.js';
+import { diagramRemovalOf } from './DiagramRemove.js';
+import { DiagramRemoveConfirm } from './DiagramRemoveConfirm.jsx';
 import { DEPTH_MOVE_DESCRIPTION, DEPTH_MOVE_KEY, DEPTH_MOVE_LABEL, DEPTH_MOVE_LIST, depthTargetOfKey } from './DiagramDepth.js';
 import './DiagramVisualEdit.css';
 
@@ -86,6 +89,10 @@ const dropOf = (connection, from) => connection.source === from.nodeId && (conne
 //                                           thing is in a mode of the session's own (a model of
 //                                           DiagramEditCardModel.js whose segments and items say open());
 //                                           nothing: the card of the editor
+//   removalGet(removal, editor, options)    what Delete takes away (DiagramRemove.js): removal is what
+//                                           the path selects (or null); answer another removal (a focus
+//                                           of the session, a node it places), null for nothing, or
+//                                           undefined when it is not the session's
 //   nodeResizeAxisListGet(nodeId, axisList) the axes the resize handles of a node change, less what
 //                                           the session decides itself (DiagramRender.jsx)
 //   cardGet(editor)                         { model, anchorRectGet, close }: the edit card of its focus
@@ -115,6 +122,9 @@ const DiagramEditStatus = observer(function DiagramEditStatus({ store, editor, i
 	</>;
 });
 
+
+// a dialog of the page over the editor (PanelPopup), not the block popup the editor may stand in itself
+const PAGE_DIALOG_SELECTOR = '.text-panel.is-popup[aria-modal="true"]:not(.doc-block-popup)';
 export const DiagramVisualEdit = observer(function DiagramVisualEdit({ data, config, onEvent, kind, registry, isInPopup = false, renderContent }) {
 	const stores = useDocStores();
 	const { compById, sourceStore } = stores;
@@ -157,12 +167,14 @@ export const DiagramVisualEdit = observer(function DiagramVisualEdit({ data, con
 	// every command, then the draft reported to the page. a control that acts
 	// may be gone once the draft rendered (the toolbar of a row that lost the
 	// focus to the row it inserted), leaving the keyboard focus on the body:
-	// the editor takes it back, so the next key (Escape, undo) reaches it
+	// the editor takes it back, so the next key (Escape, undo) reaches it; not while a dialog of the
+	// page stands over it (the lines of a code block a card holds, saved from their dialog): its keys
+	// are the dialog's
 	const change = operation => {
 		if (isLocked) return;
 		operation();
 		report();
-		requestAnimationFrame(() => { if (document.activeElement === document.body && root.current) focusRoot(); });
+		requestAnimationFrame(() => { if (document.activeElement === document.body && root.current && !document.querySelector(PAGE_DIALOG_SELECTOR)) focusRoot(); });
 	};
 	const submit = () => {
 		if (!isLocked && store) {
@@ -183,6 +195,12 @@ export const DiagramVisualEdit = observer(function DiagramVisualEdit({ data, con
 		if (!store.endpointAttachReasonGet(connectionId, role, drop)) return role;
 		const other = role === 'source' ? 'target' : 'source';
 		return store.endpointAttachReasonGet(connectionId, other, drop) ? null : other;
+	};
+	// a node as the canvas draws it ({ x, y, width, height }), or null before it is drawn
+	const nodeBoxGet = (nodeId) => {
+		const position = canvas.current?.positionGet(nodeId);
+		const size = canvas.current?.nodeSizeGet?.(nodeId);
+		return position && size ? { ...position, ...size } : null;
 	};
 	const endFreeSet = (connectionId, role, position) => change(() => (isFixed ? store.connectionRemove(connectionId) : store.connectionEndpointSet(connectionId, role, { position })));
 	// Escape steps out one level at a time: the cell being typed (restoring
@@ -220,7 +238,8 @@ export const DiagramVisualEdit = observer(function DiagramVisualEdit({ data, con
 			event.stopPropagation();
 			if (!store || !editor) return;
 			event.preventDefault();
-			if (store.cell) editor.cancelCell();
+			if (store.removal) editor.removeCancel();
+			else if (store.cell) editor.cancelCell();
 			else if (store.create) editor.createClose();
 			// a card of values alone shows no path to step along: Escape lets go of what is focused
 			else if (store.display) { if (isFixed) editor.clearSelection(); else editor.stepOut(); }
@@ -233,12 +252,11 @@ export const DiagramVisualEdit = observer(function DiagramVisualEdit({ data, con
 			const isUp = event.key === ']' || event.key === '}';
 			const selection = store.selection;
 			editor.depthMove(selection.connectionId ? { connectionId: selection.connectionId } : { nodeId: selection.nodeId }, event.shiftKey ? (isUp ? 'front' : 'back') : isUp ? 'forward' : 'backward');
-		} else if ((event.key === 'Delete' || event.key === 'Backspace') && !isInTextField(event.target) && store?.selection?.anchorId && editor) {
-			// the anchor in focus (the only thing of a line a key removes)
-			event.preventDefault();
-			event.stopPropagation();
-			change(() => store.connectionAnchorRemove(store.selection.connectionId, store.selection.anchorId));
-			focusRoot();
+		} else if ((event.key === 'Delete' || event.key === 'Backspace') && !event.ctrlKey && !event.metaKey && !event.altKey && !isInTextField(event.target) && editor && !store.cell && !store.create) {
+			// what is selected taken away (card-diagram-impl.md#removing-what-is-selected): at once, or
+			// after a question when other things depend on it. A key held down takes nothing more
+			if (event.repeat) { event.preventDefault(); event.stopPropagation(); return; }
+			if (editor.removeAsk()) { event.preventDefault(); event.stopPropagation(); }
 		}
 	};
 	// something dragged from outside the canvas (a row of a tree of the panel): a feature taking it
@@ -307,6 +325,44 @@ export const DiagramVisualEdit = observer(function DiagramVisualEdit({ data, con
 			store.createOpen(target.position, { target });
 			return true;
 		},
+		// the definition of a component of the page by the name a node writes (a card holding one: its
+		// values in the edit card), or null where the page has none
+		compDefinitionGet: name => (name ? compDefinitionNormalize(compDefinitionGet(compById ?? {}, compIdResolve(sourceStore?.configDoc, name))) ?? null : null),
+		// ---- removing what is selected (card-diagram-impl.md#removing-what-is-selected) ----
+		// what Delete would take away now: a feature first (what it focuses, a node it places), else
+		// what the path selects (DiagramRemove.js); null: nothing. Every session is asked, also one
+		// whose layer this viewport does not offer: a node it places is still its to take away
+		// sessionId: asked of that session alone, for what it has selected in a panel of its own (the
+		// tree of scenes), whatever the canvas selects
+		removalGet: ({ sessionId = null } = {}) => {
+			if (!store || isLocked) return null;
+			const options = { positionGet: editor.handlePositionGet, boxGet: nodeBoxGet, sessionId };
+			const base = sessionId ? null : diagramRemovalOf(store, options);
+			for (const session of featureSessionList) {
+				if (sessionId && session.id !== sessionId) continue;
+				const own = session.removalGet?.(base, editor, options);
+				if (own !== undefined) return own;
+			}
+			return base;
+		},
+		// what is selected taken away: at once when nothing depends on it, else after the question
+		// (DiagramRemoveConfirm.jsx); true when there was something to take away
+		removeAsk: (option) => {
+			const removal = editor.removalGet(option);
+			if (!removal) return false;
+			if (removal.reason) { store.message = removal.reason; return true; }
+			if (!removal.dependentList.length) { change(() => removal.run()); focusRoot(); return true; }
+			store.removalSet({ ...removal, rect: removal.rectGet?.() ?? editor.anchorRectGet() ?? featureList.map(item => item.cardGet?.(editor)).find(Boolean)?.anchorRectGet?.() ?? null });
+			return true;
+		},
+		removeConfirm: () => {
+			const removal = store.removal;
+			store.removalSet(null);
+			if (removal) change(() => removal.run());
+			focusRoot();
+		},
+		// isFocusKept: a pointer went down elsewhere, where the focus goes with it
+		removeCancel: ({ isFocusKept = false } = {}) => { store.removalSet(null); if (!isFocusKept) focusRoot(); },
 		// ---- the path of the edit card ----
 		navigate: path => { store.pathSet(path); },
 		select: (nodeId, options = {}) => { featureList.forEach(item => item.focusClear?.()); store.select(nodeId, options); },
@@ -537,7 +593,7 @@ export const DiagramVisualEdit = observer(function DiagramVisualEdit({ data, con
 	// card of the path while something else is going on
 	const isCardDocked = Boolean(panel?.isCardDocked);
 	const cardHeadActionList = editor && !isCardDocked ? [...panelCardHeadActionListGet(panel), ...featureList.flatMap(item => item.cardHeadActionListGet?.(editor) ?? [])] : [];
-	const featureCard = editor && !isCardDocked && !store.display && !store.cell && !store.interaction && !store.create ? featureList.map(item => item.cardGet?.(editor)).find(Boolean) ?? null : null;
+	const featureCard = editor && !isCardDocked && !store.display && !store.cell && !store.interaction && !store.create && !store.removal ? featureList.map(item => item.cardGet?.(editor)).find(Boolean) ?? null : null;
 	return <div ref={root} tabIndex={-1} className={`doc-vis-edit${editor ? ' is-active' : ''}${isInPopup ? ' is-popup' : ''}${editor && panelOwn?.hasTabs ? ' has-feature-panel' : ''}`} onKeyDown={keyDown} onDragOver={canvasDragOver} onDrop={canvasDrop} onClick={event => {
 		if (event.target === event.currentTarget || event.target.classList.contains('doc-vis-card-static')) editor?.clearSelection();
 	}}>
@@ -559,5 +615,6 @@ export const DiagramVisualEdit = observer(function DiagramVisualEdit({ data, con
 			</span> : null}
 		</> : null} actions={<EditActions status={session.status} message={session.message || store?.message} titleCancel="Cancel" isSubmitDisabled={!store || !isAllowed} onSubmit={submit} onCancel={cancel} />} />
 		{featureCard ? <DiagramEditCard key="feature" editor={editor} onKeyDown={keyDown} card={featureCard} headActionList={cardHeadActionList} /> : editor && store.isCardShown && !isCardDocked ? <DiagramEditCard editor={editor} onKeyDown={keyDown} headActionList={cardHeadActionList} /> : null}
+		{editor && store.removal ? <DiagramRemoveConfirm editor={editor} removal={store.removal} /> : null}
 	</div>;
 });

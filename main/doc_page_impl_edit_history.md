@@ -120,6 +120,8 @@ An [embedded document](doc_page_impl_mdx_embed.md) is not a file: every edit of 
 
 The hashes identify the block across edits above it, which move its line and so its path; the line is kept with the entry only to tell two blocks of the same text apart. The popup's step names its entry (`entryId`), which may not be the last of the host: the server merges it, so the host's later entries stay.
 
+An MDX block **held by another component** (a card of a card diagram: [Held by another component](doc_page_impl_mdx_embed.md#held-by-another-component)) is edited the same way: each edit made in its popup is a write of the page's document by its holder, an entry tagged with the held path (`docPath`) and the hashes of its text, and its popup takes the entries of its own path only. An MDX block written in the page never takes them.
+
 ## Routing an undo
 
 An undo is the event `historyUndoRequest` (a redo `historyRedoRequest`) of the route `history`, answered by `DocHistoryStore.eventHandle`. Who reports it decides what it names:

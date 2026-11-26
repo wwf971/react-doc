@@ -77,6 +77,8 @@ export const EditSlashMenu = observer(function EditSlashMenu({ slashStore, surfa
   // the action highlighted in the action mode, when its parameter is optional
   const actionActive = !action ? itemList[itemIndexActive]?.action : undefined;
   const actionActiveOptional = actionActive?.param?.isOptional ? actionActive : undefined;
+  // the action highlighted in the action mode, when it opens a scope (/card-comp/…)
+  const actionActiveScope = actionActive?.scope ? actionActive : undefined;
   const ItemRender = action?.param?.ItemRender;
   // what the parameter typed so far means (the action says); the placeholder while it says nothing
   const hint = action ? slashStore.paramHint : '';
@@ -92,6 +94,12 @@ export const EditSlashMenu = observer(function EditSlashMenu({ slashStore, surfa
       style={style}
       onPointerDown={(event) => event.preventDefault()}
     >
+      {!action && parsed.prefix ? (
+        // inside a scope: what was entered, its actions listed below
+        <div className="doc-edit-slash-head">
+          <span className="doc-edit-slash-head-label">{parsed.prefix}/</span>
+        </div>
+      ) : null}
       {action ? (
         <div className="doc-edit-slash-head">
           {action.icon ? <action.icon size={13} className="doc-edit-slash-icon" /> : null}
@@ -134,7 +142,11 @@ export const EditSlashMenu = observer(function EditSlashMenu({ slashStore, surfa
         </div>
       ))}
       <div className="doc-edit-slash-foot">
-        {actionActiveOptional ? (
+        {actionActiveScope ? (
+          <>
+            <kbd>↑</kbd><kbd>↓</kbd> · {actionActiveScope.run ? <><kbd>Enter</kbd> as it is · </> : null}<kbd>Tab</kbd> or <kbd>/</kbd> what it holds
+          </>
+        ) : actionActiveOptional ? (
           <>
             <kbd>↑</kbd><kbd>↓</kbd> · <kbd>Enter</kbd> {slashStore.choiceDefaultLabelGet(actionActiveOptional) || 'as it is'}
             {slashStore.choiceDefaultLabelGet(actionActiveOptional) ? ' (default)' : ''} · <kbd>Tab</kbd> choose the {actionActiveOptional.param.label || 'option'}

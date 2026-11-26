@@ -23,6 +23,17 @@
 // line starts it for a moment: "//", or a name no action has, lists nothing
 // and shows no menu.
 //
+// an action may open a scope: other actions reached through it. a "/" right
+// after its name enters the scope, and what follows is a slash text of the
+// scope's actions, read by the same grammar (the create panel of a card
+// diagram: its kind card-comp holds a block of a document, and what comes
+// after it is the slash of a document):
+//
+//   /card-comp/           action mode of the scope, query ''
+//   /card-comp/co         the scope's actions matching 'co'
+//   /card-comp/code␣ic    param mode of the scope's 'code', param 'ic'
+//   /note/x               ended: 'note' opens no scope
+//
 // a surface may also name direct triggers: a text that, typed, enters the
 // param mode of one action at once, without "/" and a name. the trigger
 // text then stands where "/name " stands:
@@ -137,6 +148,9 @@ export function slashTextGet(anchor, lineState, triggerList) {
 //   { mode: 'action', query }
 //   { mode: 'param', action, actionName, param, trigger? }
 //   { mode: 'end' }
+// inside a scope both modes also carry prefix ('/card-comp': what stands before
+// the scope's slash text, kept when the text is rewritten) and scopeActionList
+// (the actions listed there)
 // actionGet(name) answers the action of a name typed after the "/", or
 // undefined; an action without a parameter has no param mode. a text
 // starting with a direct trigger (triggerList) is the param mode of the
@@ -154,6 +168,16 @@ export function slashTextParse(text, actionGet, triggerList) {
   }
   const body = value.slice(1);
   const indexSpace = body.indexOf(' ');
+  // a name followed by "/": the scope it opens, its slash text read by its own actions
+  const indexSlash = body.indexOf('/');
+  if (indexSlash > 0 && (indexSpace < 0 || indexSlash < indexSpace)) {
+    const scopeName = body.slice(0, indexSlash);
+    const scope = actionGet?.(scopeName)?.scope;
+    if (!scope) return { mode: SLASH_MODE_END };
+    const inner = slashTextParse(body.slice(indexSlash), slashScopeActionGetBuild(scope.actionList));
+    if (inner.mode === SLASH_MODE_END) return inner;
+    return { ...inner, prefix: `/${scopeName}${inner.prefix ?? ''}`, scopeActionList: inner.scopeActionList ?? scope.actionList };
+  }
   if (indexSpace < 0) {
     if (body.length > SLASH_QUERY_LENGTH_MAX || /[\s/]/.test(body)) return { mode: SLASH_MODE_END };
     return { mode: SLASH_MODE_ACTION, query: body };
@@ -164,6 +188,20 @@ export function slashTextParse(text, actionGet, triggerList) {
   const param = body.slice(indexSpace + 1);
   if (param.startsWith(' ') || param.endsWith('  ')) return { mode: SLASH_MODE_END };
   return { mode: SLASH_MODE_PARAM, action, actionName, param };
+}
+
+// the action of a name among the actions of a scope (a name or an alias, any case)
+const scopeActionGetByList = new WeakMap();
+function slashScopeActionGetBuild(actionList) {
+  const list = Array.isArray(actionList) ? actionList : [];
+  let get = scopeActionGetByList.get(list);
+  if (!get) {
+    const actionByName = new Map();
+    for (const action of list) for (const name of [action.name, ...(action.aliasList ?? [])]) actionByName.set(String(name).toLowerCase(), action);
+    get = (name) => actionByName.get(String(name ?? '').toLowerCase());
+    scopeActionGetByList.set(list, get);
+  }
+  return get;
 }
 
 // the actions the action mode lists for a query: names starting with it
@@ -281,16 +319,17 @@ export function slashBlockTextInsert(text, offset, source) {
 //               parameter is rewritten ('/ln ' stays '/ln ')
 //   trigger     the direct trigger the param mode was entered with, when it
 //               was: its text is kept instead ('{{' stays '{{')
-export function slashEffectApplyGet(effect, actionName, trigger) {
+//   prefix      the scope the action is in ('/card-comp'), kept before it
+export function slashEffectApplyGet(effect, actionName, trigger, prefix = '') {
   if (!effect || typeof effect !== 'object') return { textNew: undefined, isEnded: false };
   if (effect.type === SLASH_EFFECT_REPLACE) return { textNew: effect.text, isEnded: true, ...(effect.isMarked === true && effect.text !== '' ? { isMarked: true } : {}) };
   if (effect.type === SLASH_EFFECT_PARAM_SET) {
-    return { textNew: trigger ? `${trigger.text}${effect.text}` : `/${actionName} ${effect.text}`, isEnded: false };
+    return { textNew: trigger ? `${trigger.text}${effect.text}` : `${prefix}/${actionName} ${effect.text}`, isEnded: false };
   }
   // another action of the surface goes on with the parameter: its "/name " is written out, also
   // where the slash mode was entered by a direct trigger, whose text is the first action's
   if (effect.type === SLASH_EFFECT_ACTION_SET) {
-    return effect.actionName ? { textNew: `/${effect.actionName} ${effect.text}`, isEnded: false } : { textNew: undefined, isEnded: false };
+    return effect.actionName ? { textNew: `${prefix}/${effect.actionName} ${effect.text}`, isEnded: false } : { textNew: undefined, isEnded: false };
   }
   if (effect.type === SLASH_EFFECT_CANCEL) return { textNew: undefined, isEnded: true };
   if (effect.type === SLASH_EFFECT_BLOCK) return { textNew: '', isEnded: true, blockSource: effect.source };
