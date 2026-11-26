@@ -9,6 +9,16 @@ import { parametricPanelTabBuild } from './ParametricPanel.jsx';
 import { iconOf, toolIconOf } from './ParametricToolBar.jsx';
 import { parametricKindList } from './ParametricShape.jsx';
 import { parametricApiListBuild } from './ParametricApi.js';
+import { ParametricLocatorLayer } from './ParametricLocatorLayer.jsx';
+import { locatorActionListBuild, locatorCardSectionListBuild, locatorModeCardBuild } from './ParametricLocatorModel.js';
+
+// what a layout type shows of itself in the editor and when read, by its type: the sections of
+// its edit card, the card of a mode of its own, what a right-click offers, and what it draws over
+// the canvas in the place of the frame of a layout. The catalog of the types is pure
+// (ParametricCatalog.js); this is the part that draws, given beside it
+export const parametricLayoutUiByType = {
+	locator: { cardSectionListGet: locatorCardSectionListBuild, modeCardGet: locatorModeCardBuild, actionListGet: locatorActionListBuild, CanvasLayer: ParametricLocatorLayer, ReadLayer: ParametricLocatorLayer },
+};
 import './ParametricCanvas.css';
 
 // The parametric canvas as a feature of a node registry (card-diagram-parametric-canvas.md): a
@@ -17,15 +27,18 @@ import './ParametricCanvas.css';
 // editing layer, the tool bar and the panel.
 //
 // Everything of it is a plugin: a feature is built from lists of constraint types
-// (ParametricConstraint.js), layout types and patterns (ParametricLayout.js), create modes
+// (ParametricConstraint.js), layout types and patterns (ParametricLayout.js; the locator:
+// ParametricLocator.js, with what it draws: layoutUiByType), the formats of reference points
+// (ParametricReferencePoint.js), create modes
 // (ParametricCreateMode.js), creators (ParametricCreator.js), tools (ParametricTool.js) and the
 // kinds it draws with (ParametricShape.jsx: a shape, a text; kinds of every registry listing the
 // feature), and the one below is built from those the package ships (a list left out is the shipped
-// one). A series wanting more builds its own: parametricFeatureBuild({ constraintTypeList: [...constraintTypeListDefault, mine] }).
-export function parametricFeatureBuild({ constraintTypeList, layoutTypeList, createModeList, creatorList, kindList = parametricKindList, toolMap = parametricToolMapDefault } = {}) {
-	const catalog = parametricCatalogBuild({ constraintTypeList, layoutTypeList, createModeList, creatorList });
+// one). A series wanting more builds its own: parametricFeatureBuild({ constraintTypeList: [...parametricConstraintTypeList, mine] })
+// (ParametricCatalog.js: the lists the package ships).
+export function parametricFeatureBuild({ constraintTypeList, layoutTypeList, referenceFormatList, createModeList, creatorList, kindList = parametricKindList, toolMap = parametricToolMapDefault, layoutUiByType = parametricLayoutUiByType } = {}) {
+	const catalog = parametricCatalogBuild({ constraintTypeList, layoutTypeList, referenceFormatList, createModeList, creatorList });
 	// the frames of the layouts framed when read, over every canvas of a diagram reading the section
-	const ReadLayer = ({ canvasStore }) => <ParametricReadLayer canvasStore={canvasStore} catalog={catalog} />;
+	const ReadLayer = ({ canvasStore }) => <ParametricReadLayer canvasStore={canvasStore} catalog={catalog} layoutUiByType={layoutUiByType} />;
 	return {
 		id: PARAMETRIC_FEATURE_ID,
 		label: 'Parametric canvas',
@@ -47,7 +60,7 @@ export function parametricFeatureBuild({ constraintTypeList, layoutTypeList, cre
 			const isConfigKept = Boolean(configStore?.layerCompValueSet && compId && configStore.configService?.compConfigDefineListGet?.(compId)?.some(define => define.key === PARAMETRIC_TOOL_KEY));
 			const toolMapConfigGet = () => (isConfigKept ? configStore.configService.compConfigGet(compId, config.sourcePath ?? '')?.[PARAMETRIC_TOOL_KEY] : null) ?? {};
 			const session = new ParametricEditStore({
-				store, registry, config, canvas, isOnGet, catalog, toolIconGet: toolIconOf, iconGet: iconOf,
+				store, registry, config, canvas, isOnGet, catalog, toolIconGet: toolIconOf, iconGet: iconOf, layoutUiByType,
 				toolMapGet: () => toolMapMerge(toolMap, toolMapConfigGet()),
 				toolMapPatch: isConfigKept ? (patch) => { void configStore.layerCompValueSet('client', compId, PARAMETRIC_TOOL_KEY, toolMapMerge(toolMapConfigGet(), patch)); } : undefined,
 			});

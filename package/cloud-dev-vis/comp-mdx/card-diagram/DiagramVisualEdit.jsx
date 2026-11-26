@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { observer } from 'mobx-react-lite';
-import { Plus, Undo2, Waypoints } from '../../../../main/frontend/UICommon.js';
+import { BringToFront, ChevronDown, ChevronUp, Plus, SendToBack, Undo2, Waypoints } from '../../../../main/frontend/UICommon.js';
 import { useDocStores } from '../../../../main/frontend/src/store/context.js';
 import { compDefinitionNormalize, compIdResolve } from '../../../../main/comp-doc/registry/comp-registry.js';
 import { EditActions } from '../../../../main/comp-doc/edit/EditActions.jsx';
@@ -13,6 +13,7 @@ import { DiagramPanelStore } from './DiagramPanelStore.js';
 import { DiagramPanel, panelCardHeadActionListGet } from './DiagramPanel.jsx';
 import { cardModelBuild } from './DiagramEditCardModel.js';
 import { endpointIsDangling, pointNodeIdBuild } from './DiagramERData.js';
+import { DEPTH_MOVE_DESCRIPTION, DEPTH_MOVE_KEY, DEPTH_MOVE_LABEL, DEPTH_MOVE_LIST, depthTargetOfKey } from './DiagramDepth.js';
 import './DiagramVisualEdit.css';
 
 const saveTargetLabels = { asset: 'Asset item', inline: 'Inline YAML' };
@@ -21,6 +22,7 @@ const endpointOf = (nodeId, handleId) => ({ nodeId, handleId: handleId ?? null }
 // search of the create panel) belongs to the field
 const isInTextField = target => Boolean(target?.isContentEditable) || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target?.tagName);
 const isPointNode = nodeId => String(nodeId).startsWith('~');
+const DEPTH_MOVE_ICON = { front: BringToFront, forward: ChevronUp, backward: ChevronDown, back: SendToBack };
 // the handle a dragged line was dropped on: the end of the React Flow
 // connection that is not the handle the drag started from
 const dropOf = (connection, from) => connection.source === from.nodeId && (connection.sourceHandle ?? null) === (from.handleId ?? null)
@@ -36,8 +38,10 @@ const dropOf = (connection, from) => connection.source === from.nodeId && (conne
 // (positions of handles and nodes, the camera), the drag interactions of
 // the canvas (connect, detach, reconnect, create), which it turns into
 // store commands, and the keys of the editor (Escape, Ctrl/⌘ + Enter, undo
-// and redo), handled here first so no keyboard map takes them from an open
-// editor.
+// and redo, Ctrl/⌘ + ] and [ for what is selected to go over or under what
+// lies on it: card-diagram-impl.md#depth), handled here first so no keyboard
+// map takes them from an open editor. The engine's own actions for a thing
+// right-clicked (its place in depth) are listed here too, before the features'.
 //
 // What a host may say in config beside the edit session (a scene edited in place gives all of
 // them: card-diagram-flexible-switch.md#a-scene-edited-in-place):
@@ -78,6 +82,12 @@ const dropOf = (connection, from) => connection.source === from.nodeId && (conne
 //                                           first (DiagramCreatePanel.jsx: textTake); the first session's
 //   cardSectionListGet(target, editor)      sections added to the edit card of a node or a line:
 //                                           { kind: node, nodeId } | { kind: line, connectionId }
+//   cardModelGet(display, editor)           the whole edit card of what the path focuses, while that
+//                                           thing is in a mode of the session's own (a model of
+//                                           DiagramEditCardModel.js whose segments and items say open());
+//                                           nothing: the card of the editor
+//   nodeResizeAxisListGet(nodeId, axisList) the axes the resize handles of a node change, less what
+//                                           the session decides itself (DiagramRender.jsx)
 //   cardGet(editor)                         { model, anchorRectGet, close }: the edit card of its focus
 //   cardHeadActionListGet(editor)           buttons of the head of the card floating beside the
 //                                           principal: [{ id, label, Icon, act }]
@@ -215,6 +225,14 @@ export const DiagramVisualEdit = observer(function DiagramVisualEdit({ data, con
 			// a card of values alone shows no path to step along: Escape lets go of what is focused
 			else if (store.display) { if (isFixed) editor.clearSelection(); else editor.stepOut(); }
 			else restReport();
+		} else if (isMod && ['[', ']', '{', '}'].includes(event.key) && !isInTextField(event.target) && editor && !isFixed && kind === 'diagram' && (store.selection?.nodeId || store.selection?.connectionId)) {
+			// what is selected moved in depth (card-diagram-impl.md#depth): ] forward, [ backward, with
+			// Shift to the front and to the back. Read from the key, not its place on the keyboard
+			event.preventDefault();
+			event.stopPropagation();
+			const isUp = event.key === ']' || event.key === '}';
+			const selection = store.selection;
+			editor.depthMove(selection.connectionId ? { connectionId: selection.connectionId } : { nodeId: selection.nodeId }, event.shiftKey ? (isUp ? 'front' : 'back') : isUp ? 'forward' : 'backward');
 		} else if ((event.key === 'Delete' || event.key === 'Backspace') && !isInTextField(event.target) && store?.selection?.anchorId && editor) {
 			// the anchor in focus (the only thing of a line a key removes)
 			event.preventDefault();
@@ -240,21 +258,49 @@ export const DiagramVisualEdit = observer(function DiagramVisualEdit({ data, con
 	};
 	// what the host offers in the panel of a double-click: an action isHidden is opened by the host alone
 	const hasCreateOffer = Boolean(config.createActionList?.some(action => !action.isHidden) || config.createSourceList?.length);
+	// where the nodes and the lines are drawn, for a step in depth: it passes the nearest thing lying
+	// on what is moved (DiagramEditStore.depthMove). A line: the box of its path as drawn, else of its ends
+	const depthGeometry = {
+		rectOf: (key) => {
+			const target = depthTargetOfKey(key);
+			if (target.nodeId !== undefined) {
+				const position = canvas.current?.positionGet(target.nodeId);
+				const size = canvas.current?.nodeSizeGet?.(target.nodeId);
+				return position && size ? { x: position.x, y: position.y, width: size.width, height: size.height } : null;
+			}
+			return canvas.current?.edgeBoxGet?.(target.connectionId) ?? null;
+		},
+	};
+	// what the engine itself offers for a node or a line right-clicked: its place in depth. Nothing
+	// where the structure is given, for a standalone card, or for a node that has no depth (pinned)
+	const depthActionListGet = (target) => {
+		if (!store || isFixed || kind !== 'diagram' || (target?.kind !== 'node' && target?.kind !== 'line')) return [];
+		const depthTarget = target.kind === 'node' ? { nodeId: target.nodeId } : { connectionId: target.connectionId };
+		if (store.depthRefuseReasonGet(depthTarget)) return [];
+		return DEPTH_MOVE_LIST.map((how) => {
+			const reason = store.depthMoveReasonGet(depthTarget, how);
+			return { id: `depth-${how}`, label: DEPTH_MOVE_LABEL[how], description: `${DEPTH_MOVE_KEY[how]}: ${DEPTH_MOVE_DESCRIPTION[how]}`, icon: DEPTH_MOVE_ICON[how], keywordList: ['depth', 'order', 'layer', 'z-index', 'front', 'back'], isDisabled: Boolean(reason), reason, start: () => { editorRef.current?.depthMove(depthTarget, how); } };
+		});
+	};
 	const editor = store && isAllowed ? {
 		store, isLocked, change, canvas, kind,
 		// ---- the features this viewport offers (their sessions) ----
 		featureList,
 		paneClick: position => featureList.some(item => item.paneClick?.(position, editor)),
-		createActionListGet: target => [...(config.createActionList ?? []), ...featureList.flatMap(item => item.createActionListGet?.(target ?? { kind: 'canvas' }, editor) ?? [])],
+		createActionListGet: target => [...(config.createActionList ?? []), ...depthActionListGet(target), ...featureList.flatMap(item => item.createActionListGet?.(target ?? { kind: 'canvas' }, editor) ?? [])],
+		// a node or a line moved in depth, as one step: front, forward, backward, back (DiagramDepth.js);
+		// forward and backward pass the nearest thing lying on it as the canvas draws them
+		depthMove: (target, how) => { let isChanged = false; change(() => { isChanged = store.depthMove(target, how, { geometry: depthGeometry }); }); return isChanged; },
 		createTextGet: target => featureList.map(item => item.createTextGet?.(target ?? { kind: 'canvas' }, editor)).find(Boolean),
 		// the edit card of a line, when the host draws it (config.lineCardGet)
 		lineCardGet: connection => (connection && config.lineCardGet ? config.lineCardGet(connection, editor) ?? null : null),
 		// a node resized by its corners: its new box, as one step; a feature placing it writes it its way
 		nodeResize: (nodeId, rect) => change(() => featureList.some(item => item.nodeResize?.(nodeId, rect, editor)) || store.nodeResize(nodeId, rect)),
-		// a right-click: the panel of a double-click with what can be done there, when a feature or
-		// the host has something to offer for it; false leaves the browser's own menu
+		// a right-click: the panel of a double-click with what can be done there: on a node or a line
+		// its place in depth (the engine's own), and what a feature or the host offers for it; on the
+		// empty canvas what a feature offers. false leaves the browser's own menu
 		contextOpen: (target) => {
-			if (isLocked || !featureList.length || !editor.createActionListGet(target).length) return false;
+			if (isLocked || (!featureList.length && !depthActionListGet(target).length) || !editor.createActionListGet(target).length) return false;
 			if (target.kind === 'node') store.select(target.nodeId);
 			else if (target.kind === 'line') store.selectConnection(target.connectionId);
 			else store.selectionClear();

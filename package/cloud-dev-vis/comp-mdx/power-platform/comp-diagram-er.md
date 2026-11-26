@@ -853,6 +853,10 @@ The words are the card's own: the rows of a Dataverse table are its *Columns*, o
 - Dragging a card in edit mode moves it, and the position is written to the draft when the card has an explicit position. The card's tab has **Remember**, which keeps the current canvas position as the node's `position` (off: the node returns to the automatic layout); **Locked** keeps the position and prevents dragging in either mode. A locked node cannot be dragged, in reading or in editing.
 - The camera is kept when the block saves.
 
+### Over and under
+
+A card or a line is put over or under what lies on it with four moves: **Bring to front**, **Bring forward**, **Send backward**, **Send to back**. They are in the menu of a right-click on the card or the line and in the section **Depth** of its edit card, and on the keys Ctrl/⌘ + `]` (forward) and Ctrl/⌘ + `[` (backward), with Shift to the front and to the back. Forward and backward pass the nearest thing lying on it; a move with nothing to pass says so. Each is one undo step. What a move writes is the `depth` of the node or the line, a number shown in the same section ([Depth](../../doc/card-diagram-impl.md#depth)).
+
 ### Data in the asset service layer
 
 The examples above are inline: a save rewrites the block. The two blocks below are references into the [asset service layer](~example/asset-store.md). Their Visual mode edits the referenced object, at its head version and while it is not locked, and a save writes a version of the object without touching the document. **Save to → Inline YAML** writes the draft into the block in place of the reference instead, and leaves the object as it was.

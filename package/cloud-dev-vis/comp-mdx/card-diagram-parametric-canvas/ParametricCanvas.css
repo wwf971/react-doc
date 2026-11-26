@@ -374,6 +374,254 @@
 	vector-effect: non-scaling-stroke;
 }
 
+/* a reference point (ParametricCanvasLayer.jsx): a small diamond, as large on the screen at every
+   zoom. A diamond is of placing by rules alone: a node handle is a square on an edge, a resize
+   handle a circle or a pill on the frame of the selection. is-own: of the member selected; is-parent:
+   of what it follows; is-declared: listed in the mode of its reference points; is-default: ringed */
+.doc-param-ref {
+	position: absolute;
+	top: 0;
+	left: 0;
+	width: 0;
+	height: 0;
+	pointer-events: none;
+}
+
+.doc-param-ref-mark {
+	position: absolute;
+	top: -4.5px;
+	left: -4.5px;
+	box-sizing: border-box;
+	display: block;
+	width: 9px;
+	height: 9px;
+	padding: 0;
+	border: 1.5px solid var(--doc-param-ref-color, #7c3aed);
+	border-radius: 1px;
+	background: var(--color-fd-background);
+	transform: scale(calc(1 / var(--doc-vis-zoom, 1))) rotate(45deg);
+	/* a mark only shown never takes the pointer: it may lie on a resize handle or a node handle */
+	pointer-events: none;
+}
+
+button.doc-param-ref-mark { pointer-events: all; }
+
+.doc-param-ref.is-parent .doc-param-ref-mark { background: var(--doc-param-ref-color, #7c3aed); }
+.doc-param-ref.is-default .doc-param-ref-mark { box-shadow: 0 0 0 2.5px color-mix(in srgb, var(--doc-param-ref-color, #7c3aed) 30%, transparent); }
+.doc-param-ref.is-open .doc-param-ref-mark { background: var(--doc-param-ref-color, #7c3aed); box-shadow: 0 0 0 3px color-mix(in srgb, var(--doc-param-ref-color, #7c3aed) 35%, transparent); }
+button.doc-param-ref-mark { cursor: pointer; }
+button.doc-param-ref-mark:hover { background: color-mix(in srgb, var(--doc-param-ref-color, #7c3aed) 45%, var(--color-fd-background)); }
+
+.doc-param-ref-name {
+	position: absolute;
+	top: 0;
+	left: 0;
+	padding: 0 0.3rem;
+	border-radius: 3px;
+	background: color-mix(in srgb, var(--doc-param-ref-color, #7c3aed) 88%, #000);
+	color: #fff;
+	font-family: ui-sans-serif, system-ui, sans-serif;
+	font-size: 10px;
+	line-height: 1.55;
+	white-space: nowrap;
+	transform: scale(calc(1 / var(--doc-vis-zoom, 1))) translate(9px, -50%);
+	transform-origin: top left;
+}
+
+/* ---------- a locator (ParametricLocatorLayer.jsx), in the coordinates of the diagram ---------- */
+
+.doc-param-locator {
+	--doc-param-locator-color: #0d9488;
+	position: absolute;
+	top: 0;
+	left: 0;
+	width: 0;
+	height: 0;
+	pointer-events: none;
+}
+
+.doc-param-locator-lines {
+	position: absolute;
+	top: 0;
+	left: 0;
+	overflow: visible;
+	pointer-events: none;
+}
+
+/* as thin on the screen at every zoom: the width is divided by the zoom of the canvas (an svg under
+   a css transform of its html ancestors is not kept thin by vector-effect in every browser) */
+.doc-param-locator-lines line {
+	stroke: var(--doc-param-locator-color);
+	stroke-width: calc(1px / var(--doc-vis-zoom, 1));
+}
+
+.doc-param-locator.is-light .doc-param-locator-lines line { stroke-opacity: 0.22; stroke-dasharray: calc(2px / var(--doc-vis-zoom, 1)) calc(4px / var(--doc-vis-zoom, 1)); }
+.doc-param-locator.is-full .doc-param-locator-lines line { stroke-opacity: 0.6; }
+.doc-param-locator.is-focused .doc-param-locator-lines line { stroke-width: calc(1.2px / var(--doc-vis-zoom, 1)); }
+/* the line being dragged: where it will be, dashed; the lines stay where they are until the drop */
+.doc-param-locator-lines line.is-ghost { stroke: var(--color-fd-primary); stroke-width: calc(1.5px / var(--doc-vis-zoom, 1)); stroke-dasharray: calc(5px / var(--doc-vis-zoom, 1)) calc(4px / var(--doc-vis-zoom, 1)); stroke-opacity: 1; }
+
+/* a chevron: its tip on its line, as large on the screen at every zoom */
+.doc-param-locator-chevron,
+.doc-param-locator-add {
+	position: absolute;
+	top: 0;
+	left: 0;
+	box-sizing: border-box;
+	display: grid;
+	place-items: center;
+	width: 14px;
+	height: 14px;
+	margin: -7px 0 0 -7px;
+	padding: 0;
+	border: 0;
+	border-radius: 3px;
+	background: transparent;
+	color: var(--doc-param-locator-color);
+	pointer-events: all;
+}
+
+.doc-param-locator-chevron > svg,
+.doc-param-locator-add > span {
+	transform: scale(calc(1 / var(--doc-vis-zoom, 1)));
+}
+
+.doc-param-locator-chevron path { stroke: currentColor; }
+.doc-param-locator-chevron.is-x { cursor: ew-resize; }
+.doc-param-locator-chevron.is-y { cursor: ns-resize; }
+.doc-param-locator.is-hint .doc-param-locator-chevron,
+.doc-param-locator.is-light .doc-param-locator-chevron { opacity: 0.55; cursor: pointer; }
+.doc-param-locator.is-full .doc-param-locator-chevron { cursor: pointer; }
+.doc-param-locator-chevron:hover,
+.doc-param-locator-chevron.is-dragged { opacity: 1 !important; color: var(--color-fd-primary); }
+.doc-param-locator.is-focused .doc-param-locator-chevron:hover > svg { filter: drop-shadow(0 0 2px color-mix(in srgb, var(--color-fd-primary) 60%, transparent)); }
+
+/* the rail the chevrons stand on, while the locator is focused: grabbed to move them all */
+.doc-param-locator-rail {
+	position: absolute;
+	top: 0;
+	left: 0;
+	pointer-events: all;
+}
+
+.doc-param-locator-rail.is-x { height: calc(6px / var(--doc-vis-zoom, 1)); cursor: ns-resize; border-top: calc(1px / var(--doc-vis-zoom, 1)) dotted color-mix(in srgb, var(--doc-param-locator-color) 60%, transparent); }
+.doc-param-locator-rail.is-y { width: calc(6px / var(--doc-vis-zoom, 1)); cursor: ew-resize; border-left: calc(1px / var(--doc-vis-zoom, 1)) dotted color-mix(in srgb, var(--doc-param-locator-color) 60%, transparent); }
+.doc-param-locator-rail:hover { border-color: var(--color-fd-primary); }
+
+/* the + after the last chevron of a rail */
+.doc-param-locator-add { cursor: pointer; }
+.doc-param-locator-add > span {
+	display: grid;
+	place-items: center;
+	width: 14px;
+	height: 14px;
+	border: 1px solid color-mix(in srgb, var(--doc-param-locator-color) 60%, transparent);
+	border-radius: 50%;
+	background: var(--color-fd-background);
+	font-family: ui-sans-serif, system-ui, sans-serif;
+	font-size: 11px;
+	line-height: 1;
+}
+.doc-param-locator-add.is-x > span { translate: calc(20px / var(--doc-vis-zoom, 1)) 0; }
+.doc-param-locator-add.is-y > span { translate: 0 calc(20px / var(--doc-vis-zoom, 1)); }
+.doc-param-locator-add:hover > span { border-color: var(--color-fd-primary); color: var(--color-fd-primary); }
+
+/* the name of a line, beside its chevron; the place of a line being dragged */
+.doc-param-locator-name,
+.doc-param-locator-drag-text {
+	position: absolute;
+	top: 0;
+	left: 0;
+	width: 0;
+	height: 0;
+	pointer-events: none;
+}
+
+.doc-param-locator-name > span,
+.doc-param-locator-drag-text > span {
+	position: absolute;
+	left: 0;
+	bottom: 0;
+	color: var(--doc-param-locator-color);
+	font-family: ui-sans-serif, system-ui, sans-serif;
+	font-size: 10px;
+	font-weight: 600;
+	line-height: 1.5;
+	white-space: nowrap;
+	transform: scale(calc(1 / var(--doc-vis-zoom, 1))) translate(-50%, -9px);
+	transform-origin: bottom left;
+}
+
+.doc-param-locator-name.is-y > span { transform: scale(calc(1 / var(--doc-vis-zoom, 1))) translate(calc(-100% - 10px), 50%); }
+.doc-param-locator.is-full:not(.is-read) .doc-param-locator-name > span { opacity: 0.75; }
+
+.doc-param-locator-drag-text > span {
+	padding: 0 0.3rem;
+	border-radius: 3px;
+	background: var(--color-fd-primary);
+	color: var(--color-fd-primary-foreground, #fff);
+	transform: scale(calc(1 / var(--doc-vis-zoom, 1))) translate(8px, -12px);
+}
+
+/* its name, at the start of its rails: a click focuses it */
+.doc-param-locator-tab {
+	position: absolute;
+	top: 0;
+	left: 0;
+	width: 0;
+	height: 0;
+	padding: 0;
+	border: 0;
+	background: none;
+	cursor: pointer;
+	pointer-events: all;
+}
+
+.doc-param-locator-tab > span {
+	position: absolute;
+	right: 0;
+	bottom: 0;
+	padding: 0 0.3rem;
+	border-radius: 3px;
+	background: color-mix(in srgb, var(--doc-param-locator-color) 12%, var(--color-fd-background));
+	color: var(--doc-param-locator-color);
+	font-family: ui-sans-serif, system-ui, sans-serif;
+	font-size: 10px;
+	font-weight: 600;
+	line-height: 1.55;
+	white-space: nowrap;
+	transform: scale(calc(1 / var(--doc-vis-zoom, 1))) translate(-10px, -9px);
+	transform-origin: bottom right;
+}
+
+.doc-param-locator.is-hint .doc-param-locator-tab > span,
+.doc-param-locator.is-light .doc-param-locator-tab > span { opacity: 0.6; }
+.doc-param-locator-tab:hover > span,
+.doc-param-locator.is-focused .doc-param-locator-tab > span { opacity: 1; background: var(--doc-param-locator-color); color: #fff; }
+
+/* the cancel area, at the bottom of the viewport while a line of a locator is dragged (the tool bar
+   stands at the top) */
+.doc-param-cancel {
+	display: flex;
+	align-items: baseline;
+	gap: 0.45rem;
+	margin-bottom: 14px;
+	padding: 0.45rem 1.1rem;
+	border: 1.5px dashed var(--color-fd-border);
+	border-radius: 6px;
+	background: var(--color-fd-popover, var(--color-fd-background));
+	box-shadow: 0 4px 14px rgb(15 23 42 / 14%);
+	color: var(--color-fd-muted-foreground);
+	font-family: ui-sans-serif, system-ui, sans-serif;
+	font-size: 12px;
+	line-height: 1.4;
+	pointer-events: none;
+	user-select: none;
+}
+
+.doc-param-cancel em { font-size: 10.5px; font-style: normal; opacity: 0.75; }
+.doc-param-cancel.is-over { border-color: #dc2626; background: color-mix(in srgb, #dc2626 10%, var(--color-fd-background)); color: #dc2626; }
+
 /* the origin of a group: a mark as large on the screen at every zoom, with the name of its group */
 .doc-param-origin {
 	position: absolute;

@@ -1,10 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { pointRead, copyNodeIdBuild, parametricLineListGet, parametricRead } from './ParametricData.js';
+import { copyNodeIdBuild, parametricLineListGet, parametricRead } from './ParametricData.js';
+import { referencePointRead, referencePointResolve } from './ParametricReferencePoint.js';
 import { constraintTypeBeside, constraintTypeBetween, constraintTypeListDefault, constraintTypeOffset } from './ParametricConstraint.js';
 import { layoutTypeArray, layoutTypeListDefault } from './ParametricLayout.js';
 import { parametricCatalogBuild } from './ParametricCatalog.js';
-import { parametricCopyNodeListBuild, parametricPlacerBuild, parametricSolve } from './ParametricSolve.js';
+import { constraintContextBuild, memberParentListOf, parametricCopyNodeListBuild, parametricPlacerBuild, parametricSolve } from './ParametricSolve.js';
 
 const catalog = parametricCatalogBuild({ constraintTypeList: constraintTypeListDefault, layoutTypeList: layoutTypeListDefault });
 const nodeListOf = idList => idList.map(id => ({ id, handles: [{ id: 'out', direction: 'out', anchor: { side: 'right', offset: 0.25 } }] }));
@@ -13,14 +14,64 @@ const sizeOf = nodeId => sizeById[nodeId] ?? { width: 10, height: 10 };
 const read = (groupList, idList = ['a', 'b', 'c', 'd']) => parametricRead({ groupList }, { nodes: nodeListOf(idList), catalog });
 const solve = (model, override) => parametricSolve(model, catalog, { sizeOf, override });
 
-test('a point of a box is read from a name, a side or fractions, never from a connection handle', () => {
-	assert.deepEqual(pointRead('center', 'p'), { x: 0.5, y: 0.5 });
-	assert.deepEqual(pointRead({ side: 'top', offset: 0.25 }, 'p'), { x: 0.25, y: 0 });
-	assert.deepEqual(pointRead({ x: 0.2, y: 0.9 }, 'p'), { x: 0.2, y: 0.9 });
-	assert.throws(() => pointRead({ handle: 'out' }, 'p'), /not a connection handle: write the side it stands on/);
-	assert.throws(() => pointRead('middle', 'p'), /unknown point "middle"/);
-	// the keys of a constraint written before the points had a word of their own say what to write
-	assert.throws(() => read([{ id: 'g', root: { x: 0, y: 0 }, memberList: [{ id: 'm1', node: 'a' }, { id: 'm2', node: 'b', parent: 'm1', constraint: { type: 'offset', anchorParent: 'bottom' } }] }]), /write pointParent \(a point of the box\) for anchorParent/);
+test('a reference point is read from a name, an edge, fractions, a direction, a corner or an id, never from a connection handle', () => {
+	const subjectOf = (outline, extra = {}) => ({ outline, referencePointList: [], referencePointDefault: null, ...extra });
+	const at = (value, subject = subjectOf({ kind: 'rect' }), size = { width: 100, height: 40 }) => {
+		const point = referencePointResolve(referencePointRead(value, 'p'), subject, size);
+		return { x: Math.round(point.x * 100) / 100, y: Math.round(point.y * 100) / 100 };
+	};
+	assert.deepEqual(at('center'), { x: 50, y: 20 });
+	assert.deepEqual(at({ side: 'top', offset: 0.25 }), { x: 25, y: 0 });
+	assert.deepEqual(at({ x: 0.2, y: 0.9 }), { x: 20, y: 36 });
+	// the 2nd of the points dividing the left edge in 4, from the top
+	assert.deepEqual(at({ side: 'left', index: 2, count: 4 }), { x: 0, y: 20 });
+	// nothing written: the default reference point of a box, its top left corner
+	assert.deepEqual(at(undefined), { x: 0, y: 0 });
+	// a round thing: on its outline, by a direction or an angle clockwise from north
+	const round = subjectOf({ kind: 'ellipse' });
+	assert.deepEqual(at({ direction: 'north' }, round), { x: 50, y: 0 });
+	assert.deepEqual(at({ direction: 'east' }, round), { x: 100, y: 20 });
+	assert.deepEqual(at({ angle: 45 }, round, { width: 100, height: 100 }), { x: 85.36, y: 14.64 });
+	// a polygon: a corner clockwise from the top, and where a direction leaves it
+	const diamond = subjectOf({ kind: 'polygon', pointList: [[0.5, 0], [1, 0.5], [0.5, 1], [0, 0.5]] });
+	assert.deepEqual(at({ vertex: 2 }, diamond), { x: 100, y: 20 });
+	assert.deepEqual(at({ angle: 90 }, diamond), { x: 100, y: 20 });
+	assert.deepEqual(at({ angle: 45 }, diamond, { width: 100, height: 100 }), { x: 75, y: 25 });
+	// a reference point the thing declares, by its id; and its default when it names one
+	const declared = subjectOf({ kind: 'rect' }, { referencePointList: [{ id: 'inlet', name: 'Inlet', point: referencePointRead({ side: 'left', index: 1, count: 4 }, 'p') }] });
+	assert.deepEqual(at('inlet', declared), { x: 0, y: 10 });
+	assert.deepEqual(at(undefined, { ...declared, referencePointDefault: { format: 'own', id: 'inlet' } }), { x: 0, y: 10 });
+	// a locator: a crossing of its lines, a line alone, its origin (its box starts at its first lines)
+	const locator = subjectOf({ kind: 'lines', xList: [{ id: 'a', at: -20, name: '' }, { id: 'b', at: 100, name: '' }], yList: [{ id: 'top', at: 0, name: '' }, { id: 'low', at: 60, name: '' }] });
+	assert.deepEqual(at({ lineX: 'b', lineY: 'low' }, locator), { x: 120, y: 60 });
+	assert.deepEqual(at({ lineX: 'b' }, locator), { x: 120, y: 0 });
+	assert.deepEqual(at(undefined, locator), { x: 20, y: 0 });
+	assert.throws(() => referencePointRead({ handle: 'out' }, 'p'), /not a connection handle: write the side it stands on/);
+	assert.throws(() => referencePointRead({ side: 'left', index: 5, count: 3 }, 'p'), /p\.index must be a number/);
+	const memberListOf = constraint => [{ id: 'g', root: { x: 0, y: 0 }, memberList: [{ id: 'm1', node: 'a' }, { id: 'm2', node: 'b', parent: 'm1', constraint }] }];
+	// a name that is none of the box is the id of a point the thing declares: it must declare it
+	assert.throws(() => read(memberListOf({ type: 'offset', pointParent: 'middle' })), /its parent m1 declares no reference point "middle"/);
+	assert.throws(() => read(memberListOf({ type: 'offset', pointParent: { lineX: '1' } })), /its parent m1 is no locator/);
+	// the keys of a constraint written before the reference points had a word of their own say what to write
+	assert.throws(() => read(memberListOf({ type: 'offset', anchorParent: 'bottom' })), /write pointParent \(a reference point\) for anchorParent/);
+});
+
+test('a member declares reference points of its own and its default one; an offset without points measures between the defaults', () => {
+	const model = read([{ id: 'g', root: { x: 0, y: 0 }, memberList: [
+		{ id: 'm1', node: 'a', referencePointList: [{ id: 'inlet', name: 'Inlet', point: { side: 'left', index: 1, count: 2 } }, { id: 'mid', point: 'center' }], referencePointDefault: 'mid' },
+		// its top left corner (its default) 10, 5 from the middle of a (the default of a): a is 100 × 40
+		{ id: 'm2', node: 'b', parent: 'm1', constraint: { type: 'offset', x: 10, y: 5 } },
+		// the middle of c on the inlet of a
+		{ id: 'm3', node: 'c', parent: 'm1', constraint: { type: 'offset', point: 'center', pointParent: 'inlet' } },
+	] }]);
+	const solved = solve(model);
+	// a itself hangs by its default reference point, its middle, on the origin
+	assert.deepEqual(solved.positionById.get('a'), { x: -50, y: -20 });
+	assert.deepEqual(solved.positionById.get('b'), { x: 10, y: 5 });
+	assert.deepEqual(solved.positionById.get('c'), { x: -90, y: -40 });
+	assert.throws(() => read([{ id: 'g', memberList: [{ id: 'm1', node: 'a', referencePointDefault: 'gone' }] }]), /declares no reference point "gone"/);
+	assert.throws(() => read([{ id: 'g', memberList: [{ id: 'm1', node: 'a', referencePointList: [{ id: 'center', point: 'top' }] }] }]), /none of the names of the box/);
+	assert.throws(() => read([{ id: 'g', memberList: [{ id: 'm1', node: 'a', referencePointList: [{ id: 'p', point: 'top' }, { id: 'p', point: 'left' }] }] }]), /declared twice/);
 });
 
 test('a member without a constraint stands at the origin, and an offset moves it', () => {
@@ -114,10 +165,11 @@ test('a drop is written as the parameters of the constraint, and solving them gi
 	const position = { x: 333, y: -47 };
 	for (const [memberId, type] of [['m2', constraintTypeOffset], ['m3', constraintTypeBeside], ['m4', constraintTypeBetween]]) {
 		const member = group.memberById.get(memberId);
-		const context = { size: sizeOf(member.nodeId), parentBoxList: member.parentIdList.map(parentId => solved.boxByKey.get(`g/${parentId}`)) };
+		const parentList = memberParentListOf(group, member);
+		const context = constraintContextBuild(catalog, type, member.constraint, { member, size: sizeOf(member.nodeId), parentList, parentBoxList: member.parentIdList.map(parentId => solved.boxByKey.get(`g/${parentId}`)) });
 		const written = type.fromPlace({ type: type.type }, member.constraint, context, position);
-		const constraintNext = type.read({ ...member.constraint, ...written }, { field: 'c', pointRead: (value) => value ?? null });
-		const placed = type.solve({ ...member.constraint, ...constraintNext, point: member.constraint.point, pointParent: member.constraint.pointParent, pointA: member.constraint.pointA, pointB: member.constraint.pointB }, context);
+		const constraintNext = type.read(written, { field: 'c', referencePointRead: () => null, parentList });
+		const placed = type.solve({ ...constraintNext, point: member.constraint.point, pointParent: member.constraint.pointParent, pointA: member.constraint.pointA, pointB: member.constraint.pointB }, context);
 		assert.deepEqual({ x: Math.round(placed.x), y: Math.round(placed.y) }, position, memberId);
 	}
 });

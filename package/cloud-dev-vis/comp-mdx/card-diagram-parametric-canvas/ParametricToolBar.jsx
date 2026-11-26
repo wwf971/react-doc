@@ -1,14 +1,14 @@
 import { useEffect, useRef } from 'react';
 import { observer } from 'mobx-react-lite';
 import { Panel } from '@xyflow/react';
-import { BadgePlus, Captions, Check, ChevronDown, Circle, CircleDashed, Columns3, Copy, Database, Diamond, Ellipsis, Grid3x3, Group, Hexagon, Layers, LayoutTemplate, LocateFixed, MousePointer2, RectangleHorizontal, Route, Rows3, Scan, Shapes, Square, Squircle, SquareDashedMousePointer, PanelBottom, PictureInPicture2, StickyNote, Table2, TagIcon, Trash2, Triangle, Type, Waypoints } from '../../../../main/frontend/UICommon.js';
+import { BadgePlus, Captions, Check, ChevronDown, Circle, CircleDashed, Columns3, Copy, Database, Diamond, Ellipsis, Grid3x3, Group, Hexagon, Layers, LayoutTemplate, LocateFixed, MousePointer2, RectangleHorizontal, Route, Rows3, Ruler, Scan, SeparatorHorizontal, SeparatorVertical, Shapes, Square, Squircle, SquareDashedMousePointer, PanelBottom, PictureInPicture2, StickyNote, Table2, TagIcon, Trash2, Triangle, Type, Waypoints } from '../../../../main/frontend/UICommon.js';
 import { DiagramEditCardBody } from '../card-diagram/DiagramEditCard.jsx';
 import { CheckValue } from '../card-diagram/DiagramValueControls.jsx';
 import { toolBarBuild } from './ParametricTool.js';
 import { toolDetailBuild } from './ParametricToolModel.js';
 
 // the icons a tool or a create mode may name (ParametricTool.js, ParametricCreateMode.js: icon)
-export const TOOL_ICON_BY_NAME = { group: Group, note: StickyNote, label: TagIcon, card: Square, icon: CircleDashed, table: Table2, database: Database, block: SquareDashedMousePointer, row: Columns3, column: Rows3, repeat: Copy, line: Waypoints, shapes: Shapes, layers: Layers, pointer: MousePointer2, box: Scan, beside: LocateFixed, route: Route, remove: Trash2, dock: PanelBottom, float: PictureInPicture2, text: Type, rect: RectangleHorizontal, rounded: Squircle, ellipse: Circle, diamond: Diamond, triangle: Triangle, hexagon: Hexagon, grid: Grid3x3, pattern: LayoutTemplate, caption: Captions, badge: BadgePlus };
+export const TOOL_ICON_BY_NAME = { group: Group, note: StickyNote, label: TagIcon, card: Square, icon: CircleDashed, table: Table2, database: Database, block: SquareDashedMousePointer, row: Columns3, column: Rows3, repeat: Copy, line: Waypoints, shapes: Shapes, layers: Layers, pointer: MousePointer2, box: Scan, beside: LocateFixed, route: Route, remove: Trash2, dock: PanelBottom, float: PictureInPicture2, text: Type, rect: RectangleHorizontal, rounded: Squircle, ellipse: Circle, diamond: Diamond, triangle: Triangle, hexagon: Hexagon, grid: Grid3x3, pattern: LayoutTemplate, caption: Captions, badge: BadgePlus, locator: Ruler, 'locator-x': SeparatorVertical, 'locator-y': SeparatorHorizontal };
 export const iconOf = name => TOOL_ICON_BY_NAME[name] ?? Shapes;
 export const toolIconOf = tool => iconOf(tool?.icon);
 

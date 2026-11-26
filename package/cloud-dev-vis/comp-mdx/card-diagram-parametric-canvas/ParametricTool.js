@@ -15,8 +15,11 @@
 //       create    what a click on the canvas with the tool makes:
 //                 { what: node, kind, data?, size?, style? }   a node of a kind of the registry, data over its
 //                                                         own, style its colors (DiagramNodeStyle.js)
-//                 { what: layout, layout: { type, ... } } a layout member (an array, a repeat, a grid); a
-//                                                         pattern is made whole, its slots filled
+//                 { what: layout, layout: { type, ... }, childList? }   a layout member (an array, a repeat, a
+//                                                         grid, a locator); a pattern is made whole, its
+//                                                         slots filled; childList: [{ kind, data?, style?,
+//                                                         size?, constraint? }]: nodes made with it, each
+//                                                         under it by its constraint (blocks on a locator)
 //                 { what: group }                         a parametric group, its origin there
 //                 { what: connection }                    a line with two free ends
 //                 `what` names the creator that makes it (ParametricCreator.js)
@@ -53,6 +56,18 @@ export const parametricToolMapDefault = {
 	'layout-column': { label: 'Column', description: 'An array: its children in a column at one gap.', icon: 'column', rank: 'e', parent: 'layout', create: { what: 'layout', layout: { type: 'array', direction: 'column', gap: 24 } } },
 	'layout-repeat': { label: 'Repeat', description: 'Its one child spawned a number of times.', icon: 'repeat', rank: 'g', parent: 'layout', create: { what: 'layout', layout: { type: 'repeat', count: 3, direction: 'row', gap: 40 } } },
 	'layout-grid': { label: 'Grid', description: 'Its children in rows of a number of columns.', icon: 'grid', rank: 'i', parent: 'layout', create: { what: 'layout', layout: { type: 'grid', columns: 3, gapX: 24, gapY: 24 } } },
+	locator: { type: 'group', label: 'Locators', description: 'Lines at places you set: what is put under one stands on its lines and follows when they move.', icon: 'locator', rank: 'kp' },
+	'locator-columns': { label: 'Vertical lines', description: 'A locator of vertical lines: x places for what is put under it.', icon: 'locator-x', rank: 'c', parent: 'locator', create: { what: 'layout', layout: { type: 'locator', xList: [0, 160, 320, 480] } } },
+	'locator-rows': { label: 'Horizontal lines', description: 'A locator of horizontal lines: y places.', icon: 'locator-y', rank: 'e', parent: 'locator', create: { what: 'layout', layout: { type: 'locator', yList: [0, 80, 160] } } },
+	'locator-grid': { label: 'Lines both ways', description: 'A locator of vertical and horizontal lines: their crossings and the boxes between them.', icon: 'grid', rank: 'g', parent: 'locator', create: { what: 'layout', layout: { type: 'locator', xList: [0, 160, 320], yList: [0, 100, 200] } } },
+	'locator-blocks': {
+		label: 'Row of blocks', description: 'Blocks side by side between the vertical lines of a locator, as high as its two horizontal lines are apart: drag a line and they follow.', icon: 'row', rank: 'i', parent: 'locator',
+		create: { what: 'layout', layout: { type: 'locator', xList: [0, 120, 240, 480], yList: [0, 80] }, childList: [
+			{ kind: 'shape', data: { shape: 'rect', text: 'A' }, constraint: { type: 'locate', lineX: ['1', '2'], lineY: ['1', '2'] } },
+			{ kind: 'shape', data: { shape: 'rect', text: 'B' }, constraint: { type: 'locate', lineX: ['2', '3'], lineY: ['1', '2'] } },
+			{ kind: 'shape', data: { shape: 'rect', text: 'C' }, constraint: { type: 'locate', lineX: ['3', '4'], lineY: ['1', '2'] } },
+		] },
+	},
 	pattern: { type: 'group', label: 'Patterns', description: 'Things made together, whose relations are fixed: only their parameters change.', icon: 'pattern', rank: 'l' },
 	'pattern-caption': { label: 'Captioned', description: 'A shape and its caption, on the side you choose.', icon: 'caption', rank: 'c', parent: 'pattern', create: { what: 'layout', layout: { type: 'caption' } } },
 	'pattern-badge': { label: 'Badged', description: 'A shape and a badge on one of its corners.', icon: 'badge', rank: 'e', parent: 'pattern', create: { what: 'layout', layout: { type: 'badge' } } },

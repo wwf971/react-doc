@@ -49,6 +49,16 @@ export function shapePointListOf(shape) {
 	}
 }
 
+// the outline of a shape node, for whoever needs the shape of its boundary (the reference points of
+// the parametric canvas: an ellipse offers directions, a polygon its corners): a round shape, a
+// polygon with its corners as fractions of its box, else a box
+export function shapeOutlineOf(node) {
+	const shape = node?.data?.shape;
+	if (shape === 'ellipse') return { kind: 'ellipse' };
+	const pointList = shapePointListOf(shape);
+	return pointList ? { kind: 'polygon', pointList: pointList.map(point => [point[0] / 100, point[1] / 100]) } : { kind: 'rect' };
+}
+
 // what a search finds in a shape or a text: its words, never its icons
 export function shapeTextSearchMatch(node, helper) {
 	return helper.test(cardIconTextStrip(node.data?.text ?? '')) ? { partList: [], childList: [], isWhole: true } : null;

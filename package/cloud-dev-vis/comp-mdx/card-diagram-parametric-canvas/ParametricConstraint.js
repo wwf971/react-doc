@@ -1,4 +1,5 @@
-import { SIDE_LIST, pointAt, pointNameOf, choiceRead, numberRead } from './ParametricData.js';
+import { SIDE_LIST, choiceRead, numberRead } from './ParametricData.js';
+import { REFERENCE_POINT_DEFAULT } from './ParametricReferencePoint.js';
 
 // The constraint types of the parametric canvas (card-diagram-parametric-canvas.md#constraints): how
 // the place of a member follows from its parent(s). Pure. A type is a plugin: a feature is built
@@ -8,62 +9,84 @@ import { SIDE_LIST, pointAt, pointNameOf, choiceRead, numberRead } from './Param
 //     type, label, description
 //     parentCount                 how many parents it reads (1, or 2 for between)
 //     paramDefault                what a new constraint of the type starts with
-//     read(input, { field, pointRead(value, key) })   validated and resolved; throws naming the field.
-//                                 pointRead reads a point of a box (of the member, or of a parent: the
-//                                 property says which, `of`), as fractions of the box (ParametricData.js)
-//     solve(constraint, { size, parentBoxList })   -> { x, y }: the top left corner of the member's box
-//     fromPlace(input, constraint, { size, parentBoxList }, position)
+//     read(input, { field, referencePointRead(value, key), parentList })
+//                                 validated and resolved; throws naming the field. referencePointRead
+//                                 reads a reference point as written (a definition, or null when
+//                                 nothing is written: ParametricReferencePoint.js); parentList: the
+//                                 parents as read (what each is: a locator has lines)
+//     solve(constraint, context)  -> { x, y }: the top left corner of the member's box
+//     fromPlace(input, constraint, context, position)
 //                                 -> the constraint as written whose solve answers `position`, the other
 //                                 parameters kept: what a drop on the canvas writes
+//     sizeOf?(constraint, { parentList })   -> { width?, height? }: a size it dictates (a member
+//                                 between two lines of a locator is as wide as they are apart)
+//     parentReasonGet?(parentList)   why it cannot place a member under those parents ('' when it can)
 //     propertyList                the parameters, for the edit card: { id, label, kind: number | enum |
-//                                 point, of?, values?, valueLabels?, valueDefault, step?, min?, max? }
+//                                 referencePoint, of?, values?, valueLabels?, valueDefault, step?, min?, max? }
+//     propertyListGet?(constraint, { parentList })   the same, where they depend on the parents (the
+//                                 lines of a locator): a definition may say apply(value, written) ->
+//                                 the keys of the constraint it writes ({ key: value | undefined })
+//     summaryOf(constraint, { pointLabelOf(key) })   a few words, for a tree
 //
-// A point is of the box of a member (`point`, `pointParent`, `pointA`, `pointB`), never a connection
-// handle. The keys written before (anchor, anchorParent, anchorA, anchorB) are refused, with the key
-// to write instead
-//     summaryOf(constraint)       a few words, for a tree
+//   context   { size, parentBoxList, parentList,
+//               pointOf(key),                    a reference point parameter resolved: of the member
+//                                                (of: self), where it is in its own box, from its top
+//                                                left corner; of a parent (of: 0, 1), where it is on
+//                                                the canvas
+//               parentPointAt(index, definition) any reference point of a parent, on the canvas }
+//
+// A reference point is of a member or of a parent (`point`, `pointParent`, `pointA`, `pointB`:
+// the property says which, `of`), never a connection handle; a constraint type knows none of the
+// formats they are written in. The keys written before (anchor, anchorParent, anchorA, anchorB) are
+// refused, with the key to write instead
 const round = value => Math.round(value * 100) / 100;
-const pointText = point => pointNameOf(point) ?? `${round(point.x)}, ${round(point.y)}`;
 const KEY_RENAMED = { anchor: 'point', anchorParent: 'pointParent', anchorA: 'pointA', anchorB: 'pointB' };
 function keyOldRefuse(input, field) {
 	for (const [keyOld, keyNew] of Object.entries(KEY_RENAMED)) {
-		if (input[keyOld] !== undefined) throw new Error(`${field}: write ${keyNew} (a point of the box) for ${keyOld}.`);
+		if (input[keyOld] !== undefined) throw new Error(`${field}: write ${keyNew} (a reference point) for ${keyOld}.`);
 	}
 }
+const CENTER = Object.freeze({ format: 'box', x: 0.5, y: 0.5 });
 
-// a point of the member at an offset from a point of its parent. With the top left corners (the
-// default) the offset is the place of the member relative to its parent
+// a reference point of the member at an offset from a reference point of its parent: the default
+// constraint, with the default reference point of each when none is named (the top left corner of
+// a box: the offset is then the place of the member relative to its parent)
 export const constraintTypeOffset = {
 	type: 'offset',
 	label: 'Offset',
-	description: 'A point of the member stands at an offset from a point of its parent.',
+	description: 'A reference point of the member stands at an offset (X, Y) from a reference point of its parent: their default ones unless others are chosen.',
 	parentCount: 1,
 	paramDefault: { type: 'offset', x: 0, y: 0 },
-	read(input, { field, pointRead }) {
+	read(input, { field, referencePointRead }) {
 		keyOldRefuse(input, field);
 		return {
 			type: 'offset',
 			x: numberRead(input.x ?? 0, `${field}.x`),
 			y: numberRead(input.y ?? 0, `${field}.y`),
-			point: pointRead(input.point, 'point') ?? { x: 0, y: 0 },
-			pointParent: pointRead(input.pointParent, 'pointParent') ?? { x: 0, y: 0 },
+			point: referencePointRead(input.point, 'point') ?? REFERENCE_POINT_DEFAULT,
+			pointParent: referencePointRead(input.pointParent, 'pointParent') ?? REFERENCE_POINT_DEFAULT,
 		};
 	},
-	solve(constraint, { size, parentBoxList }) {
-		const at = pointAt(parentBoxList[0], constraint.pointParent);
-		return { x: at.x + constraint.x - size.width * constraint.point.x, y: at.y + constraint.y - size.height * constraint.point.y };
+	solve(constraint, { pointOf }) {
+		const at = pointOf('pointParent');
+		const own = pointOf('point');
+		return { x: at.x + constraint.x - own.x, y: at.y + constraint.y - own.y };
 	},
-	fromPlace(input, constraint, { size, parentBoxList }, position) {
-		const at = pointAt(parentBoxList[0], constraint.pointParent);
-		return { ...input, type: 'offset', x: Math.round(position.x + size.width * constraint.point.x - at.x), y: Math.round(position.y + size.height * constraint.point.y - at.y) };
+	fromPlace(input, constraint, { pointOf }, position) {
+		const at = pointOf('pointParent');
+		const own = pointOf('point');
+		return { ...input, type: 'offset', x: Math.round(position.x + own.x - at.x), y: Math.round(position.y + own.y - at.y) };
 	},
 	propertyList: [
 		{ id: 'x', label: 'X', kind: 'number', valueDefault: 0, step: 1 },
 		{ id: 'y', label: 'Y', kind: 'number', valueDefault: 0, step: 1 },
-		{ id: 'point', label: 'Its point', kind: 'point', of: 'self', valueDefault: 'top-left' },
-		{ id: 'pointParent', label: 'Point of the parent', kind: 'point', of: 0, valueDefault: 'top-left' },
+		{ id: 'point', label: 'Its reference point', kind: 'referencePoint', of: 'self', valueDefault: 'default' },
+		{ id: 'pointParent', label: 'Reference point of the parent', kind: 'referencePoint', of: 0, valueDefault: 'default' },
 	],
-	summaryOf: constraint => `offset ${round(constraint.x)}, ${round(constraint.y)}${pointText(constraint.point) === 'top-left' && pointText(constraint.pointParent) === 'top-left' ? '' : ` (${pointText(constraint.point)} from ${pointText(constraint.pointParent)})`}`,
+	summaryOf(constraint, { pointLabelOf } = {}) {
+		const isDefault = constraint.point.format === 'default' && constraint.pointParent.format === 'default';
+		return `offset ${round(constraint.x)}, ${round(constraint.y)}${isDefault || !pointLabelOf ? '' : ` (${pointLabelOf('point')} from ${pointLabelOf('pointParent')})`}`;
+	},
 };
 
 // an edge of the member at a distance from the facing edge of its parent: beside it on a side.
@@ -112,35 +135,37 @@ export const constraintTypeBeside = {
 	summaryOf: constraint => `${constraint.side === 'top' ? 'above' : constraint.side === 'bottom' ? 'below' : constraint.side}, gap ${round(constraint.gap)}`,
 };
 
-// a point of the member between a point of each of two parents: at t of the way from the first
-// to the second, plus an offset
+// a reference point of the member between a reference point of each of two parents: at t of the
+// way from the first to the second, plus an offset. The middles of their boxes unless others are chosen
 export const constraintTypeBetween = {
 	type: 'between',
 	label: 'Between',
 	description: 'The member stands between two parents, at a part of the way from the first to the second.',
 	parentCount: 2,
 	paramDefault: { type: 'between', t: 0.5 },
-	read(input, { field, pointRead }) {
+	read(input, { field, referencePointRead }) {
 		keyOldRefuse(input, field);
 		return {
 			type: 'between',
 			t: numberRead(input.t ?? 0.5, `${field}.t`),
 			x: numberRead(input.x ?? 0, `${field}.x`),
 			y: numberRead(input.y ?? 0, `${field}.y`),
-			point: pointRead(input.point, 'point') ?? { x: 0.5, y: 0.5 },
-			pointA: pointRead(input.pointA, 'pointA') ?? { x: 0.5, y: 0.5 },
-			pointB: pointRead(input.pointB, 'pointB') ?? { x: 0.5, y: 0.5 },
+			point: referencePointRead(input.point, 'point') ?? CENTER,
+			pointA: referencePointRead(input.pointA, 'pointA') ?? CENTER,
+			pointB: referencePointRead(input.pointB, 'pointB') ?? CENTER,
 		};
 	},
-	solve(constraint, { size, parentBoxList }) {
-		const at = betweenPointOf(constraint, parentBoxList);
-		return { x: at.x + constraint.x - size.width * constraint.point.x, y: at.y + constraint.y - size.height * constraint.point.y };
+	solve(constraint, { pointOf }) {
+		const at = betweenPointOf(constraint, pointOf);
+		const own = pointOf('point');
+		return { x: at.x + constraint.x - own.x, y: at.y + constraint.y - own.y };
 	},
-	fromPlace(input, constraint, { size, parentBoxList }, position) {
-		const at = betweenPointOf(constraint, parentBoxList);
+	fromPlace(input, constraint, { pointOf }, position) {
+		const at = betweenPointOf(constraint, pointOf);
+		const own = pointOf('point');
 		const result = { ...input, type: 'between' };
-		for (const [axis, extent] of [['x', size.width], ['y', size.height]]) {
-			const value = Math.round(position[axis] + extent * constraint.point[axis] - at[axis]);
+		for (const axis of ['x', 'y']) {
+			const value = Math.round(position[axis] + own[axis] - at[axis]);
 			if (value !== 0) result[axis] = value; else delete result[axis];
 		}
 		return result;
@@ -149,16 +174,16 @@ export const constraintTypeBetween = {
 		{ id: 't', label: 'Part of the way', kind: 'number', valueDefault: 0.5, step: 0.05 },
 		{ id: 'x', label: 'X', kind: 'number', valueDefault: 0, step: 1 },
 		{ id: 'y', label: 'Y', kind: 'number', valueDefault: 0, step: 1 },
-		{ id: 'point', label: 'Its point', kind: 'point', of: 'self', valueDefault: 'center' },
-		{ id: 'pointA', label: 'Point of the first parent', kind: 'point', of: 0, valueDefault: 'center' },
-		{ id: 'pointB', label: 'Point of the second parent', kind: 'point', of: 1, valueDefault: 'center' },
+		{ id: 'point', label: 'Its reference point', kind: 'referencePoint', of: 'self', valueDefault: 'center' },
+		{ id: 'pointA', label: 'Reference point of the first parent', kind: 'referencePoint', of: 0, valueDefault: 'center' },
+		{ id: 'pointB', label: 'Reference point of the second parent', kind: 'referencePoint', of: 1, valueDefault: 'center' },
 	],
 	summaryOf: constraint => `between, at ${round(constraint.t)}`,
 };
 
-function betweenPointOf(constraint, parentBoxList) {
-	const a = pointAt(parentBoxList[0], constraint.pointA);
-	const b = pointAt(parentBoxList[1], constraint.pointB);
+function betweenPointOf(constraint, pointOf) {
+	const a = pointOf('pointA');
+	const b = pointOf('pointB');
 	return { x: a.x + (b.x - a.x) * constraint.t, y: a.y + (b.y - a.y) * constraint.t };
 }
 

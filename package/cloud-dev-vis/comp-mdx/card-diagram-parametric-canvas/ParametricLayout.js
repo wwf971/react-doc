@@ -3,11 +3,17 @@ import { choiceRead, numberRead } from './ParametricData.js';
 // The layout types of the parametric canvas (card-diagram-parametric-canvas.md#layout-members): a
 // layout member places nothing itself and arranges its children. Pure. A type is a plugin, like a
 // constraint type. A **pattern** is a layout type with slots: its children fill named slots and the
-// relations between them are its code, so only its parameters can change.
+// relations between them are its code, so only its parameters can change. A **locator**
+// (ParametricLocator.js) is a layout type that arranges nothing: it has lines, and each child says
+// itself, by its constraint, where on them it stands.
 //
 //   layout type
 //     type, label, description
 //     childMax?                   how many children it takes; any number when absent
+//     isChildConstrained?         true: its children keep constraints of their own (they are not
+//                                 arranged in their order); arrange is then called with no child
+//     outlineOf?(layout)          the outline its reference points are read on, when it is not its
+//                                 box (ParametricReferencePoint.js: a locator, its lines)
 //     slotList?                   [{ id, label, create? }]: a pattern, a child fills one slot each.
 //                                 create { kind, data?, style?, size? }: what fills the slot when the
 //                                 pattern is made whole by a tool (ParametricEditStore.layoutCreate)

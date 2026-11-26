@@ -9,6 +9,7 @@ import { diagramArrangeRun } from './DiagramArrange.js';
 import { cardRowDisplayIdListOf, cardRowDisplayWithout, cardViewDefaultGet, cardViewListGet, cardViewListPrune, cardViewRowListGet, cardViewSourceOf } from './TableCardData.js';
 import { routeAnchorCoupleSet, routeAnchorHandleSet, routeAnchorHandlesPull, routeAnchorIdNext, routeAnchorInsertAt, routeAnchorMove, routeAnchorPlaceOf, routeAnchorRemove, routeCompact, routeEndHandleSet, routeNormalize, routeTypeFamilyGet, routeTypeHasAnchors } from './DiagramRoute.js';
 import { CARD_COMP_TYPE, cardCompDataOf, cardCompNodeCreate } from './CardCompData.js';
+import { DEPTH_MOVE_LIST, DEPTH_MOVE_NOTHING_REASON, depthKeyOfTarget, depthRectIsOverlapping, depthTargetOfKey, diagramDepthMove, diagramDepthOrderListGet } from './DiagramDepth.js';
 
 export { cardTabList };
 
@@ -134,7 +135,7 @@ export class DiagramEditStore {
 		this.history = new EditHistory({ isSame: (a, b) => a.valueCurrent === b.valueCurrent });
 		// what is read off the path is compared by content: a change of the draft that leaves the
 		// selection as it was notifies nobody (every node reads the selection)
-		makeAutoObservable(this, { documentDraft: false, resolve: false, registry: false, scope: false, history: false, path: observable.ref, redirectRuleList: false, routeDraft: observable.ref, shownTimer: false, itemComputedByKey: false, display: computed.struct, selection: computed.struct, arrangerUnavailableIdList: computed.struct }, { autoBind: true });
+		makeAutoObservable(this, { documentDraft: false, resolve: false, registry: false, scope: false, history: false, path: observable.ref, redirectRuleList: false, routeDraft: observable.ref, shownTimer: false, itemComputedByKey: false, display: computed.struct, selection: computed.struct, arrangerUnavailableIdList: computed.struct, depthOrderList: computed.struct }, { autoBind: true });
 	}
 
 	// ---------- the draft ----------
@@ -1082,6 +1083,83 @@ export class DiagramEditStore {
 			const path = this.nodePathGet(nodeId);
 			if (size) documentNext.setIn([...path, 'size'], documentNext.createNode(size));
 			else documentNext.deleteIn([...path, 'size']);
+		});
+	}
+
+	// ---------- depth: what is drawn over what (card-diagram-impl.md#depth, DiagramDepth.js) ----------
+
+	// the nodes and the lines of the draft in drawing order, bottom to top. Read by content: a word
+	// typed changes nothing of it, so what reads it (the edit card) is told of nothing
+	get depthOrderList() {
+		if (this.kind !== 'diagram') return [];
+		return diagramDepthOrderListGet({ nodes: this.nodes, connections: this.connections }, { isBackgroundOf: node => this.registry?.kindByType[node.renderer?.type]?.contract.isBackground === true });
+	}
+
+	// target: { nodeId } or { connectionId }
+	depthItemGet(target) { return target?.connectionId !== undefined && target?.nodeId === undefined ? this.connectionGet(target.connectionId) : this.nodeGet(target?.nodeId); }
+	depthGet(target) { const depth = this.depthItemGet(target)?.depth; return typeof depth === 'number' ? depth : 0; }
+
+	depthPathGet(target) {
+		if (target?.connectionId !== undefined && target?.nodeId === undefined) {
+			const index = this.connections.findIndex(connection => connection.id === target.connectionId);
+			if (index < 0) throw new Error('Unknown connection.');
+			return ['connections', index, 'depth'];
+		}
+		return [...this.nodePathGet(target?.nodeId), 'depth'];
+	}
+
+	// a depth written into a document being changed: the key taken away for 0, what a thing has when it writes none
+	depthWrite(documentNext, target, depth) {
+		const path = this.depthPathGet(target);
+		if (depth === 0) { if (documentNext.hasIn(path)) documentNext.deleteIn(path); } else documentNext.setIn(path, depth);
+	}
+
+	// why a thing takes no depth here; '' when it does
+	depthRefuseReasonGet(target) {
+		if (this.kind !== 'diagram') return 'A standalone card has no depth.';
+		if (this.isStructureFixed) return 'What this diagram holds is given: nothing of it is put over or under.';
+		const item = this.depthItemGet(target);
+		if (!item) return 'Unknown node or line.';
+		return item.pin !== undefined ? 'A node pinned to the viewport is not on the canvas: it has no depth.' : '';
+	}
+
+	// the depth of a node or a line: a higher one is drawn over a lower one. groupKey: a number being typed
+	depthSet(target, depth, { groupKey = null } = {}) {
+		const reason = this.depthRefuseReasonGet(target);
+		if (reason || typeof depth !== 'number' || !Number.isFinite(depth)) { this.message = reason || 'A depth is a number.'; return false; }
+		return this.changeApply(documentNext => this.depthWrite(documentNext, target, depth), { groupKey });
+	}
+
+	// why a move in depth has nothing to do, from the order alone; '' when it may have
+	depthMoveReasonGet(target, how) {
+		const reason = this.depthRefuseReasonGet(target);
+		if (reason) return reason;
+		const orderList = this.depthOrderList;
+		const at = orderList.findIndex(item => item.key === depthKeyOfTarget(target));
+		const isAtEnd = how === 'front' || how === 'forward' ? at === orderList.length - 1 : at === 0;
+		return isAtEnd ? DEPTH_MOVE_NOTHING_REASON[how] : '';
+	}
+
+	// a node or a line moved in the drawing order, as one step: front (over everything), back (under
+	// everything), forward (just over the nearest thing lying on it), backward (just under the
+	// nearest under it). The depths written are those that give exactly that order, as few as possible
+	// (diagramDepthMove). geometry: { rectOf(key) -> { x, y, width, height } | null }, the boxes as
+	// drawn, keyed as DiagramDepth.js keys them: with it a step passes the nearest thing that
+	// overlaps the target (a thing whose box is not known counts), without it the next thing at all
+	depthMove(target, how, { geometry } = {}) {
+		const reason = this.depthRefuseReasonGet(target);
+		if (reason || !DEPTH_MOVE_LIST.includes(how)) { this.message = reason || `A move in depth is one of ${DEPTH_MOVE_LIST.join(', ')}.`; return false; }
+		const key = depthKeyOfTarget(target);
+		const orderList = this.depthOrderList;
+		const rect = geometry?.rectOf?.(key);
+		const overlapKeySet = rect ? new Set(orderList.filter((item) => {
+			const rectOther = item.key === key ? null : geometry.rectOf(item.key);
+			return item.key !== key && (!rectOther || depthRectIsOverlapping(rect, rectOther));
+		}).map(item => item.key)) : undefined;
+		const depthByKey = diagramDepthMove(orderList, key, how, { overlapKeySet });
+		if (!depthByKey.size) { this.message = DEPTH_MOVE_NOTHING_REASON[how]; return false; }
+		return this.changeApply((documentNext) => {
+			for (const [keyChanged, depth] of depthByKey) this.depthWrite(documentNext, depthTargetOfKey(keyChanged), depth);
 		});
 	}
 

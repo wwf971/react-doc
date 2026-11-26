@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useRef } from 'react';
 import { observer } from 'mobx-react-lite';
 import { BookOpen, LoaderCircle, TriangleAlert } from '../../frontend/UICommon.js';
 import { useDocStores } from '../../frontend/src/store/context.js';
@@ -22,13 +22,25 @@ import './Portal.css';
 //            isEditable follows the portal's own editing: config.portal.editSet)
 // A portal the registry does not know, or whose component the page has not, says so here, with
 // the way back to the documents: the page is never left blank.
+//
+// A portal drawn stays drawn while its provider is read again: an object whose entry was just
+// rewritten (a portal writing the metadata of its own object) is not known for a moment, and the
+// registry then answers "not known yet" (isLoading). The host keeps the portal it drew last, and the
+// type of its object, until the registry knows again, so an app is never taken down and mounted
+// anew by its own write.
 export const PortalHost = observer(function PortalHost() {
   const { objectFrontendStore, portalStore } = useDocStores();
   const id = portalStore.portalIdOpen;
-  const portal = portalStore.portalGet(id);
+  const heldRef = useRef({ portal: undefined, typeId: '' });
+  const portalKnown = portalStore.portalGet(id);
+  if (portalKnown) heldRef.current = { portal: portalKnown, typeId: heldRef.current.portal?.id === id ? heldRef.current.typeId : '' };
+  else if (!portalStore.isLoading || heldRef.current.portal?.id !== id) heldRef.current = { portal: undefined, typeId: '' };
+  const portal = portalKnown ?? heldRef.current.portal;
   const service = portalStore.serviceGet(id);
   const providerRef = portal?.providerKind === 'objectFrontend' ? portal.providerRef : '';
-  const typeId = providerRef ? objectFrontendStore.objectGet(providerRef).typeId : '';
+  const typeIdKnown = providerRef ? objectFrontendStore.objectGet(providerRef).typeId : '';
+  if (typeIdKnown) heldRef.current.typeId = typeIdKnown;
+  const typeId = typeIdKnown || heldRef.current.typeId;
   // the api of the providing object, without a block: its switches answer that there is none
   const objectService = useMemo(
     () => (providerRef ? objectFrontendServiceBuild({

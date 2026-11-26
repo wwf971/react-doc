@@ -4,6 +4,7 @@ import { cardRowDisplayIdListOf, CARD_VIEW_MODE_LABEL, cardViewLabelOf, cardView
 import { strokeDashList } from './DiagramEditStore.js';
 import { LINE_STROKE_SWATCH_LIST, nodeStyleKeyListOf, nodeStyleLabelOf, nodeStyleSwatchListOf } from './DiagramNodeStyle.js';
 import { NODE_SIZE_MODE_BY_ID, nodeSizeModeOf } from './DiagramNodeResize.js';
+import { DEPTH_MOVE_LABEL, DEPTH_MOVE_LIST } from './DiagramDepth.js';
 import { cardTabList, tabPathGet, pathLabelListGet, rowNameGet, selectionPathBuild } from './DiagramEditPath.js';
 import { routeAnchorPointGet, routeDirectionFacingList, routeEndPointGet, routeResolve, routeTypeHasAnchors, routeTypeIsBezier, ROUTE_DIRECTION_LIST } from './DiagramRoute.js';
 
@@ -17,6 +18,8 @@ import { routeAnchorPointGet, routeDirectionFacingList, routeEndPointGet, routeR
 //   model      { title, kindLabel, tabList, tabId, segmentList, view }
 //   tab        { id, label, isDisabled, disabledReason, path }
 //   segment    { name, path }                                  the path bar
+//              a segment or an item of a card that is not of the path (a feature's own: a mode of a
+//              thing) says open() in the place of path: what a click on it does
 //   view       { type: 'detail', sectionList }
 //              { type: 'list', id, label, itemList, isReorderable, reorderReason,
 //                move(indexFrom, indexTo), remove(id), add?, actionList?, note, sectionList }
@@ -43,6 +46,14 @@ export function cardModelBuild(editor) {
 	const display = store.display;
 	if (!display) return null;
 	if (store.isStructureFixed) return cardModelFixedBuild(editor);
+	// a feature of the editor may answer the card of what is focused itself, while the thing is in
+	// a mode of the feature's own (a session's cardModelGet: the reference points of a member of a
+	// parametric group, in the place of its settings); its tabs, segments and items say what a click
+	// on them opens (open)
+	for (const session of editor.featureList ?? []) {
+		const own = session.cardModelGet?.(display, editor);
+		if (own) return own;
+	}
 	const path = store.path;
 	const change = operation => { let result = false; editor.change(() => { result = operation(); }); return result; };
 	const positionGet = editor.handlePositionGet;
@@ -124,6 +135,23 @@ export function cardModelBuild(editor) {
 		});
 		return { id: 'size', label: 'Size', propertyList, note: mode === 'fit' ? 'The box follows the words; Shift + Enter breaks a line.' : '', actionList: [] };
 	};
+	// what a node or a line is drawn over and under (DiagramDepth.js): its depth as a number, and the
+	// four moves, each greyed with why when the order alone says it has nothing to do. target:
+	// { nodeId } or { connectionId }; null where a thing takes no depth (a standalone card, a draft
+	// whose structure is given, a node pinned to the viewport)
+	const depthSectionOf = (target) => {
+		if (store.depthRefuseReasonGet(target)) return null;
+		const groupKey = `depth:${target.nodeId !== undefined ? `node/${target.nodeId}` : `connection/${target.connectionId}`}`;
+		const move = how => (editor.depthMove ? editor.depthMove(target, how) : change(() => store.depthMove(target, how)));
+		return {
+			id: 'depth', label: 'Depth', note: 'A higher depth is drawn over a lower one. Forward and backward pass the nearest thing lying on it.',
+			propertyList: [{ id: 'depth', label: 'Depth', kind: 'number', value: store.depthGet(target), step: 1, set: (value) => { const depth = Number(value); return Number.isFinite(depth) && change(() => store.depthSet(target, depth, { groupKey })); } }],
+			actionList: DEPTH_MOVE_LIST.map((how) => {
+				const reason = store.depthMoveReasonGet(target, how);
+				return { id: `depth-${how}`, label: DEPTH_MOVE_LABEL[how], isDisabled: Boolean(reason), reason, act: () => move(how) };
+			}),
+		};
+	};
 	const lineSectionList = lineConnection => {
 		const lineSet = (field, value, option) => change(() => store.connectionSet(lineConnection.id, field, value, option));
 		const endText = endpoint => endpointIsDangling(endpoint) ? `free at ${endpoint.position.x}, ${endpoint.position.y}` : `${store.nodeGet(endpoint.nodeId)?.data?.name ?? endpoint.nodeId} / ${endpoint.handleId}`;
@@ -143,6 +171,7 @@ export function cardModelBuild(editor) {
 				{ id: 'source', label: 'From', kind: 'text', value: endText(lineConnection.source), isReadOnly: true, set: () => false },
 				{ id: 'target', label: 'To', kind: 'text', value: endText(lineConnection.target), isReadOnly: true, set: () => false },
 			], actionList: [] },
+			...[depthSectionOf({ connectionId: lineConnection.id })].filter(Boolean),
 			{ id: 'line-actions', label: '', propertyList: [], actionList: [
 				{ id: 'connection-remove', label: 'Remove line', kind: 'danger', act: () => change(() => store.connectionRemove(lineConnection.id)) },
 			] },
@@ -439,6 +468,9 @@ export function cardModelBuild(editor) {
 			// its colors (DiagramNodeStyle.js): the keys of node.style its kind draws
 			const style = styleSectionOf(nodeId);
 			if (style) sectionList.push(style);
+			// what it is drawn over and under (DiagramDepth.js)
+			const depth = depthSectionOf({ nodeId });
+			if (depth) sectionList.push(depth);
 			const header = schema ? handleSection('header', 'Title handles', schema.isHeaderHandleAllowed(node.data)) : null;
 			if (header) sectionList.push(header);
 			// the footer: shown by itself, or because a line leaves the bottom of the card

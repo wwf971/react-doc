@@ -1,10 +1,13 @@
 import { useMemo } from 'react';
 import { observer } from 'mobx-react-lite';
-import { CARD_MATRIX_CELL_SIZE, CARD_MATRIX_ROW_HEAD_WIDTH, cardMatrixCellOf } from './CardMatrixData.js';
+import { CARD_MATRIX_CELL_SIZE, CARD_MATRIX_ROW_HEAD_WIDTH, cardMatrixBandOf, cardMatrixCellOf } from './CardMatrixData.js';
 
 // data-switch-link: what a click on this part of a card opens, on a canvas that switches
 // scenes (card-diagram-flexible-switch.md). this card knows nothing of that layer.
 const linkPropsOf = (item) => (item.link ? { 'data-switch-link': item.link } : {});
+// the shading of a band (a cross where a row and a column of one band meet), and the line before a group
+const bandPropsOf = (band) => (band ? { 'data-band': band.tone, ...(band.isCross ? { 'data-band-cross': '' } : {}) } : {});
+const groupClassOf = (item) => (item.isGroupStart ? ' is-group-start' : '');
 
 export const CardMatrix = observer(function CardMatrix({ node, nodeId }) {
 	const { data } = node;
@@ -34,7 +37,7 @@ export const CardMatrix = observer(function CardMatrix({ node, nodeId }) {
 							{data.rowAxisLabel ? <span className="doc-card-matrix-axis is-row">{data.rowAxisLabel} ↓</span> : null}
 						</th>
 						{columnList.map((column) => (
-							<th key={column.id} scope="col" data-tone={column.tone || undefined} title={column.label} className={`doc-card-matrix-column${column.link ? ' is-link' : ''}`} {...linkPropsOf(column)}>
+							<th key={column.id} scope="col" data-tone={column.tone || undefined} title={column.title ?? column.label} className={`doc-card-matrix-column${column.link ? ' is-link' : ''}${groupClassOf(column)}`} {...bandPropsOf(cardMatrixBandOf(null, column))} {...linkPropsOf(column)}>
 								<span>{column.label}</span>
 							</th>
 						))}
@@ -42,12 +45,12 @@ export const CardMatrix = observer(function CardMatrix({ node, nodeId }) {
 				</thead>
 				<tbody>
 					{rowList.map((row) => (
-						<tr key={row.id}>
-							<th scope="row" data-tone={row.tone || undefined} title={row.label} className={`doc-card-matrix-row${row.link ? ' is-link' : ''}`} {...linkPropsOf(row)}>{row.label}</th>
+						<tr key={row.id} className={row.isGroupStart ? 'is-group-start' : undefined}>
+							<th scope="row" data-tone={row.tone || undefined} title={row.title ?? row.label} className={`doc-card-matrix-row${row.link ? ' is-link' : ''}`} {...bandPropsOf(cardMatrixBandOf(row, null))} {...linkPropsOf(row)}>{row.label}</th>
 							{columnList.map((column) => {
 								const cell = cellOf(row.id, column.id);
 								return (
-									<td key={column.id} title={cell?.title} data-tone={cell?.tone || undefined} className={`doc-card-matrix-cell${data.isDiagonalMarked && row.id === column.id ? ' is-diagonal' : ''}${cell?.link ? ' is-link' : ''}`} {...(cell ? linkPropsOf(cell) : {})}>
+									<td key={column.id} title={cell?.title} data-tone={cell?.tone || undefined} className={`doc-card-matrix-cell${data.isDiagonalMarked && row.id === column.id ? ' is-diagonal' : ''}${cell?.link ? ' is-link' : ''}${groupClassOf(column)}`} {...bandPropsOf(cardMatrixBandOf(row, column))} {...(cell ? linkPropsOf(cell) : {})}>
 										{cell ? <span className="doc-card-matrix-dot" /> : null}
 										{cell?.mark !== undefined ? <span className="doc-card-matrix-mark">{cell.mark}</span> : null}
 									</td>

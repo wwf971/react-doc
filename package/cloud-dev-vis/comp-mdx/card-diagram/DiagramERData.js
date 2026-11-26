@@ -2,6 +2,7 @@ import { routeNormalize, routeTypeHasAnchors } from './DiagramRoute.js';
 import { CARD_FOOTER_ANCHOR } from './TableCardSchema.js';
 import { nodeStyleRead } from './DiagramNodeStyle.js';
 import { NODE_SIZE_MODE_BY_ID, nodeSizeModeOf } from './DiagramNodeResize.js';
+import { depthRead } from './DiagramDepth.js';
 
 const sides = ['left', 'right', 'top', 'bottom'];
 const lineTypes = ['straight', 'bezier', 'step', 'smoothstep', 'polyline'];
@@ -196,6 +197,8 @@ export function diagramNormalize(input, registry, resolve, height = 620) {
 		const { renderer, contract } = rendererRead(node.renderer, `${id}.renderer`, 'visualizationNode', resolve, registry);
 		const dataInput = mapping(node.data ?? {}, `${id}.data`);
 		const data = mapping(contract.dataNormalize ? contract.dataNormalize(dataInput) : dataInput, `${id}.data`);
+		// its depth (DiagramDepth.js): what it is drawn over and under; 0 when absent
+		depthRead(node.depth, id);
 		// its colors (DiagramNodeStyle.js): the keys its kind draws
 		nodeStyleRead(node.style, id, renderer.type ? registry?.kindByType[renderer.type] : undefined, renderer.type ?? renderer.component);
 		if (typeof contract.anchorListGet !== 'function') throw new Error(`${id}: renderer requires anchorListGet.`);
@@ -302,6 +305,7 @@ export function diagramNormalize(input, registry, resolve, height = 620) {
 		}
 		const result = { ...connectionDefault, ...connection, id, ...endpoints, renderer, style, label, route, data: mapping(connection.data ?? connectionDefault.data ?? {}, `${id}.data`), markerStart: connection.markerStart ?? connectionDefault.markerStart ?? 'none', markerEnd: connection.markerEnd ?? connectionDefault.markerEnd ?? 'arrowClosed', isAnimated: connection.isAnimated ?? connectionDefault.isAnimated ?? false };
 		if (![result.markerStart, result.markerEnd].every(marker => markerTypes.includes(marker))) throw new Error(`${id}: invalid marker.`);
+		depthRead(result.depth, id);
 		if (typeof result.isAnimated !== 'boolean') throw new Error(`${id}: isAnimated must be boolean.`);
 		return result;
 	});

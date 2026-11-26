@@ -54,7 +54,10 @@ How the list is kept (also in `AGENTS.md`):
 What the [parametric canvas](../package/cloud-dev-vis/doc/card-diagram-parametric-canvas.md) leaves for later:
 
 - <a id="parametric-tool-bar-edit"></a>**Editing the tool bar.** The tool bar is data (`ParametricToolMap`), and a tool's name, parameters and way of placing are changed on the bar. Adding, removing and duplicating a tool, putting tools under a group, ordering them and keeping one off the bar are written in the config by hand. It waits for [config a layer contributes to](#config-layer-contribute): a tool is an entry each layer may give.
-- <a id="parametric-group-inside"></a>**Inside a group.** A point inside a card (of a row of it), lines among the copies of a repeat, a repeat inside a repeat. 
+- <a id="parametric-group-inside"></a>**Inside a group.** A reference point inside a card (of a row of it), lines among the copies of a repeat, a repeat inside a repeat. 
+- <a id="parametric-locator-line-follow"></a>**A line of a locator that follows something.** A locator is placed as a whole (its origin by its constraint), and each line is a number from that origin. A line whose place is taken from another member (the right edge of a card, a line of another locator) would let a locator measure a drawing instead of only carrying one; sizes dictated by lines would then depend on places, which the solver computes after sizes today.
+- <a id="parametric-reference-free"></a>**A reference point picked with the pointer.** A reference point is defined by parameters (an edge and a dividing point, a direction, a corner, lines). Clicking a place of a thing to make one there, snapped to what its outline offers, is left out on purpose for now.
+- <a id="parametric-read-switch"></a>**In a block of scenes when read.** The canvas of the switch layer does not draw what the layer draws over a diagram being read (the frames of layouts, a locator shown in full). 
 - <a id="parametric-ink"></a>**Handwriting.** Strokes drawn by hand over a scene, with an eraser that takes a whole stroke and one that splits what it touches. `perfect-freehand` (MIT) is the candidate for the outline of a stroke; splitting a stroke is its points cut where the eraser passed.
 
 ## Settings panel

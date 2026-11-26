@@ -1,17 +1,21 @@
 import { MEMBER_ROOT_ID, PARAMETRIC_FEATURE_ID, copyNodeIdBuild, groupKeyOf, parametricRead } from './ParametricData.js';
+import { REFERENCE_SUBJECT_ORIGIN, referencePointResolve } from './ParametricReferencePoint.js';
 
 // The solver of the parametric canvas (card-diagram-parametric-canvas.md#the-solver): where every
 // member of every group stands, from the model (ParametricData.js) and the sizes of the nodes as
 // drawn. Pure.
 //
-//   sizes    bottom-up: an object member is as large as its node (or as its size binding says), a
-//            layout member as large as its layout makes its children
-//   places   top-down: the origin, then each member from its parents by its constraint, a child
-//            of a layout member where the layout puts it
+//   sizes    bottom-up: an object member is as large as its node (or as its size binding says, or as
+//            its constraint dictates: between two lines of a locator), a layout member as large as
+//            its layout makes it
+//   places   top-down: the origin, then each member from its parents by its constraint (its
+//            reference points resolved: constraintContextBuild), a child of a layout that arranges
+//            its children where the layout puts it
 //
 // parametricSolve(model, catalog, { sizeOf(nodeId), override? }) answers
 //   positionById   Map nodeId -> { x, y }: the nodes of the members, and the copies a repeat spawns
-//   sizeById       Map nodeId -> { width?, height? }: the sizes bound to another member
+//   sizeById       Map nodeId -> { width?, height? }: the sizes a node does not decide itself (bound
+//                  to another member, dictated by its constraint)
 //   boxByKey       Map `${groupId}/${memberId}` -> { x, y, width, height }: every member, `root` too
 // override: Map nodeId -> { x, y }, the place of a node while it is dragged: what follows it follows
 // it there, before anything is written
@@ -24,8 +28,32 @@ export function parametricSolve(model, catalog, { sizeOf, override }) {
 // the key of the place of a origin while it is dragged, among the places of dragged nodes
 export const rootOverrideKeyOf = groupId => `~root:${groupId}`;
 
+// the parents of a member as subjects of reference points: the members, the origin for `root`
+export const memberParentListOf = (group, member) => member.parentIdList.map(parentId => (parentId === MEMBER_ROOT_ID ? REFERENCE_SUBJECT_ORIGIN : group.memberById.get(parentId) ?? REFERENCE_SUBJECT_ORIGIN));
+
+// what a constraint is solved with (ParametricConstraint.js: context): the reference points it
+// names resolved against the things they are of. member: the subject of its own points (its
+// outline, the points it declares, its default); parentList: the same of each parent, with their
+// boxes on the canvas
+export function constraintContextBuild(catalog, constraintType, constraint, { member, size, parentList, parentBoxList }) {
+	const formatList = catalog.referenceFormatList;
+	const ofByKey = Object.fromEntries((constraintType.propertyList ?? []).filter(definition => definition.kind === 'referencePoint').map(definition => [definition.id, definition.of]));
+	const parentPointAt = (index, definition) => {
+		const box = parentBoxList[index];
+		const offset = referencePointResolve(definition, parentList[index], box, formatList);
+		return { x: box.x + offset.x, y: box.y + offset.y };
+	};
+	const pointOf = (key) => {
+		const of = ofByKey[key];
+		return of === undefined || of === 'self' ? referencePointResolve(constraint[key], member, size, formatList) : parentPointAt(of, constraint[key]);
+	};
+	return { size, parentBoxList, parentList, pointOf, parentPointAt };
+}
+
 function groupSolve(group, catalog, sizeOf, override, result) {
 	const sizeById = new Map();
+	// the axes of a member its node does not decide: bound to another member, dictated by its constraint
+	const sizeGivenById = new Map();
 	const arrangementById = new Map();
 	const boxById = new Map();
 	const sizeOpenSet = new Set();
@@ -37,15 +65,23 @@ function groupSolve(group, catalog, sizeOf, override, result) {
 		const member = group.memberById.get(memberId);
 		let size;
 		if (member.layout) {
-			const arrangement = catalog.layoutTypeByType[member.layout.type].arrange(member.layout, group.childListOf(memberId).map(child => ({ id: child.id, slot: child.slot, size: sizeGet(child.id) })));
+			// a layout that leaves its children their constraints (a locator) is as large as it says itself
+			const layoutType = catalog.layoutTypeByType[member.layout.type];
+			const arrangement = layoutType.arrange(member.layout, layoutType.isChildConstrained ? [] : group.childListOf(memberId).map(child => ({ id: child.id, slot: child.slot, size: sizeGet(child.id) })));
 			arrangementById.set(memberId, arrangement);
 			size = arrangement.size;
 		} else {
 			size = { ...sizeOf(member.nodeId) };
+			const given = {};
 			for (const axis of ['width', 'height']) {
 				const binding = member.sizeBinding?.[axis];
-				if (binding) size[axis] = Math.max(1, sizeGet(binding.memberId)[axis] * binding.factor + binding.add);
+				if (binding) given[axis] = Math.max(1, sizeGet(binding.memberId)[axis] * binding.factor + binding.add);
 			}
+			// a size its constraint dictates (between two lines of a locator) wins over a binding
+			const dictated = member.constraint ? catalog.constraintTypeByType[member.constraint.type].sizeOf?.(member.constraint, { parentList: memberParentListOf(group, member) }) : null;
+			for (const axis of ['width', 'height']) if (dictated?.[axis] !== undefined) given[axis] = Math.max(1, dictated[axis]);
+			Object.assign(size, given);
+			if (Object.keys(given).length) sizeGivenById.set(memberId, given);
 		}
 		sizeOpenSet.delete(memberId);
 		sizeById.set(memberId, size);
@@ -63,11 +99,14 @@ function groupSolve(group, catalog, sizeOf, override, result) {
 			const dragged = member.nodeId ? override?.get(member.nodeId) : undefined;
 			let position;
 			if (dragged) position = dragged;
-			else if (parentDirect?.layout) {
+			else if (member.isArranged) {
 				const parentBox = boxGet(parentDirect.id);
 				const place = arrangementById.get(parentDirect.id).placeById.get(memberId) ?? { x: 0, y: 0 };
 				position = { x: parentBox.x + place.x, y: parentBox.y + place.y };
-			} else position = catalog.constraintTypeByType[member.constraint.type].solve(member.constraint, { size, parentBoxList: member.parentIdList.map(boxGet) });
+			} else {
+				const constraintType = catalog.constraintTypeByType[member.constraint.type];
+				position = constraintType.solve(member.constraint, constraintContextBuild(catalog, constraintType, member.constraint, { member, size, parentList: memberParentListOf(group, member), parentBoxList: member.parentIdList.map(boxGet) }));
+			}
 			box = { x: position.x, y: position.y, width: size.width, height: size.height };
 		}
 		boxById.set(memberId, box);
@@ -79,11 +118,7 @@ function groupSolve(group, catalog, sizeOf, override, result) {
 		result.boxByKey.set(groupKeyOf(group.id, member.id), box);
 		if (!member.nodeId) continue;
 		result.positionById.set(member.nodeId, { x: box.x, y: box.y });
-		if (member.sizeBinding) {
-			const bound = {};
-			for (const axis of ['width', 'height']) if (member.sizeBinding[axis]) bound[axis] = box[axis];
-			result.sizeById.set(member.nodeId, bound);
-		}
+		if (sizeGivenById.has(member.id)) result.sizeById.set(member.nodeId, { ...sizeGivenById.get(member.id) });
 	}
 	// the copies of a repeat: every node under it again, moved by the step of each copy
 	for (const member of group.memberList) {
@@ -115,6 +150,12 @@ export function parametricPlacerBuild(model, catalog) {
 	};
 }
 
+// the outline of a node (ParametricReferencePoint.js): the shape of its boundary, as its kind says
+// it (contract.outlineOf(node), node-registry.js); a box when it says nothing
+export function nodeOutlineOf(node, registry) {
+	return registry?.kindByType?.[node?.renderer?.type]?.contract?.outlineOf?.(node) ?? undefined;
+}
+
 // the nodes a repeat spawns, from the nodes of the diagram as normalized: a copy is drawn like its
 // source and is nobody's to edit or to connect (isDerived), so it has no handles
 export function parametricCopyNodeListBuild(model, nodes) {
@@ -130,9 +171,9 @@ export function parametricCopyNodeListBuild(model, nodes) {
 // here with the sizes as written, so what cannot be solved (a size that follows from itself) is
 // refused when the diagram is read, with its reason, and never while it is drawn
 export function parametricGraphResolveBuild(catalog) {
-	return (value, graph) => {
+	return (value, graph, { registry } = {}) => {
 		if (value === undefined || value === null) return undefined;
-		const model = parametricRead(value, { nodes: graph.nodes, catalog });
+		const model = parametricRead(value, { nodes: graph.nodes.map(node => ({ id: node.id, around: node.around, outline: nodeOutlineOf(node, registry) })), catalog });
 		if (!model.groupList.length) return { data: { model } };
 		const nodeById = new Map(graph.nodes.map(node => [node.id, node]));
 		const sizeWrittenOf = (nodeId) => {

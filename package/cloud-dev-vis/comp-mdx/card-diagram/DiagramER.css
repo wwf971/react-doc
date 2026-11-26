@@ -150,6 +150,12 @@
 	box-shadow: none;
 }
 
+/* what is laid over the canvas in its coordinates (React Flow's viewport portal: the anchors of a
+   route, the marks of a feature, a token of an animation) stays over every node and line, also one
+   with a depth (DiagramDepth.js gives those a z-index above 0); it takes no pointer itself.
+   Under the bounding box of a scene (900) and the create panel (1000) */
+.doc-er-diagram-flow .react-flow__viewport-portal { z-index: 800; }
+
 .doc-er-table {
 	width: 100%;
 	box-sizing: border-box;
@@ -1005,8 +1011,21 @@
 .doc-card-matrix-cell[data-tone='red'] { --doc-card-matrix-cell-tone: #dc2626; }
 .doc-card-matrix-cell[data-tone='violet'] { --doc-card-matrix-cell-tone: #7c3aed; }
 .doc-card-matrix-cell[data-tone='slate'] { --doc-card-matrix-cell-tone: #94a3b8; }
+/* a band: its row or its column shaded across the matrix, lighter where a row and a column of one band cross;
+   a group: a thick line before its first row or column */
+.doc-card-matrix-table [data-band] { --doc-card-matrix-band: #d97706; background: color-mix(in srgb, var(--doc-card-matrix-band) 30%, transparent); }
+.doc-card-matrix-table [data-band][data-band-cross] { background: color-mix(in srgb, var(--doc-card-matrix-band) 11%, transparent); }
+.doc-card-matrix-table [data-band='blue'] { --doc-card-matrix-band: #2563eb; }
+.doc-card-matrix-table [data-band='teal'] { --doc-card-matrix-band: #0d9488; }
+.doc-card-matrix-table [data-band='green'] { --doc-card-matrix-band: #16a34a; }
+.doc-card-matrix-table [data-band='red'] { --doc-card-matrix-band: #dc2626; }
+.doc-card-matrix-table [data-band='violet'] { --doc-card-matrix-band: #7c3aed; }
+.doc-card-matrix-table [data-band='slate'] { --doc-card-matrix-band: #94a3b8; }
+.doc-card-matrix-cell[data-band][data-tone] { background: color-mix(in srgb, var(--doc-card-matrix-cell-tone) 24%, transparent); }
+.doc-card-matrix-table tr.is-group-start > * { border-top: 2px solid var(--color-fd-foreground); }
+.doc-card-matrix-table th.is-group-start, .doc-card-matrix-table td.is-group-start { border-left: 2px solid var(--color-fd-foreground) !important; }
 /* where the pointer is: its row and its column, what a matrix is read by */
-.doc-card-matrix-table tbody tr:hover > * { background: color-mix(in srgb, var(--doc-card-matrix-accent) 7%, transparent); }
+.doc-card-matrix-table tbody tr:hover > * { box-shadow: inset 0 0 0 100vmax color-mix(in srgb, var(--doc-card-matrix-accent) 7%, transparent); }
 .doc-card-matrix-cell:hover::before { content: ''; position: absolute; left: 0; right: 0; top: -2000px; bottom: -2000px; background: color-mix(in srgb, var(--doc-card-matrix-accent) 7%, transparent); pointer-events: none; }
 .doc-switch-flow .doc-card-matrix .is-link { cursor: pointer; }
 .doc-switch-flow .doc-card-matrix th.is-link:hover { color: var(--doc-card-matrix-accent) !important; text-decoration: underline; }

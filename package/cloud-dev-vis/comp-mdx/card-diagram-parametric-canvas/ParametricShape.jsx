@@ -7,7 +7,7 @@ import { CellValue } from '../../../../main/comp-doc/cell/CellValue.jsx';
 import { DiagramRenderContext } from '../card-diagram/DiagramRender.jsx';
 import { cardIconToken } from '../card-diagram/CardIconToken.jsx';
 import { nodeSizeModeOf } from '../card-diagram/DiagramNodeResize.js';
-import { shapeNormalize, shapePointListOf, shapePropertyList, shapeTextSearchMatch, textNodeNormalize, textNodePropertyList } from './ParametricShapeData.js';
+import { shapeNormalize, shapeOutlineOf, shapePointListOf, shapePropertyList, shapeTextSearchMatch, textNodeNormalize, textNodePropertyList } from './ParametricShapeData.js';
 
 // The kinds the parametric canvas brings to every registry listing it (node-registry.js: a feature's
 // kindList; ParametricShapeData.js for their data): a shape, drawn to the size of its node, and a
@@ -70,6 +70,8 @@ export const shapeNodeKind = {
 		dataNormalize: shapeNormalize, anchorListGet: () => [{ id: 'body', sideList: sideAllList }],
 		sizeDefault: { width: 160, height: 100 }, sizeMin: { width: 12, height: 12 },
 		styleList: ['fill', 'stroke'], propertyList: shapePropertyList, searchMatch: shapeTextSearchMatch,
+		// the shape of its boundary: what its reference points are read on (node-registry.js: outlineOf)
+		outlineOf: shapeOutlineOf,
 	},
 	schema: null,
 	Card: ShapeCard,

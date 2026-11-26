@@ -13,10 +13,10 @@ A diagram is node cards joined by connection lines on a canvas, written as YAML.
 | a diagram moving between named states | `CardDiagramAnimation`, `DiagramERAnimation` | [Card Diagram Animation](card-diagram-usage-animation.md) |
 | many diagrams in one viewport, switched by path, one inside a card of another | `CardDiagramSwitch`, `DiagramERSwitch`, `DiagramAwsSwitch` | [Card Diagram Scenes](card-diagram-usage-flexible-switch.md) |
 | to shape a line by hand | anchors and handles on any of them | [Connection Lines](card-diagram-connection-line.md) |
-| to draw by hand with tools (shapes, words, patterns), or keep a group placed by rules that one number changes | `viewport.featureList: [parametric-canvas]` on any of them | [Drawing on a Card Diagram](card-diagram-usage-parametric-canvas.md) |
+| to draw by hand with tools (shapes, words, patterns), keep a group placed by rules that one number changes, or stand many things on shared lines that are moved together (a locator) | `viewport.featureList: [parametric-canvas]` on any of them | [Drawing on a Card Diagram](card-diagram-usage-parametric-canvas.md) |
 | to try something out | [the playground](card-diagram.playground.md), a document git ignores, under **Playground** in the side panel (a fresh clone has none: the item creates it) | [Playground documents](../../../main/doc_page_impl_test.md#playground-documents) |
 
-Each feature layer has a usage document of its own beside this one, named after it: [card-diagram-usage-animation.md](card-diagram-usage-animation.md) (states), [card-diagram-usage-flexible-switch.md](card-diagram-usage-flexible-switch.md) (scenes), [card-diagram-usage-parametric-canvas.md](card-diagram-usage-parametric-canvas.md) (drawing, groups placed by rules). This document says when to reach for one; the details are there.
+Each feature layer has a usage document of its own beside this one, named after it: [card-diagram-usage-animation.md](card-diagram-usage-animation.md) (states), [card-diagram-usage-flexible-switch.md](card-diagram-usage-flexible-switch.md) (scenes), [card-diagram-usage-parametric-canvas.md](card-diagram-usage-parametric-canvas.md) (drawing, groups placed by rules, reference points, locators). This document says when to reach for one; the details are there.
 
 ## The smallest diagram
 
@@ -57,7 +57,7 @@ Reach for a card that exists before drawing one of your own: each already knows 
 | what a long series leaves out | `card-three-dots` | "298 batches" between the first and the last; a line may leave the dots, without the square of a handle (`isMarkerHidden`) |
 | a database, a store | `card-database` | a cylinder with its name inside |
 | a thing among many, in a graph of what relates to what | `card-icon`, with `card-caption` over a group | a small round mark with its name beside it, a dot for its state; lines end on the mark (`anchor: { target: icon }`). In a narrow place, laid out by the [outline arranger](card-diagram-arrange.md#the-outline-arranger) |
-| which of a set relates to which | `card-matrix` | rows and columns with a mark where they meet; a cell may be a [link](card-diagram-usage-flexible-switch.md#a-link-to-a-scene) |
+| which of a set relates to which | `card-matrix` | rows and columns with a mark where they meet; a cell may be a [link](card-diagram-usage-flexible-switch.md#a-link-to-a-scene); rows and columns divided into groups by thick lines (`isGroupStart`), and **a band** (`band: { id, tone }`) shading a row or a column across the matrix, lighter where a row and a column of one band cross: a set of things read as a cross (a cycle of a migration order) |
 | many things to find and open (hundreds, thousands) | `card-index` | small cards of two names in a grid, in groups, each a link; one node however many ([the index](card-diagram-impl.md#node-registries)) |
 | what the looks of a diagram stand for | `card-legend` | a card or a line as drawn, with words, pinned to a corner of the viewport (`pin: top-right`) so it stays while the reader moves; folds to its title line. **Use it for any legend** ([Legends](#legends)) |
 | a graph of hundreds or thousands of things (what looks up what in a whole database) | `card-graph` | each thing a small square or a label and the lines between them, in one node; a search finds each thing by its names, a pointer on one lights its lines ([Many things in a graph](#many-things-in-a-graph)) |
@@ -205,9 +205,22 @@ handles: []
 
 `itemList` may be empty, for a block with no label. Each item has a unique `id` and a `text`; `level: 1` or `2` makes it a title, larger and on a line of its own. `columnList: [{ id, x, width, text? }]` with `columnTop` draws columns inside the block, in its own pixels (from its outer edge: the block's edge is drawn over it and takes no room, so columns up to its width end at its right edge rather than past a border), for what reads as columns without a block in the block. A text is a text of the cell editing kit: **an icon is written among its words**, `{{icon:NAME}}`, quoted in YAML since it starts with a brace; the names are those of `CARD_ICON_BY_NAME` (`database`, `server`, `file`, `archive`, `cloud` ...). Tones are `blue`, `teal`, `green`, `amber`, `red`, `violet` and `slate` (the default).
 
-A block has no handles and does not own or move what lies on it. It is always drawn behind the lines and the cards, whatever the order in the data. While reading, the pointer passes through it; while editing it is selected and moved like a card, resized by its corners, the words of a label or a column are typed where they stand (`/icon`, or `{{icon:`, puts an icon among them; a click on an icon changes it), a label typed empty goes, the **+** at the corner of the block selected adds one, and a label under the pointer has a grip to move it among the others and a button to take it away (a block may keep no label). Its tone and the side of its labels are set in its edit card, its fill and its edge under **Style**. Leave room for its labels when placing cards on it.
+A block has no handles and does not own or move what lies on it. It is drawn behind the lines and the cards, whatever the order in the data, unless a depth says otherwise ([Over and under](#over-and-under)). While reading, the pointer passes through it; while editing it is selected and moved like a card, resized by its corners, the words of a label or a column are typed where they stand (`/icon`, or `{{icon:`, puts an icon among them; a click on an icon changes it), a label typed empty goes, the **+** at the corner of the block selected adds one, and a label under the pointer has a grip to move it among the others and a button to take it away (a block may keep no label). Its tone and the side of its labels are set in its edit card, its fill and its edge under **Style**. Leave room for its labels when placing cards on it.
 
 `card-three-dots` (`data: { direction?: vertical | horizontal, text?, tone? }`) stands for what is left out of a long series of cards. A table card takes `data.badge`, a short word before its name.
+
+## Over and under
+
+What lies on what follows from what the things are: a color block is under the lines, the lines are under the cards, and of two cards the one written later is over the other. Where a drawing needs another order, write a `depth` on the node or on the line: a number, 0 when absent, a higher one drawn over a lower one ([Depth](card-diagram-impl.md#depth)).
+
+```yaml
+nodes:
+  - { id: watermark, renderer: { type: shape }, depth: -1, ... }   # under the lines and the blocks
+connections:
+  - { id: bridge, depth: 1, source: ..., target: ... }             # a line drawn over the cards
+```
+
+In the visual editor nobody types the number: **Bring to front**, **Bring forward**, **Send backward** and **Send to back** are in the menu of a right-click on a node or a line, and in the section **Depth** of its edit card (Ctrl/⌘ + `]` and `[`, with Shift to the front and to the back). Forward and backward pass the nearest thing lying on it, so each step is seen. Keep depths few: a diagram drawn in the order above needs none.
 
 ## Legends
 

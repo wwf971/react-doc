@@ -1,7 +1,8 @@
 import { createContext, useCallback, useContext, useId, useMemo, useState } from 'react';
 import { observer } from 'mobx-react-lite';
 import { DiagramRenderContext, DiagramSearchPathContext } from '../card-diagram/DiagramRender.jsx';
-import { DiagramStaticLabel, DiagramStaticLine, DiagramStaticNode, pathLabelPointAt, pathPointAt } from '../card-diagram/DiagramStatic.jsx';
+import { DiagramStaticLabel, DiagramStaticLineLayers, DiagramStaticNode, pathLabelPointAt, pathPointAt } from '../card-diagram/DiagramStatic.jsx';
+import { depthKeyOfNode, depthZIndexTopGet, diagramDepthZIndexMapOf } from '../card-diagram/DiagramDepth.js';
 import { endpointIsDangling } from '../card-diagram/DiagramERData.js';
 import { switchPresentationBuild } from './SwitchData.js';
 
@@ -38,6 +39,10 @@ export const SwitchStaticScene = observer(function SwitchStaticScene({ store, pa
 	void store.measureVersion;
 	const positions = store.entryPositionsGet(entry);
 	const nodeList = entry.canvas.graph.nodes.filter((node) => node.renderer.type !== 'scene-box');
+	// what is drawn over what: the z-index of each card and line, from their depths (card-diagram/DiagramDepth.js)
+	const zIndexByKey = diagramDepthZIndexMapOf(entry.canvas.graph);
+	// the words of the lines stay over every card, also one with a depth
+	const zIndexLabel = depthZIndexTopGet(zIndexByKey) ? depthZIndexTopGet(zIndexByKey) + 1 : 0;
 	// a root drawn as the canvas draws it (a mask, the measuring host) has the title of the scene
 	// focused; an embedded copy is named by what holds it
 	const titleNode = !isEmbedded && depth === 0 ? store.titleNodeOf?.(path) ?? null : null;
@@ -57,19 +62,12 @@ export const SwitchStaticScene = observer(function SwitchStaticScene({ store, pa
 		<SwitchContext.Provider value={context}>
 			<DiagramSearchPathContext.Provider value={path}>
 			<div className="doc-switch-static">
-				<svg className="doc-switch-static-lines" aria-hidden="true">
-					<defs>
-						<marker id={markerId} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto-start-reverse">
-							<path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b" />
-						</marker>
-					</defs>
-					{lineList.map(({ connection, source, target }) => <DiagramStaticLine key={connection.id} connection={connection} source={source} target={target} markerId={markerId} />)}
-				</svg>
+				<DiagramStaticLineLayers className="doc-switch-static-lines" lineList={lineList} zIndexByKey={zIndexByKey} markerId={markerId} />
 				{titleNode && titleRect ? <DiagramStaticNode className="doc-switch-static-node" key={titleNode.id} id={titleNode.id} node={titleNode} position={titleRect} config={config} registry={registry} onGeometry={onGeometry} /> : null}
 				{nodeList.map((node) => (
-					<DiagramStaticNode className="doc-switch-static-node" key={node.id} id={node.id} node={node.around ? { ...node, size: store.nodeSizeOf(entry, node) } : node} position={positions.get(node.id) ?? { x: 0, y: 0 }} config={config} registry={registry} onGeometry={onGeometry} />
+					<DiagramStaticNode className="doc-switch-static-node" key={node.id} id={node.id} node={node.around ? { ...node, size: store.nodeSizeOf(entry, node) } : node} position={positions.get(node.id) ?? { x: 0, y: 0 }} zIndex={zIndexByKey.get(depthKeyOfNode(node.id))} config={config} registry={registry} onGeometry={onGeometry} />
 				))}
-				{lineList.filter(({ connection }) => connection.label.text).map(({ connection, source, target }) => <DiagramStaticLabel className="doc-switch-edge-label" key={connection.id} connection={connection} source={source} target={target} />)}
+				{lineList.filter(({ connection }) => connection.label.text).map(({ connection, source, target }) => <DiagramStaticLabel className="doc-switch-edge-label" key={connection.id} connection={connection} source={source} target={target} zIndex={zIndexLabel} />)}
 			</div>
 			</DiagramSearchPathContext.Provider>
 		</SwitchContext.Provider>

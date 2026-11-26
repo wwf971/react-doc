@@ -206,10 +206,11 @@ test('the focus of a group and the path of the editor are one selection', () => 
 test('the tools are a mapping merged entry by entry, in the order of their ranks', () => {
 	const toolMap = toolMapMerge(parametricToolMapDefault, { note: null, 'my-note': { label: 'Blue note', rank: 'd', create: { what: 'node', kind: 'card-note', data: { tone: 'blue' } } }, label: { ...parametricToolMapDefault.label, isHidden: true } });
 	const bar = toolBarBuild(toolListBuild(toolMap));
-	assert.deepEqual(bar.topList.map(tool => tool.id), ['group', 'my-note', 'text', 'shape', 'card', 'layout', 'pattern', 'line']);
+	assert.deepEqual(bar.topList.map(tool => tool.id), ['group', 'my-note', 'text', 'shape', 'card', 'layout', 'locator', 'pattern', 'line']);
 	assert.deepEqual(bar.moreList.map(tool => tool.id), ['label']);
 	assert.deepEqual(bar.childListOf('layout').map(tool => tool.id), ['layout-row', 'layout-column', 'layout-repeat', 'layout-grid']);
 	assert.deepEqual(bar.childListOf('pattern').map(tool => tool.id), ['pattern-caption', 'pattern-badge']);
+	assert.deepEqual(bar.childListOf('locator').map(tool => tool.id), ['locator-columns', 'locator-rows', 'locator-grid', 'locator-blocks']);
 });
 
 test('the edit card stands in the panel or beside the thing, as the author chose; a folded panel lets it float', async () => {

@@ -881,6 +881,25 @@ test('a scene edited in place: an edit starts on what was clicked, ends by itsel
 	assert.equal(store.sceneEditStart(), false);
 });
 
+test('new scenes keep the scene shown when the view its path named is gone, else go back to the root', () => {
+	const viewed = (path, viewIdList) => ({ path, diagram: { nodes: [] }, ...(viewIdList ? { viewDefault: viewIdList[0], viewList: viewIdList.map((id) => ({ id, label: id, diagram: { nodes: [] } })) } : {}) });
+	const providerOf = (sceneByPath) => ({ root: '/', sceneGet: (path) => sceneByPath[path] ?? null, labelGet: (path) => path, childListGet: () => [] });
+	const store = new SwitchStore({ provider: providerOf({ '/': viewed('/'), '/a': viewed('/a', ['diagram', 'matrix']) }), registry: switchRegistryBuild({ id: 'test', kindList: [] }), pathInitial: '/a@matrix' });
+	assert.equal(store.pathCurrent, '/a@matrix');
+	// the scene is there again with other views: it stays, at its default view
+	store.providerSet(providerOf({ '/': viewed('/'), '/a': viewed('/a', ['index']) }));
+	assert.equal(store.pathCurrent, '/a@index');
+	// with no view at all
+	store.providerSet(providerOf({ '/': viewed('/'), '/a': viewed('/a') }));
+	assert.equal(store.pathCurrent, '/a');
+	// the scene gone: the root
+	store.providerSet(providerOf({ '/': viewed('/') }));
+	assert.equal(store.pathCurrent, '/');
+	// a path asked for whose view is not there is said, as before
+	store.providerSet(providerOf({ '/': viewed('/'), '/a': viewed('/a', ['index']) }), '/a@matrix');
+	assert.match(store.message, /no view matrix/);
+});
+
 test('a label is a pill as wide as its words, carrying the settings its data declares', () => {
 	const registry = switchRegistryBuild(cardDiagramNodeRegistry);
 	const node = diagramNormalize({ version: 1, nodes: [{ id: 'settings', renderer: { type: 'card-label' }, position: { x: 0, y: 0 }, data: { title: 'Settings', icon: 'settings', tone: 'teal', statusTone: 'red', propertyList: [{ id: 'name', label: 'Name' }], name: 'First' } }] }, registry).nodes[0];

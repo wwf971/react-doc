@@ -95,8 +95,8 @@ export const DiagramEditCardContent = observer(function DiagramEditCardContent({
 		</div> : null}
 		{model.segmentList.length ? <div className="doc-vis-card-path doc-path" data-plain="">
 			{PathBar
-				? <PathBar pathData={{ segments: model.segmentList.map(segment => ({ name: segment.name })) }} onPathSegClicked={index => editor.navigate(model.segmentList[index].path)} allowEditText={false} appendTrailingSlash={false} height={22} separator="›" />
-				: <span className="doc-vis-card-path-plain">{model.segmentList.map((segment, index) => <span key={index}>{index > 0 ? <span className="doc-vis-card-path-separator">›</span> : null}<button type="button" className="doc-vis-card-path-segment" onClick={() => editor.navigate(segment.path)}>{segment.name}</button></span>)}</span>}
+				? <PathBar pathData={{ segments: model.segmentList.map(segment => ({ name: segment.name })) }} onPathSegClicked={index => (model.segmentList[index].open ? model.segmentList[index].open() : editor.navigate(model.segmentList[index].path))} allowEditText={false} appendTrailingSlash={false} height={22} separator="›" />
+				: <span className="doc-vis-card-path-plain">{model.segmentList.map((segment, index) => <span key={index}>{index > 0 ? <span className="doc-vis-card-path-separator">›</span> : null}<button type="button" className="doc-vis-card-path-segment" onClick={() => (segment.open ? segment.open() : editor.navigate(segment.path))}>{segment.name}</button></span>)}</span>}
 		</div> : <div className="doc-vis-card-rule" />}
 		<div className="doc-vis-card-body">
 			<DiagramEditCardBody model={model} editor={editor} />
@@ -213,7 +213,8 @@ function NoteComp({ data }) {
 // one item of a list view: its name, a badge and a sub line; a click opens
 // its detail. is-selected follows the path, so it can never be stale
 const ListItemComp = observer(function ListItemComp({ data, editor }) {
-	return <button type="button" className={`doc-vis-list-item${data.isSelected ? ' is-selected' : ''}`} onClick={() => editor.navigate(data.path)}>
+	// an item of a card of a feature says itself what a click opens (open); one that opens nothing is only shown
+	return <button type="button" className={`doc-vis-list-item${data.isSelected ? ' is-selected' : ''}`} disabled={!data.open && !data.path} onClick={() => (data.open ? data.open() : editor.navigate(data.path))}>
 		<span className="doc-vis-list-main"><span className="doc-vis-list-name">{data.name || '(empty)'}</span>{data.badge ? <span className="doc-badge doc-vis-list-badge">{data.badge}</span> : null}</span>
 		{data.sub ? <span className="doc-vis-list-sub">{data.sub}</span> : null}
 	</button>;

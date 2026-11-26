@@ -111,7 +111,7 @@ test('an agent reads the groups and changes them through the apis, each a comman
 	const changeApi = (options, command) => ({ name: options.name, run: (store, params) => command(store, params, () => null, {}) });
 	const readApi = (options, read) => ({ name: options.name, run: (store, params) => read(store, params, {}) });
 	for (const api of parametricCanvasFeature.apiListBuild({ changeApi, readApi })) apiByName[api.name] = api;
-	assert.deepEqual(Object.keys(apiByName), ['parametricGroupListGet', 'parametricGroupAdd', 'parametricMemberAdd', 'parametricMemberParentSet', 'parametricMemberSet', 'parametricMemberRemove', 'parametricToolPlace']);
+	assert.deepEqual(Object.keys(apiByName), ['parametricGroupListGet', 'parametricGroupAdd', 'parametricMemberAdd', 'parametricMemberParentSet', 'parametricMemberSet', 'parametricReferencePointSet', 'parametricLocatorLineSet', 'parametricMemberRemove', 'parametricToolPlace']);
 	const store = new DiagramEditStore(sourceOf({ nodes: [{ id: 'a', renderer: { type: 'card-note' }, position: { x: 100, y: 40 }, size: { width: 120, height: 40 }, data: { title: 'A' }, handles: [] }] }), 'diagram', undefined, registry);
 	const groupId = apiByName.parametricGroupAdd.run(store, { x: 100, y: 40, nodeIdList: ['a'] });
 	assert.ok(groupId);

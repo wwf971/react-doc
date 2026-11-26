@@ -770,3 +770,103 @@ test('the box of a node scrolls only what its card holds beyond it by more than 
 	assert.equal(nodeOverflowIsScroll(box(200 + NODE_OVERFLOW_SCROLL_MIN + 1, 200)), true);
 	assert.equal(nodeOverflowIsScroll(box(200, 200, 300, 48)), true);
 });
+
+test('depth: a number of a node or a line and the four moves, each one step an undo takes back; the canvas and the edit card follow', () => {
+	const source = JSON.stringify({ version: 1, nodes: [
+		{ id: 'block', renderer: { type: 'color-block' }, position: { x: 0, y: 0 }, size: { width: 400, height: 300 }, data: { tone: 'blue' } },
+		{ id: 'a', renderer: { type: 'card-note' }, position: { x: 20, y: 20 }, data: { title: 'A' }, handles: [{ id: 'out', direction: 'out', anchor: { side: 'right' } }] },
+		{ id: 'b', renderer: { type: 'card-note' }, position: { x: 300, y: 20 }, data: { title: 'B' }, handles: [{ id: 'in', direction: 'in', anchor: { side: 'left' } }] },
+		{ id: 'shape', renderer: { type: 'card-note' }, position: { x: 150, y: 10 }, data: { title: 'S' } },
+		{ id: 'pinned', renderer: { type: 'card-note' }, pin: 'top-right', data: { title: 'P' } },
+	], connections: [{ id: 'line', source: { nodeId: 'a', handleId: 'out' }, target: { nodeId: 'b', handleId: 'in' } }] });
+	const store = new DiagramEditStore(source, 'diagram', undefined, registry);
+	const order = () => store.depthOrderList.map(item => item.key);
+	const orderInitial = ['node:block', 'connection:line', 'node:a', 'node:b', 'node:shape'];
+	// no depth written: backgrounds, lines, nodes as written; a pinned node has no place
+	assert.deepEqual(order(), orderInitial);
+
+	// a depth typed is a step; 0 takes the key away, and the draft is what it was
+	assert.equal(store.depthSet({ nodeId: 'a' }, 2), true);
+	assert.equal(store.nodeGet('a').depth, 2);
+	assert.equal(store.depthGet({ nodeId: 'a' }), 2);
+	assert.equal(order().at(-1), 'node:a');
+	assert.equal(store.depthSet({ nodeId: 'a' }, 0), true);
+	assert.equal('depth' in store.nodeGet('a'), false);
+	assert.equal(store.isDirty, false);
+	assert.equal(store.undo(), true);
+	assert.equal(store.nodeGet('a').depth, 2);
+	assert.equal(store.undo(), true);
+	assert.deepEqual(order(), orderInitial);
+	assert.equal(store.history.isUndoAvailable, false);
+	// what is no number, a node pinned to the viewport: refused, nothing changed
+	assert.equal(store.depthSet({ nodeId: 'a' }, Number.NaN), false);
+	assert.equal(store.depthSet({ nodeId: 'pinned' }, 1), false);
+	assert.match(store.message, /pinned to the viewport/);
+	assert.equal(store.depthSet({ connectionId: 'none' }, 1), false);
+	assert.equal(store.history.isUndoAvailable, false);
+
+	// the shape lies on the line and on the block, not on the other notes
+	const rectByKey = { 'node:block': { x: 0, y: 0, width: 400, height: 300 }, 'node:a': { x: 20, y: 20, width: 100, height: 60 }, 'node:b': { x: 300, y: 20, width: 100, height: 60 }, 'node:shape': { x: 150, y: 10, width: 100, height: 80 }, 'connection:line': { x: 120, y: 50, width: 180, height: 0 } };
+	const geometry = { rectOf: key => rectByKey[key] ?? null };
+	// sent backward: under the line, still over the block, the other notes still over the line
+	assert.equal(store.depthMove({ nodeId: 'shape' }, 'backward', { geometry }), true);
+	assert.deepEqual(order(), ['node:block', 'node:shape', 'connection:line', 'node:a', 'node:b']);
+	// the canvas draws it: a z-index from the depths, lines and nodes without one as they were
+	const canvas = new DiagramERStore(store.rawDraft, undefined, 620, registry);
+	const zIndexOf = id => canvas.nodeList.find(node => node.id === id).zIndex;
+	assert.ok(zIndexOf('block') < zIndexOf('shape') && zIndexOf('shape') < 0);
+	assert.equal(zIndexOf('a'), 0);
+	assert.equal(canvas.edgeList[0].zIndex, undefined);
+	// one step, whatever it wrote
+	assert.equal(store.undo(), true);
+	assert.deepEqual(order(), orderInitial);
+	assert.equal(store.isDirty, false);
+	assert.equal(store.redo(), true);
+	assert.deepEqual(order(), ['node:block', 'node:shape', 'connection:line', 'node:a', 'node:b']);
+	// and forward again: over the line, as it was
+	assert.equal(store.depthMove({ nodeId: 'shape' }, 'forward', { geometry }), true);
+	assert.deepEqual(order().slice(0, 3), ['node:block', 'connection:line', 'node:shape']);
+	store.undo();
+	store.undo();
+
+	// nothing to pass: refused with its reason, no step
+	assert.equal(store.depthMove({ nodeId: 'shape' }, 'forward', { geometry }), false);
+	assert.equal(store.message, 'Nothing lies over it.');
+	assert.equal(store.depthMove({ nodeId: 'block' }, 'back'), false);
+	assert.equal(store.message, 'It is behind everything already.');
+	assert.equal(store.depthMove({ nodeId: 'shape' }, 'sideways'), false);
+	assert.equal(store.history.isUndoAvailable, false);
+	assert.equal(store.depthMoveReasonGet({ nodeId: 'shape' }, 'front'), 'It is in front of everything already.');
+	assert.equal(store.depthMoveReasonGet({ nodeId: 'shape' }, 'back'), '');
+
+	// a line to the front: over every node
+	assert.equal(store.depthMove({ connectionId: 'line' }, 'front'), true);
+	assert.equal(store.connectionGet('line').depth, 1);
+	assert.equal(order().at(-1), 'connection:line');
+	assert.equal(new DiagramERStore(store.rawDraft, undefined, 620, registry).edgeList[0].zIndex, 2);
+	assert.equal(store.undo(), true);
+	assert.equal('depth' in store.connectionGet('line'), false);
+
+	// the edit card: the depth and the four moves, greyed with why when there is nothing to pass
+	store.select('shape');
+	const editor = { store, change: operation => operation(), handlePositionGet: positionGet };
+	const depthSection = () => cardModelBuild(editor).view.sectionList.find(section => section.id === 'depth');
+	assert.deepEqual(depthSection().actionList.map(action => [action.id, action.isDisabled]), [['depth-front', true], ['depth-forward', true], ['depth-backward', false], ['depth-back', false]]);
+	assert.equal(depthSection().actionList[0].reason, 'It is in front of everything already.');
+	assert.equal(depthSection().propertyList[0].value, 0);
+	assert.equal(depthSection().propertyList[0].set(-3), true);
+	assert.equal(store.nodeGet('shape').depth, -3);
+	assert.equal(order()[0], 'node:shape');
+	assert.equal(depthSection().actionList.find(action => action.id === 'depth-front').act(), true);
+	assert.equal(order().at(-1), 'node:shape');
+	// a line has the section too; a node pinned to the viewport has none
+	store.selectConnection('line');
+	assert.ok(cardModelBuild(editor).view.sectionList.some(section => section.id === 'depth'));
+
+	// a draft whose structure is given takes no depth; a depth that is no number does not read
+	const fixed = new DiagramEditStore(source, 'diagram', undefined, registry, { isStructureFixed: true });
+	assert.equal(fixed.depthSet({ nodeId: 'a' }, 1), false);
+	assert.equal(fixed.depthMove({ nodeId: 'a' }, 'front'), false);
+	assert.throws(() => diagramNormalize({ version: 1, nodes: [{ id: 'a', renderer: { type: 'card-note' }, data: { title: 'A' }, depth: 'high' }] }, registry), /a\.depth must be a number/);
+	assert.throws(() => diagramNormalize({ version: 1, nodes: [], connections: [{ id: 'l', source: { position: { x: 0, y: 0 } }, target: { position: { x: 9, y: 9 } }, depth: '1' }] }, registry), /l\.depth must be a number/);
+});

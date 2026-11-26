@@ -27,12 +27,13 @@ export default defineConfig({
     dedupe: ['react', 'react-dom'],
     // a component of a doc page lying anywhere imports the page by its name
     // (compDefine, RegisteredComp), from a checkout as from an installed package; its pure
-    // utilities without the page by a path of their own (asset-path, pagination, cell-text: no React, for node tests too)
+    // utilities without the page by a path of their own (asset-path, pagination, cell-text, rank: no React, for node tests too)
     alias: [
       { find: /^@wwf971\/react-doc$/, replacement: path.join(path.dirname(fileURLToPath(import.meta.url)), 'src/index.js') },
       { find: /^@wwf971\/react-doc\/asset-path$/, replacement: path.join(path.dirname(fileURLToPath(import.meta.url)), 'src/lib/doc-object-frontend-asset-path.js') },
       { find: /^@wwf971\/react-doc\/pagination$/, replacement: path.join(path.dirname(fileURLToPath(import.meta.url)), 'src/lib/doc-pagination.js') },
       { find: /^@wwf971\/react-doc\/cell-text$/, replacement: path.join(path.dirname(fileURLToPath(import.meta.url)), 'src/lib/doc-cell-text.js') },
+      { find: /^@wwf971\/react-doc\/rank$/, replacement: path.join(path.dirname(fileURLToPath(import.meta.url)), 'src/lib/doc-rank.js') },
     ],
   },
   // the first visit after a server starts (main/doc_page_impl_cli.md#the-first-load-after-a-start):

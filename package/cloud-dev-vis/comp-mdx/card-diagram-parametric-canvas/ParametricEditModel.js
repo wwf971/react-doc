@@ -1,43 +1,80 @@
-import { POINT_BY_NAME, MEMBER_ROOT_ID, pointNameOf, groupKeyOf, memberIsFramedWhenRead } from './ParametricData.js';
+import { MEMBER_ROOT_ID, groupKeyOf, memberIsFramedWhenRead } from './ParametricData.js';
+import { memberParentListOf } from './ParametricSolve.js';
+import { REFERENCE_POINT_DEFAULT, outlineReferenceDefaultOf, referenceFormatListOf, referencePointLabelOf, referencePointWrite } from './ParametricReferencePoint.js';
 
 // What the parametric canvas shows of a thing in the editor, as data (card-diagram-parametric-canvas.md#the-editor):
 // the sections it adds to the edit card of a node, the edit card of a group or of a layout member,
-// and what can be done with a thing (the actions of the panel of a right-click). In the forms of
-// the framework (DiagramEditCardModel.js: section, property, action; DiagramCreatePanel.jsx:
-// action, state), so the same components draw them.
-const POINT_CUSTOM = 'custom';
-const pointNameList = Object.keys(POINT_BY_NAME);
-const pointLabels = { 'top-left': 'Top left', top: 'Top', 'top-right': 'Top right', left: 'Left', center: 'Center', right: 'Right', 'bottom-left': 'Bottom left', bottom: 'Bottom', 'bottom-right': 'Bottom right', [POINT_CUSTOM]: 'Custom' };
+// the card of a mode of a thing (its reference points), and what can be done with a thing (the
+// actions of the panel of a right-click). In the forms of the framework (DiagramEditCardModel.js:
+// section, property, action, list; DiagramCreatePanel.jsx: action, state), so the same components
+// draw them.
 const round = value => Math.round(value * 1000) / 1000;
 
 // a command of the session run as a change of the editor (the draft is reported after it)
 function changeOf(editor, operation) {
 	let result = false;
 	editor.change(() => { result = operation(); });
-	return Boolean(result);
+	return result;
+}
+
+// a reference point as properties of an edit card: a menu of what its thing offers (its default
+// reference point, the points it declares, then what the formats of its outline offer), and under
+// it the parameters of the choice made (an edge and a dividing point, an angle, lines).
+//   definition    the reference point as read; subject: the thing it is of (its outline, the
+//                 points it declares, its default); isOwnOffered: false for a declared point itself
+//   isDefaultWritten   the default reference point is written as the word (a parameter whose absence
+//                 means something else: the middle, for between)
+//   write(written, isTyped)   keeps it, as written (undefined: the key taken away)
+export function referencePointPropertyListBuild({ id, label, definition, subject, formatList, isOwnOffered = true, isDefaultOffered = true, isDefaultWritten = false, write }) {
+	const outline = subject.outline;
+	const current = definition ?? REFERENCE_POINT_DEFAULT;
+	const formatOfferList = referenceFormatListOf(outline, formatList);
+	const formatCurrent = formatList.find(format => format.id === current.format);
+	// the format of what is written is listed even where the outline no longer offers it (a shape changed)
+	if (formatCurrent && !formatOfferList.includes(formatCurrent)) formatOfferList.push(formatCurrent);
+	const choiceList = [];
+	if (isDefaultOffered) choiceList.push({ key: 'default', label: `Default: ${referencePointLabelOf(REFERENCE_POINT_DEFAULT, subject, formatList).replace(/^default \((.*)\)$/, '$1')}`, definition: REFERENCE_POINT_DEFAULT });
+	if (isOwnOffered) for (const declared of subject.referencePointList ?? []) choiceList.push({ key: `own:${declared.id}`, label: declared.name || referencePointLabelOf(declared.point, subject, formatList), definition: { format: 'own', id: declared.id } });
+	for (const format of formatOfferList) choiceList.push(...format.choiceListGet(outline));
+	const keyCurrent = current.format === 'default' ? 'default' : current.format === 'own' ? `own:${current.id}` : formatCurrent?.keyOf(current) ?? '';
+	const writtenOf = next => (next.format === 'default' ? (isDefaultWritten ? 'default' : undefined) : referencePointWrite(next, formatList));
+	const propertyList = [{
+		id, label, kind: 'enum', value: keyCurrent, values: choiceList.map(choice => choice.key), valueLabels: Object.fromEntries(choiceList.map(choice => [choice.key, choice.label])), isSearchable: choiceList.length > 14,
+		set: next => write(writtenOf(choiceList.find(choice => choice.key === next)?.definition ?? REFERENCE_POINT_DEFAULT), false),
+	}];
+	for (const param of formatCurrent?.paramListGet(current, outline) ?? []) {
+		propertyList.push({
+			id: `${id}-${param.id}`, label: `· ${param.label}`, kind: param.kind, value: param.value, values: param.values, valueLabels: param.valueLabels, min: param.min, max: param.max, step: param.step,
+			set: (next) => {
+				if (param.kind !== 'number') return write(writtenOf(param.next(next)), false);
+				const number = Number(next);
+				return Number.isFinite(number) && write(writtenOf(param.next(number)), true);
+			},
+		});
+	}
+	return propertyList;
 }
 
 // the properties of the parameters of a constraint or a layout (their propertyList), for the edit
-// card. valueOf(id): the value as resolved; set(id, value, isTyped): writes one
-function paramPropertyListBuild(definitionList, valueOf, set) {
+// card. valueOf(id): the value as resolved; set(id, value, isTyped): writes one; patch(keys,
+// isTyped, id): writes several (a definition saying apply); subjectOf(of): the thing a reference
+// point parameter is of (the member: self; a parent: its place among the parents)
+function paramPropertyListBuild(definitionList, { valueOf, set, patch, subjectOf, formatList }) {
 	return definitionList.flatMap((definition) => {
-		const value = valueOf(definition.id);
+		const value = definition.value !== undefined ? definition.value : valueOf(definition.id);
+		const write = (next, isTyped) => (definition.apply ? patch(definition.apply(next), isTyped, definition.id) : set(definition.id, next, isTyped));
 		if (definition.kind === 'number') {
-			return [{ id: definition.id, label: definition.label, kind: 'number', value: round(value ?? definition.valueDefault), step: definition.step, min: definition.min, max: definition.max, set: (next) => { const number = Number(next); return Number.isFinite(number) && set(definition.id, number, true); } }];
+			return [{ id: definition.id, label: definition.label, kind: 'number', value: round(value ?? definition.valueDefault), step: definition.step, min: definition.min, max: definition.max, set: (next) => { const number = Number(next); return Number.isFinite(number) && write(number, true); } }];
 		}
 		if (definition.kind === 'enum') {
 			// the values of a menu are words: a number is written back as the number it stands for
-			return [{ id: definition.id, label: definition.label, kind: 'enum', value: String(value ?? definition.valueDefault), values: definition.values.map(String), valueLabels: Object.fromEntries(definition.values.map(item => [String(item), definition.valueLabels?.[item] ?? String(item)])), set: next => set(definition.id, definition.values.find(item => String(item) === next), false) }];
+			return [{ id: definition.id, label: definition.label, kind: 'enum', value: String(value ?? definition.valueDefault), values: definition.values.map(String), valueLabels: Object.fromEntries(definition.values.map(item => [String(item), definition.valueLabels?.[item] ?? String(item)])), isSearchable: definition.isSearchable, set: next => write(definition.values.find(item => String(item) === next), false) }];
 		}
-		if (definition.kind === 'point') {
-			// a point of a box: one of the nine named ones, or fractions of the box typed
-			const point = value ?? POINT_BY_NAME[definition.valueDefault];
-			const name = pointNameOf(point) ?? POINT_CUSTOM;
-			const propertyList = [{ id: definition.id, label: definition.label, kind: 'enum', value: name, values: [...pointNameList, POINT_CUSTOM], valueLabels: pointLabels, set: next => set(definition.id, next === POINT_CUSTOM ? { x: round(point.x), y: round(point.y) } : next, false) }];
-			if (name === POINT_CUSTOM) {
-				for (const axis of ['x', 'y']) propertyList.push({ id: `${definition.id}-${axis}`, label: `${definition.label} ${axis.toUpperCase()}`, kind: 'number', value: round(point[axis]), step: 0.05, set: (next) => { const number = Number(next); return Number.isFinite(number) && set(definition.id, { ...point, [axis]: number }, true); } });
-			}
-			return propertyList;
+		if (definition.kind === 'referencePoint') {
+			const subject = subjectOf?.(definition.of);
+			// a thing that is one point (the origin of a group) has nothing to choose
+			if (!subject || subject.outline?.kind === 'point') return [];
+			return referencePointPropertyListBuild({ id: definition.id, label: definition.label, definition: value, subject, formatList, isDefaultWritten: definition.valueDefault !== 'default', write });
 		}
 		return [];
 	});
@@ -56,7 +93,7 @@ const memberWordsOf = (session, groupId, memberId) => {
 };
 
 // how a member is placed: its parent, its constraint type, the parameters of the constraint; for a
-// child of a layout, the layout that places it
+// child of a layout that arranges its children, the layout that places it
 function placementSectionBuild(session, groupId, memberId, editor) {
 	const group = session.groupModelGet(groupId);
 	const member = group.memberById.get(memberId);
@@ -69,21 +106,51 @@ function placementSectionBuild(session, groupId, memberId, editor) {
 		set: next => changeOf(editor, () => (member.parentIdList.length > 1 ? session.memberBetweenSet(groupId, memberId, next, member.parentIdList[1]) : session.memberParentSet(groupId, memberId, next, { type: member.constraint?.type }))),
 	}];
 	let note;
-	if (parentDirect?.layout) note = `Its ${session.catalog.layoutTypeByType[parentDirect.layout.type].label.toLowerCase()} places it. Drag it among the others to order it.`;
+	if (member.isArranged) note = `Its ${session.catalog.layoutTypeByType[parentDirect.layout.type].label.toLowerCase()} places it. Drag it among the others to order it.`;
 	else {
 		const constraintType = session.catalog.constraintTypeByType[member.constraint.type];
+		const parentList = memberParentListOf(group, member);
 		if (member.parentIdList.length > 1) {
 			const secondList = candidateList.filter(id => id !== member.parentIdList[0]);
 			propertyList.push({ id: 'parent-second', label: 'Second parent', kind: 'enum', value: member.parentIdList[1], values: secondList, valueLabels: labelsOf(secondList), isSearchable: secondList.length > 8, set: next => changeOf(editor, () => session.memberBetweenSet(groupId, memberId, member.parentIdList[0], next)) });
 		}
+		// the ways it can be placed under what it follows (on lines only under a locator)
+		const typeList = session.catalog.constraintTypeList.filter(type => type.type === constraintType.type || !type.parentReasonGet?.(parentList));
 		propertyList.push({
-			id: 'constraint-type', label: 'Placed by', kind: 'enum', value: constraintType.type, values: session.catalog.constraintTypeList.map(type => type.type), valueLabels: Object.fromEntries(session.catalog.constraintTypeList.map(type => [type.type, type.label])),
+			id: 'constraint-type', label: 'Placed by', kind: 'enum', value: constraintType.type, values: typeList.map(type => type.type), valueLabels: Object.fromEntries(typeList.map(type => [type.type, type.label])),
 			set: next => changeOf(editor, () => session.memberConstraintTypeSet(groupId, memberId, next)),
 		});
-		propertyList.push(...paramPropertyListBuild(constraintType.propertyList, id => member.constraint[id], (id, value, isTyped) => changeOf(editor, () => session.memberConstraintParamSet(groupId, memberId, id, value, { groupKey: isTyped ? `parametric:${groupId}/${memberId}/constraint/${id}` : null }))));
+		const groupKeyOfParam = id => `parametric:${groupId}/${memberId}/constraint/${id}`;
+		propertyList.push(...paramPropertyListBuild(constraintType.propertyListGet?.(member.constraint, { parentList }) ?? constraintType.propertyList, {
+			valueOf: id => member.constraint[id],
+			set: (id, value, isTyped) => changeOf(editor, () => session.memberConstraintParamSet(groupId, memberId, id, value, { groupKey: isTyped ? groupKeyOfParam(id) : null })),
+			patch: (keys, isTyped, id) => changeOf(editor, () => session.memberConstraintPatch(groupId, memberId, keys, { groupKey: isTyped ? groupKeyOfParam(id) : null })),
+			subjectOf: of => (of === 'self' ? member : parentList[of]),
+			formatList: session.formatList,
+		}));
 		note = constraintType.description;
 	}
 	return { id: 'parametric-placement', label: `Placement in ${groupWritten?.name || 'its group'}`, propertyList, note, actionList: [] };
+}
+
+// the reference points of a member, in a few lines: its default one, and the way into the mode
+// where they are listed, added and removed (modeCardModelBuild)
+function referenceSectionBuild(session, groupId, memberId, editor) {
+	const member = session.groupModelGet(groupId).memberById.get(memberId);
+	const declaredList = member.referencePointList;
+	const outlineLabel = referencePointLabelOf(outlineReferenceDefaultOf(member.outline), member, session.formatList);
+	const valueDefault = member.referencePointDefault?.format === 'own' ? member.referencePointDefault.id : member.referencePointDefault ? '~custom' : '';
+	const values = ['', ...declaredList.map(item => item.id), ...(valueDefault === '~custom' ? ['~custom'] : [])];
+	return {
+		id: 'parametric-reference', label: 'Reference points',
+		propertyList: [{
+			id: 'reference-default', label: 'Default', kind: 'enum', value: valueDefault, values,
+			valueLabels: { '': `Of its outline: ${outlineLabel.toLowerCase()}`, '~custom': member.referencePointDefault ? referencePointLabelOf(member.referencePointDefault, member, session.formatList) : '', ...Object.fromEntries(declaredList.map(item => [item.id, item.name || referencePointLabelOf(item.point, member, session.formatList)])) },
+			set: next => (next === '~custom' ? false : changeOf(editor, () => session.memberReferencePointDefaultSet(groupId, memberId, next || null))),
+		}],
+		note: 'What a constraint places or measures from when it names no other point.',
+		actionList: [{ id: 'reference-edit', label: `Edit reference points (${declaredList.length + 1})`, act: () => { session.referencePointModeEnter(groupId, memberId); return true; } }],
+	};
 }
 
 // the size of an object member taken from another member, or its own
@@ -110,6 +177,7 @@ export function nodeSectionListBuild(session, nodeId, editor) {
 	}
 	return [
 		placementSectionBuild(session, at.groupId, at.memberId, editor),
+		referenceSectionBuild(session, at.groupId, at.memberId, editor),
 		sizeSectionBuild(session, at.groupId, at.memberId, editor),
 		{ id: 'parametric-actions', label: '', propertyList: [], actionList: [{ id: 'member-remove', label: 'Take out of the group', act: () => changeOf(editor, () => session.memberRemove(at.groupId, at.memberId)) }] },
 	];
@@ -133,16 +201,86 @@ export function focusCardModelBuild(session, focus, editor) {
 	const member = session.groupModelGet(focus.groupId).memberById.get(focus.memberId);
 	const memberWritten = session.memberGet(focus.groupId, focus.memberId);
 	const layoutType = session.catalog.layoutTypeByType[member.layout.type];
-	return modelOf(memberWritten.name || layoutType.label, 'Layout', [
+	const groupKeyOfParam = id => `parametric:${focus.groupId}/${focus.memberId}/layout/${id}`;
+	// what a layout type shows of itself beside its parameters (a locator: its lines), from whoever
+	// draws the feature (ParametricFeature.jsx: layoutUiByType)
+	const typeSectionList = session.layoutUiByType?.[layoutType.type]?.cardSectionListGet?.({ session, groupId: focus.groupId, memberId: focus.memberId, member, editor, change: operation => changeOf(editor, operation) }) ?? [];
+	return modelOf(memberWritten.name || layoutType.label, layoutType.isChildConstrained ? layoutType.label : 'Layout', [
 		{ id: 'layout', label: layoutType.label, actionList: [], note: layoutType.description, propertyList: [
 			{ id: 'name', label: 'Name', kind: 'text', value: memberWritten.name ?? '', placeholder: layoutType.label, set: value => changeOf(editor, () => session.memberNameSet(focus.groupId, focus.memberId, String(value).trim())) },
-			// its frame and name are drawn while the diagram is edited; when it is read, if so
-			{ id: 'isFramedWhenRead', label: 'Framed when read', kind: 'bool', value: memberIsFramedWhenRead(member, session.catalog), set: value => changeOf(editor, () => session.memberFramedWhenReadSet(focus.groupId, focus.memberId, Boolean(value))) },
-			...paramPropertyListBuild(layoutType.propertyList, id => member.layout[id], (id, value, isTyped) => changeOf(editor, () => session.memberLayoutParamSet(focus.groupId, focus.memberId, id, value, { groupKey: isTyped ? `parametric:${focus.groupId}/${focus.memberId}/layout/${id}` : null }))),
+			// its frame and name are drawn while the diagram is edited; when it is read, if so (a layout
+			// that arranges nothing has no frame: how it is shown is a parameter of its own)
+			...(layoutType.isChildConstrained ? [] : [{ id: 'isFramedWhenRead', label: 'Framed when read', kind: 'bool', value: memberIsFramedWhenRead(member, session.catalog), set: value => changeOf(editor, () => session.memberFramedWhenReadSet(focus.groupId, focus.memberId, Boolean(value))) }]),
+			...paramPropertyListBuild(layoutType.propertyList, {
+				valueOf: id => member.layout[id],
+				set: (id, value, isTyped) => changeOf(editor, () => session.memberLayoutParamSet(focus.groupId, focus.memberId, id, value, { groupKey: isTyped ? groupKeyOfParam(id) : null })),
+				formatList: session.formatList,
+			}),
 		] },
+		...typeSectionList,
 		placementSectionBuild(session, focus.groupId, focus.memberId, editor),
-		{ id: 'layout-actions', label: '', propertyList: [], actionList: [{ id: 'member-remove', label: 'Remove layout', kind: 'danger', act: () => changeOf(editor, () => session.memberRemove(focus.groupId, focus.memberId)) }], note: 'Its children stay where they stand, under its parent.' },
+		referenceSectionBuild(session, focus.groupId, focus.memberId, editor),
+		{ id: 'layout-actions', label: '', propertyList: [], actionList: [{ id: 'member-remove', label: `Remove ${layoutType.label.toLowerCase()}`, kind: 'danger', act: () => changeOf(editor, () => session.memberRemove(focus.groupId, focus.memberId)) }], note: 'Its children stay where they stand, under its parent.' },
 	]);
+}
+
+// ---------- the card of a mode of a thing ----------
+
+// the edit card of the member selected while it is in a mode of its own (ParametricEditStore.js:
+// mode): its reference points listed, one of them open; or what its layout type draws for a mode of
+// its own (a locator: the lines of an axis). null: no mode, the card of its settings.
+// Its path bar leads back: the member (the mode left), the list, the thing open
+export function modeCardModelBuild(session, editor) {
+	const mode = session.modeShown;
+	if (!mode) return null;
+	const names = session.memberLabelOf(mode.groupId, mode.memberId);
+	const change = operation => changeOf(editor, operation);
+	if (mode.kind !== 'referencePoint') {
+		const member = session.groupModelGet(mode.groupId).memberById.get(mode.memberId);
+		return session.layoutUiByType?.[member.layout?.type]?.modeCardGet?.({ session, mode, member, names, editor, change }) ?? null;
+	}
+	const { groupId, memberId } = mode;
+	const member = session.groupModelGet(groupId).memberById.get(memberId);
+	const formatList = session.formatList;
+	const labelOf = definition => referencePointLabelOf(definition, member, formatList);
+	const isDefaultOf = pointId => member.referencePointDefault?.format === 'own' && member.referencePointDefault.id === pointId;
+	const segmentList = [{ name: names.label, open: () => session.modeLeave() }, { name: 'Reference points', open: () => session.referencePointModeEnter(groupId, memberId) }];
+	const declared = mode.pointId ? member.referencePointList.find(item => item.id === mode.pointId) : null;
+	if (!declared) {
+		const outlineLabel = labelOf(outlineReferenceDefaultOf(member.outline));
+		const itemList = [
+			{ id: '~outline', name: outlineLabel, badge: member.referencePointDefault ? 'of its outline' : 'of its outline · default', sub: '', isSelected: false, isRemovable: false, removeReason: 'The reference point of its outline is always there.' },
+			...member.referencePointList.map(item => ({ id: item.id, name: item.name || labelOf(item.point), badge: isDefaultOf(item.id) ? 'default' : '', sub: item.name ? labelOf(item.point) : '', isSelected: false, open: () => session.referencePointModeEnter(groupId, memberId, item.id), isRemovable: true, removeReason: '' })),
+		];
+		return { title: names.label, kindLabel: 'Reference points', tabList: [], tabId: null, segmentList, view: {
+			type: 'list', id: 'reference-points', label: `Reference points (${itemList.length})`, itemList,
+			isReorderable: false, reorderReason: 'Reference points have no order.',
+			move: () => false,
+			remove: id => change(() => session.memberReferencePointRemove(groupId, memberId, id)),
+			add: { id: 'reference-add', label: 'Add reference point', act: () => { const id = change(() => session.memberReferencePointAdd(groupId, memberId)); if (id) session.referencePointModeEnter(groupId, memberId, id); return Boolean(id); } },
+			actionList: [{ id: 'reference-done', label: 'Done', act: () => { session.modeLeave(); return true; } }],
+			note: 'A reference point is a point of the thing that a constraint places or measures from. It is defined by parameters, so what is measured by it follows when they change.',
+			sectionList: [],
+		} };
+	}
+	const useList = session.referencePointUseListOf(groupId, memberId).filter(use => (use.definition?.format === 'own' && use.definition.id === declared.id) || (isDefaultOf(declared.id) && (!use.definition || use.definition.format === 'default')));
+	const groupKeyOfParam = id => `parametric:${groupId}/${memberId}/reference/${declared.id}/${id}`;
+	return { title: names.label, kindLabel: 'Reference point', tabList: [], tabId: null, segmentList: [...segmentList, { name: declared.name || 'Unnamed', open: () => {} }], view: { type: 'detail', sectionList: [
+		{ id: 'reference-point', label: 'Reference point', actionList: [],
+			note: useList.length ? `Measured by: ${[...new Set(useList.map(use => session.memberLabelOf(groupId, use.memberId).label))].join(', ')}.` : 'Nothing is measured by it yet: choose it as the reference point of a constraint.',
+			propertyList: [
+				{ id: 'name', label: 'Name', kind: 'text', value: declared.name, placeholder: labelOf(declared.point), set: value => change(() => session.memberReferencePointSet(groupId, memberId, declared.id, { name: String(value).trim() }, { groupKey: groupKeyOfParam('name') })) },
+				...referencePointPropertyListBuild({
+					id: 'point', label: 'Where', definition: declared.point, subject: member, formatList, isOwnOffered: false, isDefaultOffered: false,
+					write: (written, isTyped) => change(() => session.memberReferencePointSet(groupId, memberId, declared.id, { point: session.referencePointReadOf(written) }, { groupKey: isTyped ? groupKeyOfParam('point') : null })),
+				}),
+				{ id: 'isDefault', label: 'Its default one', kind: 'bool', value: isDefaultOf(declared.id), set: value => change(() => session.memberReferencePointDefaultSet(groupId, memberId, value ? declared.id : null)) },
+			] },
+		{ id: 'reference-actions', label: '', propertyList: [], note: 'Removed, what was measured by it is measured by the same place of the box: nothing moves.', actionList: [
+			{ id: 'reference-remove', label: 'Remove reference point', kind: 'danger', act: () => change(() => session.memberReferencePointRemove(groupId, memberId, declared.id)) },
+			{ id: 'reference-done', label: 'Done', act: () => { session.modeLeave(); return true; } },
+		] },
+	] } };
 }
 
 // where the box of a focus is on the screen, for its edit card: the origin of a group, the
@@ -212,7 +350,8 @@ export function actionListBuild(session, target, editor, toolIconGet) {
 	const member = group?.memberById.get(at.memberId);
 	if (!member) return [];
 	const candidateList = parentCandidateListGet(session, at.groupId, at.memberId);
-	const isLayoutChild = Boolean(group.memberById.get(member.parentIdList[0])?.layout);
+	const isLayoutChild = member.isArranged;
+	const parentList = memberParentListOf(group, member);
 	const actionList = [];
 	if (member.layout) {
 		const box = session.solve().boxByKey.get(groupKeyOf(at.groupId, at.memberId));
@@ -224,8 +363,11 @@ export function actionListBuild(session, target, editor, toolIconGet) {
 	});
 	for (const constraintType of session.catalog.constraintTypeList) {
 		const isCurrent = !isLayoutChild && member.constraint?.type === constraintType.type;
-		actionList.push({ id: `constraint-${constraintType.type}`, label: `Place by: ${constraintType.label.toLowerCase()}`, description: constraintType.description, keywordList: ['constraint'], isDisabled: isLayoutChild || isCurrent, reason: isLayoutChild ? 'Its layout places it.' : 'It is placed so already.', start: run(() => session.memberConstraintTypeSet(at.groupId, at.memberId, constraintType.type)) });
+		const reasonParent = isLayoutChild ? '' : constraintType.parentReasonGet?.(parentList) ?? '';
+		actionList.push({ id: `constraint-${constraintType.type}`, label: `Place by: ${constraintType.label.toLowerCase()}`, description: constraintType.description, keywordList: ['constraint'], isDisabled: isLayoutChild || isCurrent || Boolean(reasonParent), reason: isLayoutChild ? 'Its layout places it.' : reasonParent || 'It is placed so already.', start: run(() => session.memberConstraintTypeSet(at.groupId, at.memberId, constraintType.type)) });
 	}
+	actionList.push({ id: 'reference-edit', label: 'Reference points…', description: 'The points of it that constraints place or measure from: its default one, and those it declares.', keywordList: ['reference', 'point', 'anchor'], start: () => { session.referencePointModeEnter(at.groupId, at.memberId); } });
+	if (member.layout) actionList.push(...(session.layoutUiByType?.[member.layout.type]?.actionListGet?.({ session, groupId: at.groupId, memberId: at.memberId, member, run }) ?? []));
 	actionList.push({ id: 'member-remove', label: member.layout ? 'Remove layout' : 'Take out of the group', description: member.layout ? 'Its children stay where they stand, under its parent.' : 'It stays where it stands, as a free element.', ...(member.layout ? removeLook : {}), start: run(() => session.memberRemove(at.groupId, at.memberId)) });
 	if (member.nodeId) actionList.push({ id: 'node-remove', label: 'Remove node', description: 'The node goes; what followed it follows its parent, its lines keep a free end.', keywordList: ['delete'], ...removeLook, start: run(() => session.memberRemove(at.groupId, at.memberId, { isNodeRemoved: true, positionGet: editor.handlePositionGet })) });
 	return actionList;

@@ -167,9 +167,16 @@ export class SwitchStore {
 		this.mask = null;
 		this.embedHeld = null;
 		const wanted = switchPathHashRead(pathInitial || this.pathCurrent || provider.root);
-		const pathWanted = wanted.path;
+		let pathWanted = wanted.path;
 		if (wanted.itemId) this.itemInitial = wanted.itemId;
-		const isFound = this.pathIsFound(pathWanted);
+		let isFound = this.pathIsFound(pathWanted);
+		// the scene shown still there without the view its path named (new scenes may have other views):
+		// the scene is kept, at the view it shows by default, rather than the block going back to its root
+		const sceneWanted = switchPathViewRead(pathWanted).path;
+		if (!isFound && !pathInitial && sceneWanted !== pathWanted && this.pathIsFound(sceneWanted)) {
+			pathWanted = sceneWanted;
+			isFound = true;
+		}
 		if (pathInitial && !isFound) this.message = this.pathMissingText(pathWanted);
 		const path = this.pathFocusedOf(isFound ? pathWanted : provider.root);
 		this.pathCurrent = path;

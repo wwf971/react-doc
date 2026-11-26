@@ -139,8 +139,8 @@ export const creatorLayout = {
 		if (!layoutType) { session.store.message = `Unknown layout type ${create.layout?.type}.`; return null; }
 		const layout = layoutOfPlacement(layoutType, create.layout, placement);
 		const corner = layoutCornerOf(placement);
-		if (placement.kind === 'beside' && placement.target.memberId) return session.layoutCreate(layout, corner, { groupId: placement.target.groupId, parentId: placement.target.memberId }, besideConstraintOf(session, placement));
-		return session.layoutCreate(layout, corner, target);
+		if (placement.kind === 'beside' && placement.target.memberId) return session.layoutCreate(layout, corner, { groupId: placement.target.groupId, parentId: placement.target.memberId }, { ...besideConstraintOf(session, placement), childList: create.childList });
+		return session.layoutCreate(layout, corner, target, { childList: create.childList });
 	},
 	paramSectionListGet(create, write, { session }) {
 		const layoutType = session.catalog.layoutTypeByType[create.layout?.type];
@@ -148,7 +148,7 @@ export const creatorLayout = {
 		const layout = layoutType.read({ ...layoutType.paramDefault, ...create.layout }, 'layout');
 		return [{
 			id: 'layout', label: `Makes: ${layoutType.label.toLowerCase()}`, actionList: [],
-			propertyList: layoutType.propertyList.filter(definition => definition.kind !== 'point').map((definition) => {
+			propertyList: layoutType.propertyList.filter(definition => definition.kind !== 'referencePoint').map((definition) => {
 				const set = value => write({ ...create, layout: { ...create.layout, [definition.id]: value } });
 				if (definition.kind === 'enum') return { id: definition.id, label: definition.label, kind: 'enum', value: String(layout[definition.id]), values: definition.values.map(String), valueLabels: Object.fromEntries(definition.values.map(item => [String(item), definition.valueLabels?.[item] ?? String(item)])), set: next => set(definition.values.find(item => String(item) === next)) };
 				return { id: definition.id, label: definition.label, kind: 'number', value: layout[definition.id], step: definition.step, min: definition.min, max: definition.max, set: (next) => { const number = Number(next); return Number.isFinite(number) && set(number); } };

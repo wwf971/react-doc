@@ -6,6 +6,7 @@ import { diagramNormalize, diagramPlacesGet, endpointIsDangling, handleAnchorDra
 import { labelLengthOf, routePathPolylineGet } from './DiagramRoute.js';
 import { DiagramPinLayer } from './DiagramPinLayer.jsx';
 import { useNodeOverflowWatch } from './DiagramNodeOverflow.js';
+import { depthKeyOfNode, depthLineLevelListGet, depthZIndexTopGet, diagramDepthZIndexMapOf } from './DiagramDepth.js';
 
 // A diagram drawn without a canvas (card-diagram-impl.md#a-diagram-without-a-canvas): the same
 // cards, placed absolutely, their lines in one svg. Nothing pans or zooms; the block is as large
@@ -15,7 +16,10 @@ import { useNodeOverflowWatch } from './DiagramNodeOverflow.js';
 //
 //   DiagramStaticNode    one card: placed by its parent, measuring its anchors; the geometry
 //                        goes up once it changes, not per frame
+//                        zIndex: what it is drawn over (DiagramDepth.js: the depth of its node); a
+//                        background under the lines when absent
 //   DiagramStaticLine    one line between two measured ends
+//   DiagramStaticLineLayers   the lines of a diagram: an svg per level of depth that has lines
 //   DiagramStaticLabel   the label of a line, at its place along it
 //   DiagramStatic        a whole diagram, from its data
 const pathElement = () => document.createElementNS('http://www.w3.org/2000/svg', 'path');
@@ -35,7 +39,7 @@ export function pathLabelPointAt(d, label) {
 	return path.getPointAtLength(labelLengthOf(path.getTotalLength(), label));
 }
 
-export const DiagramStaticNode = observer(function DiagramStaticNode({ id, node, position, config, registry, onGeometry, className = 'doc-diagram-static-node' }) {
+export const DiagramStaticNode = observer(function DiagramStaticNode({ id, node, position, config, registry, onGeometry, zIndex, className = 'doc-diagram-static-node' }) {
 	const root = useRef(null);
 	// the box scrolls only what its card really holds beyond it (DiagramNodeOverflow.js)
 	const contentRef = useRef(null);
@@ -75,7 +79,7 @@ export const DiagramStaticNode = observer(function DiagramStaticNode({ id, node,
 	const visualization = useMemo(() => ({ nodeId: id, size: node.size, isEdit: false, anchorRef }), [id, node.size, anchorRef]);
 	const width = node.isWidthFit ? 'max-content' : node.size.width === 'auto' ? node.sizeDefault.width : node.size.width;
 	return (
-		<div ref={root} className={className} data-id={id} data-link={node.link ? '' : undefined} data-search={searchMark.state ?? undefined} style={{ left: position.x, top: position.y, width, height: node.size.height === 'auto' ? undefined : node.size.height, zIndex: node.isBackground ? -1 : undefined, pointerEvents: node.isBackground ? 'none' : undefined }}>
+		<div ref={root} className={className} data-id={id} data-link={node.link ? '' : undefined} data-search={searchMark.state ?? undefined} style={{ left: position.x, top: position.y, width, height: node.size.height === 'auto' ? undefined : node.size.height, zIndex: (zIndex ?? (node.isBackground ? -1 : 0)) || undefined, pointerEvents: node.isBackground ? 'none' : undefined }}>
 			<div ref={contentRef} className="doc-vis-node-content not-prose" style={nodeStyleVarsOf(node)}>
 				<DiagramNodeContent id={id} node={node} config={config} registry={registry} anchorRef={anchorRef} visualization={visualization} />
 			</div>
@@ -90,12 +94,33 @@ export function DiagramStaticLine({ connection, source, target, markerId }) {
 	return <path d={d} fill="none" style={connection.style} markerEnd={connection.markerEnd === 'none' || !markerId ? undefined : `url(#${markerId})`} />;
 }
 
-export const DiagramStaticLabel = observer(function DiagramStaticLabel({ connection, source, target, className = 'doc-diagram-static-label' }) {
+// the lines of a diagram without a canvas: one svg per level of depth that has lines (DiagramDepth.js),
+// each with its z-index, so a line with a depth is over or under the cards as it says; a diagram
+// that writes no depth has one svg, under its cards, as ever. lineList: [{ connection, source, target }]
+export function DiagramStaticLineLayers({ lineList, zIndexByKey, markerId, className }) {
+	const levelList = depthLineLevelListGet(lineList, zIndexByKey);
+	if (levelList.length === 0) levelList.push({ zIndex: 0, lineList: [] });
+	return levelList.map((level, index) => (
+		<svg key={level.zIndex} className={className} style={level.zIndex ? { zIndex: level.zIndex } : undefined} aria-hidden="true">
+			{index === 0 ? (
+				<defs>
+					<marker id={markerId} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto-start-reverse">
+						<path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b" />
+					</marker>
+				</defs>
+			) : null}
+			{level.lineList.map(({ connection, source, target }) => <DiagramStaticLine key={connection.id} connection={connection} source={source} target={target} markerId={markerId} />)}
+		</svg>
+	));
+}
+
+// zIndex: over what it stands (the words of the lines stay over every card: above the highest depth)
+export const DiagramStaticLabel = observer(function DiagramStaticLabel({ connection, source, target, zIndex, className = 'doc-diagram-static-label' }) {
 	const searchState = useDiagramSearchMark('').lineStateOf(connection.id);
 	const point = useMemo(() => {
 		return pathLabelPointAt(connectionPathBuild(connection, diagramStaticEndsOf(source, target)), connection.label);
 	}, [connection, source, target]);
-	return <div className={`${className}${connection.link ? ' is-link' : ''}`} data-search={searchState ?? undefined} style={{ transform: `translate(${point.x}px, ${point.y}px) translate(-50%, -50%)` }}>{connection.label.text}</div>;
+	return <div className={`${className}${connection.link ? ' is-link' : ''}`} data-search={searchState ?? undefined} style={{ transform: `translate(${point.x}px, ${point.y}px) translate(-50%, -50%)`, zIndex: zIndex || undefined }}>{connection.label.text}</div>;
 });
 
 // A whole diagram, still.
@@ -139,6 +164,10 @@ export const DiagramStatic = observer(function DiagramStatic({ diagram, registry
 		});
 	}, []);
 	const graph = load.graph;
+	// what is drawn over what: the z-index of each card and line, from their depths (DiagramDepth.js)
+	const zIndexByKey = diagramDepthZIndexMapOf(graph);
+	// the words of the lines stay over every card, also one with a depth
+	const zIndexLabel = depthZIndexTopGet(zIndexByKey) ? depthZIndexTopGet(zIndexByKey) + 1 : 0;
 	const place = useMemo(() => (graph ? diagramPlacesGet(graph.nodes, graph.layout, geometry.sizeById) : null), [graph, geometry.sizeById]);
 	const lineList = useMemo(() => {
 		if (!graph) return [];
@@ -179,18 +208,11 @@ export const DiagramStatic = observer(function DiagramStatic({ diagram, registry
 	return (
 		<div className={`doc-diagram-static not-prose${className ? ` ${className}` : ''}`} style={{ width: box.width, height: box.height }} onClick={nodeClick}>
 			<div className="doc-diagram-static-world" style={{ transform: `translate(${-box.x}px, ${-box.y}px)` }}>
-				<svg className="doc-diagram-static-lines" aria-hidden="true">
-					<defs>
-						<marker id={markerId} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto-start-reverse">
-							<path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b" />
-						</marker>
-					</defs>
-					{lineList.map(({ connection, source, target }) => <DiagramStaticLine key={connection.id} connection={connection} source={source} target={target} markerId={markerId} />)}
-				</svg>
+				<DiagramStaticLineLayers className="doc-diagram-static-lines" lineList={lineList} zIndexByKey={zIndexByKey} markerId={markerId} />
 				{graph.nodes.filter((node) => node.renderer.type !== 'scene-box').map((node) => (
-					<DiagramStaticNode key={node.id} id={node.id} node={place.sizeById.has(node.id) ? { ...node, size: nodeSizePlacedOf(node.size, place.sizeById.get(node.id)) } : node} position={place.positions.get(node.id) ?? { x: 0, y: 0 }} config={config} registry={registry} onGeometry={onGeometry} />
+					<DiagramStaticNode key={node.id} id={node.id} node={place.sizeById.has(node.id) ? { ...node, size: nodeSizePlacedOf(node.size, place.sizeById.get(node.id)) } : node} position={place.positions.get(node.id) ?? { x: 0, y: 0 }} zIndex={zIndexByKey.get(depthKeyOfNode(node.id))} config={config} registry={registry} onGeometry={onGeometry} />
 				))}
-				{lineList.filter(({ connection }) => connection.label.text).map(({ connection, source, target }) => <DiagramStaticLabel key={connection.id} connection={connection} source={source} target={target} />)}
+				{lineList.filter(({ connection }) => connection.label.text).map(({ connection, source, target }) => <DiagramStaticLabel key={connection.id} connection={connection} source={source} target={target} zIndex={zIndexLabel} />)}
 			</div>
 			<DiagramPinLayer pinList={graph.pinList} registry={registry} config={config} />
 		</div>

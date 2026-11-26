@@ -73,6 +73,9 @@ export {
 // building blocks for a component's own edit mode (doc_page_impl_edit.md)
 export { EditActions } from '../../comp-doc/edit/EditActions.jsx';
 export { EditFloatingPanel } from '../../comp-doc/edit/EditFloatingPanel.jsx';
+// where the bar of an editor goes (the floating area of a block): given by whoever draws the edit mode of a
+// component outside a document (a portal: an element of its own bar), doc_page_impl_edit.md#editing-primitives
+export { DocEditBlockFloatContext } from '../../comp-doc/edit/DocEditDocContext.js';
 export { EditSourceSurface } from '../../comp-doc/edit/EditSourceSurface.jsx';
 export { EditButtonGroup, editReorderInsertionOf } from '../../comp-doc/edit/EditButtonGroup.jsx';
 export { EditValueInline } from '../../comp-doc/edit/EditValueInline.jsx';

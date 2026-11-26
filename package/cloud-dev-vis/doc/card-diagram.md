@@ -15,6 +15,7 @@ a new thing the author can do    a command of DiagramEditStore (and the control 
 a change of how cards are drawn  TableCard / ResourceNodeCard / OperatorCard and their css
 a change of the canvas           DiagramERStore, CardDiagram, DiagramRender
 a change of the data format      DiagramERData (normalization) first, then everything that reads it
+what is drawn over what           DiagramDepth: card-diagram-impl.md#depth
 a diagram moving between states  the animation wrapper: card-diagram-animation.md
 many diagrams in one viewport    the switching layer: card-diagram-flexible-switch.md
 a layer over every diagram       a feature of the registry: card-diagram-impl.md#features
@@ -56,7 +57,7 @@ Each kind of change has a checklist below. Most mistakes come from making one ki
 
 ## Background blocks
 
-What `color-block` looks like and how it is written is in [the usage document](card-diagram-usage.md#background-color-blocks). For the framework, it is a kind like any other with one generic capability: `contract.isBackground: true`, resolved by normalization. Canvas and static renderers place such nodes behind connections and ordinary cards regardless of array order, static scenes establish an isolated stacking context so backgrounds remain visible, and in reading mode backgrounds are pointer-transparent, including React Flow's node wrapper. No platform ids or location rules belong in the canvas renderer: where blocks go is the business of whoever generates the diagram.
+What `color-block` looks like and how it is written is in [the usage document](card-diagram-usage.md#background-color-blocks). For the framework, it is a kind like any other with one generic capability: `contract.isBackground: true`, resolved by normalization. Canvas and static renderers place such nodes behind the connections and the ordinary cards of their depth, wherever they are written ([Depth](card-diagram-impl.md#depth)), static scenes establish an isolated stacking context so backgrounds remain visible, and in reading mode backgrounds are pointer-transparent, including React Flow's node wrapper. No platform ids or location rules belong in the canvas renderer: where blocks go is the business of whoever generates the diagram.
 
 ## Adding a command to the editor
 
@@ -123,6 +124,7 @@ Things to be careful about, each learned once:
 - **Positions.** A dragged node's position lives in the canvas store until the drop writes it into the draft (`nodeMove`, read a frame after the drop). A draft reloaded keeps runtime positions for nodes whose authored position did not change, and takes the authored one when it did; `positionsTemporary` is forgotten for such a node. Keep this when touching `sourceLoad`, or an undo of a move will leave the node where it was dragged.
 - **Measurement.** Repeat layout only when automatic geometry changed (`measurementSet` ignores sub-pixel changes); never on camera movement or render.
 - **The wheel and the drag.** Every row of a card is `nodrag nopan` (a drag in it selects text), the title line is not (a drag pans or moves). For the wheel, read [the next section](#the-wheel-over-a-canvas): this bug has come back more than once.
+- **Depth.** The z-index of a node and of a line comes from one map, built from their depths (`diagramDepthZIndexMapGet`, [Depth](card-diagram-impl.md#depth)), in every renderer: the canvas, a diagram without a canvas, a scene inside a card. A new renderer reads the map; a kind never gives its node a z-index of its own. What is laid over the canvas in its coordinates goes into React Flow's viewport portal, which is kept over every depth (`DiagramER.css`).
 - **Handles.** Runtime handle ids derive from `direction` (a `both` handle has two runtime ids mapped back to one authored id); side and position are not part of an id; after rows reorder or an anchor moves, call `updateNodeInternals`.
 - **Free ends** are hidden point nodes (`~end:<role>:<id>`); authored ids may not start with `~`. A gesture ending on a point node is not a handle drop.
 - **Edit layout equals read layout.** A cell is text in one mode and a control of the same box in the other; a row or field toolbar floats beside the card and undoes the zoom (the custom property of the canvas), so it keeps its screen size. The control of a cell being typed has the text box of the words as read, to the fraction of a pixel: no padding, border or margin of its own, its frame an outline and a tint, which take no room. A card as wide as its title is the case that shows it: a control even 4px narrower sends the last letter to a second line and the card grows. Measure it (each cell's box and line count, read and typed) after touching the controls or the cells.

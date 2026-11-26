@@ -168,6 +168,8 @@ DocPageMdx
 
 The page is never left blank, and never trapped: the note has the switcher too when there are other portals.
 
+**A portal drawn stays drawn while its provider is read again.** A portal that writes the entry of its own object (its name, its metadata) makes the object unknown for a moment, until the entry is read anew, and the registry then says of its portals "not known yet". The host keeps the portal it drew last, with the type of its object, until the registry knows again: the component is not unmounted, and keeps its state, its scroll and what is open in it. A component reading its object meanwhile (`config.objectFrontend.object.status: 'loading'`) holds what it read last the same way, rather than showing a line for the time of one request.
+
 ## The address
 
 ```text
@@ -217,6 +219,8 @@ The command palette and an agent switch portals with them ([Unified api registry
 The reading lists of `example_doc` provide the portal **Library** (`.doc-page/type.yaml`, `portalList` of `example.reading-list`): the smallest useful portal, which draws nothing of the list itself. It lays out two modes the type has already, the shelf and the book chosen, side by side (`ObjectFrontendMode`), keeps what is shown in its place (`find?status=want#/book/sci-fi/dune`), and has an Edit switch and a way to the documents in its bar. The page has two reading lists, so two libraries; the short list names its own in its `portal.yaml`. `example_doc/portal.md` shows them.
 
 The package cv provides two portals over one state, in two looks (`@cv-dev/cv/doc/cv-portal.md`): a desk in Material UI and an archive room in 3D.
+
+Zatelier Drawboard provides one portal per project (`@react-doc-db-migration-tool/zatelier/drawboard/doc/zdb_impl_portal.md`): the face of a desktop app made for a browser, every place an address, writing the entry of its own object (its folders, the order of its drawings) while it is shown.
 
 ## Files
 

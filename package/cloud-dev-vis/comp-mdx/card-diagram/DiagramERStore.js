@@ -2,6 +2,7 @@ import { applyNodeChanges, MarkerType } from '@xyflow/react';
 import { yamlParse } from '../../../../main/frontend/src/lib/yaml.js';
 import { makeAutoObservable, observable } from 'mobx';
 import { diagramNormalize, diagramPlacesGet, viewportNormalize, endpointIsDangling, pointNodeIdBuild } from './DiagramERData.js';
+import { depthKeyOfConnection, depthKeyOfNode, depthZIndexTopGet, diagramDepthZIndexMapGet } from './DiagramDepth.js';
 
 // the style of a node on the canvas: its size as written, or what places it says (sizePlaced: a
 // background drawn around other nodes, a node a placer sizes: diagramPlacesGet)
@@ -106,12 +107,17 @@ class DiagramERStore {
 			const { positions, sizeById, placedById } = diagramPlacesGet(this.graph.nodes, this.graph.layout, this.measurements);
 			this.placed = placedById;
 			this.isPlacePending = false;
+			// what is drawn over what (DiagramDepth.js): the z-index of each node and line, from their
+			// depths; a diagram that writes none gets the numbers it always had. A free end is over
+			// everything, so its dot is always reached
+			const zIndexByKey = diagramDepthZIndexMapGet(this.graph);
+			const zIndexTop = depthZIndexTopGet(zIndexByKey);
 			const pointNodes = [];
 			const endpointNode = (connection, role) => {
 				const endpoint = connection[role];
 				if (!endpointIsDangling(endpoint)) return { node: endpoint.nodeId, handle: endpoint.handleId };
 				const id = pointNodeIdBuild(connection.id, role);
-				pointNodes.push({ id, type: 'visualizationPoint', position: { ...endpoint.position }, draggable: false, selectable: false, focusable: false, connectable: false, style: { width: 1, height: 1 }, data: { connectionId: connection.id, role } });
+				pointNodes.push({ id, type: 'visualizationPoint', position: { ...endpoint.position }, draggable: false, selectable: false, focusable: false, connectable: false, ...(zIndexTop ? { zIndex: zIndexTop } : {}), style: { width: 1, height: 1 }, data: { connectionId: connection.id, role } });
 				return { node: id, handle: 'end' };
 			};
 			const marker = value => value === 'none' ? undefined : { type: value === 'arrow' ? MarkerType.Arrow : MarkerType.ArrowClosed, width: 13, height: 13 };
@@ -124,6 +130,7 @@ class DiagramERStore {
 					style: connection.style, animated: connection.isAnimated,
 					markerStart: marker(connection.markerStart), markerEnd: marker(connection.markerEnd),
 					interactionWidth: 24,
+					...(zIndexByKey.get(depthKeyOfConnection(connection.id)) ? { zIndex: zIndexByKey.get(depthKeyOfConnection(connection.id)) } : {}),
 					data: { connection },
 				};
 			});
@@ -146,7 +153,7 @@ class DiagramERStore {
 					return {
 						...(isSizeAuthoredChanged ? beforeWithoutSize : before),
 						id: node.id, type: 'visualizationNode', position: before && !isPositionAuthoredChanged && !isPlaced ? before.position : positions.get(node.id),
-						zIndex: node.isBackground ? -1 : 0,
+						zIndex: zIndexByKey.get(depthKeyOfNode(node.id)) ?? 0,
 						style: nodeStyleOf(node, sizeById.get(node.id)),
 						...(node.around || node.isDerived ? { draggable: false } : {}),
 						data: { node },

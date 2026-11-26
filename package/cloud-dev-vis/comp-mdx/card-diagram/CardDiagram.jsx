@@ -29,6 +29,7 @@ import { DiagramSearchStore } from './DiagramSearchStore.js';
 import { diagramSceneSearch } from './DiagramSearch.js';
 import { DiagramSearchBar, useDiagramSearchHost } from './DiagramSearchView.jsx';
 import { diagramCanvasGeometryBuild, diagramCanvasLineListGet, diagramCanvasRegister, diagramCanvasEndsGet } from './DiagramCanvasRegistry.js';
+import { routePathPolylineGet } from './DiagramRoute.js';
 
 // A diagram of nodes and connections on a pannable, zoomable canvas
 // (card-diagram-impl.md), drawn with the node registry of its component type
@@ -278,6 +279,15 @@ const DiagramERCanvas = observer(function DiagramERCanvas({ store, viewState, is
 				return { left, right, top, bottom, width: right - left, height: bottom - top };
 			},
 			edgeEndsGet: (id, connection) => diagramCanvasEndsGet(edgeGeometry, id, connection),
+			// the box of a line as drawn, in units of the canvas: of its path, with its bends
+			edgeBoxGet: (id) => {
+				const d = edgeGeometry?.get(id)?.d;
+				const pointList = d ? routePathPolylineGet(d) : [];
+				if (!pointList.length) return null;
+				const xList = pointList.map(point => point.x);
+				const yList = pointList.map(point => point.y);
+				return { x: Math.min(...xList), y: Math.min(...yList), width: Math.max(...xList) - Math.min(...xList), height: Math.max(...yList) - Math.min(...yList) };
+			},
 			centerGet: () => {
 				const rect = wrapper.current?.getBoundingClientRect();
 				return rect ? screenToFlowPosition({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }) : null;

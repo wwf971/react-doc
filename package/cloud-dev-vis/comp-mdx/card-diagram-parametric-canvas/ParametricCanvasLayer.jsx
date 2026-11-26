@@ -1,11 +1,12 @@
 import { useContext, useEffect, useRef } from 'react';
 import { observer } from 'mobx-react-lite';
-import { ViewportPortal, useReactFlow, useViewport } from '@xyflow/react';
+import { Panel, ViewportPortal, useReactFlow, useViewport } from '@xyflow/react';
 import { DiagramRenderContext } from '../card-diagram/DiagramRender.jsx';
 import { MEMBER_ROOT_ID, groupKeyOf, memberIsFramedWhenRead } from './ParametricData.js';
 import { rootOverrideKeyOf } from './ParametricSolve.js';
 import { ParametricToolBar } from './ParametricToolBar.jsx';
 import { nodeResizeAxisListOf, nodeResizeHandlePointListOf } from '../card-diagram/DiagramNodeResize.js';
+import { REFERENCE_POINT_DEFAULT, outlineReferenceDefaultOf, referencePointLabelOf, referencePointResolve } from './ParametricReferencePoint.js';
 
 // What the parametric canvas draws over the canvas while a diagram is edited
 // (card-diagram-parametric-canvas.md#on-the-canvas), inside React Flow, in the coordinates of the diagram:
@@ -18,7 +19,15 @@ import { nodeResizeAxisListOf, nodeResizeHandlePointListOf } from '../card-diagr
 //                                   on the name focuses it. An empty one says what goes into it; one
 //                                   not framed when the diagram is read is drawn faded
 //                                   (ParametricReadLayer.jsx draws the others when it is read)
-//   the relations of what is selected   a line from each parent to the member selected
+//   a layout that draws itself      what its type draws in the place of the frame (a locator: its
+//                                   lines and chevrons, ParametricLocatorLayer.jsx: layoutUiByType)
+//   the relations of what is selected   its parents framed; the reference points its constraint
+//                                   measures by marked (a diamond on the parent, one on the
+//                                   member), a dashed line from the one to the other; its default
+//                                   reference point ringed
+//   the reference points of a member    while it is in that mode: every one with its name, the
+//                                   default ringed; a click opens one in the edit card
+//   while a line of a locator is dragged   the cancel area, at the bottom of the viewport
 //   while a tool is armed           the gesture surface: it takes the pointer over the whole canvas
 //                                   (so a box can start over a card), hands every pointer event to
 //                                   the session as the gesture, and the ghost of what the gesture
@@ -34,7 +43,9 @@ export const ParametricCanvasLayer = observer(function ParametricCanvasLayer({ s
 	const solved = canvasStore?.placed.get(session.id);
 	const boxOf = (groupId, memberId) => solved?.boxByKey.get(groupKeyOf(groupId, memberId));
 	const selected = session.selected;
-	const guideList = solved && selected?.memberId ? guideListBuild(session, selected, boxOf) : [];
+	const mode = session.modeShown;
+	const guide = solved && selected?.memberId ? guideBuild(session, selected, solved, boxOf, mode) : GUIDE_NONE;
+	const guideList = guide.guideList;
 	const { zoom } = useViewport();
 	const handlePointList = solved ? resizeHandlePointListOf(session, boxOf, canvasStore) : [];
 	// within the reach of a resize handle (as large on the screen at every zoom)
@@ -42,6 +53,8 @@ export const ParametricCanvasLayer = observer(function ParametricCanvasLayer({ s
 	return (
 		<>
 			<ParametricToolBar session={session} editor={editor} />
+			{/* a line of a locator dragged: let go here, nothing is written (ParametricLocatorLayer.jsx) */}
+			{session.lineDrag ? <Panel position="bottom-center" className={`doc-param-cancel${session.lineDrag.isOverCancel ? ' is-over' : ''}`}><span>Drop here to cancel</span><em>or press Esc</em></Panel> : null}
 			{session.toolArmed ? <GestureSurface session={session} editor={editor} /> : null}
 			{session.toolArmed ? <ViewportPortal><GestureGhost session={session} /></ViewportPortal> : null}
 			{solved ? (
@@ -57,6 +70,9 @@ export const ParametricCanvasLayer = observer(function ParametricCanvasLayer({ s
 						if (!box) return null;
 						const isEmpty = !box.width && !box.height;
 						const isSelected = selected?.kind === 'member' && selected.groupId === group.id && selected.memberId === member.id;
+						// a layout type that draws itself (a locator: its lines), in the place of the frame
+						const TypeLayer = session.layoutUiByType?.[member.layout.type]?.CanvasLayer;
+						if (TypeLayer) return <TypeLayer key={`${group.id}/${member.id}`} session={session} editor={editor} group={group} member={member} box={box} isSelected={isSelected} childBoxList={group.memberList.filter(other => other.parentIdList.includes(member.id)).map(other => boxOf(group.id, other.id)).filter(Boolean)} />;
 						const names = session.memberLabelOf(group.id, member.id);
 						const size = isEmpty ? LAYOUT_EMPTY_SIZE : { width: box.width, height: box.height };
 						return (
@@ -66,6 +82,14 @@ export const ParametricCanvasLayer = observer(function ParametricCanvasLayer({ s
 							</div>
 						);
 					}))}
+					{guide.markList.map(mark => (
+						<div key={mark.key} className={`doc-param-ref is-${mark.kind}${mark.isDefault ? ' is-default' : ''}${mark.isOpen ? ' is-open' : ''}`} style={{ transform: `translate(${mark.x}px, ${mark.y}px)` }}>
+							{mark.open
+								? <button type="button" className="doc-param-ref-mark nodrag nopan" title={mark.title} aria-label={mark.title} onClick={(event) => { event.stopPropagation(); mark.open(); }} />
+								: <span className="doc-param-ref-mark" title={mark.title} />}
+							{mark.label ? <span className="doc-param-ref-name">{mark.label}</span> : null}
+						</div>
+					))}
 					{session.model.groupList.map((group) => {
 						const box = boxOf(group.id, MEMBER_ROOT_ID);
 						return box ? <OriginMark key={group.id} session={session} editor={editor} groupId={group.id} position={box} name={session.groupGet(group.id)?.name || 'Group'} isSelected={selected?.groupId === group.id && (selected.kind === 'group' || guideList.some(guide => guide.isFromRoot))} isFocused={selected?.kind === 'group' && selected.groupId === group.id} isYielding={isOnHandle(box)} /> : null;
@@ -200,9 +224,6 @@ const OriginMark = observer(function OriginMark({ session, editor, groupId, posi
 	);
 });
 
-// the relations of the member selected: each of its parents framed, and a line from it to the
-// member, between the sides of the two boxes that face each other. A layout parent holds the
-// member inside its box: its frame says so, and no line is drawn
 // where the resize handles of the node selected stand (DiagramNodeResize.js: the same rule the
 // handles are drawn by), when it is a member of a group
 function resizeHandlePointListOf(session, boxOf, canvasStore) {
@@ -215,16 +236,65 @@ function resizeHandlePointListOf(session, boxOf, canvasStore) {
 	return nodeResizeHandlePointListOf(box, nodeResizeAxisListOf(node, session.registry?.kindByType[node.renderer?.type]?.contract));
 }
 
-function guideListBuild(session, selected, boxOf) {
+const GUIDE_NONE = { guideList: [], markList: [] };
+
+// what is drawn of the member selected (card-diagram-parametric-canvas.md#on-the-canvas):
+//   guideList   its parents, each framed ({ box, isFromRoot }), with a line to it ({ from, to }):
+//               between the reference points its constraint measures by, else (a constraint naming
+//               none: beside) between the sides of the two boxes that face each other. A layout
+//               that arranges it holds it inside its box: its frame says so, no line
+//   markList    reference points, on the canvas: { key, kind: own | parent | declared, x, y, isDefault?,
+//               label?, title, open? }. Its default one, and those its constraint names; in the mode
+//               of its reference points, every one of them instead, each opening in the edit card
+function guideBuild(session, selected, solved, boxOf, mode) {
 	const group = session.groupModelGet(selected.groupId);
 	const member = group?.memberById.get(selected.memberId);
 	const box = boxOf(selected.groupId, selected.memberId);
-	if (!member || !box) return [];
-	return member.parentIdList.flatMap((parentId) => {
+	if (!member || !box) return GUIDE_NONE;
+	const formatList = session.formatList;
+	const atOf = (definition) => { const offset = referencePointResolve(definition, member, box, formatList); return { x: box.x + offset.x, y: box.y + offset.y }; };
+	const markList = [];
+	if (mode?.kind === 'referencePoint') {
+		// every reference point it has: that of its outline, then those it declares
+		const isOutlineDefault = !member.referencePointDefault;
+		const outlinePoint = outlineReferenceDefaultOf(member.outline);
+		markList.push({ key: 'outline', kind: 'declared', ...atOf(outlinePoint), isDefault: isOutlineDefault, label: referencePointLabelOf(outlinePoint, member, formatList), title: `The reference point of its outline${isOutlineDefault ? ': its default one' : ''}` });
+		for (const declared of member.referencePointList) {
+			const isDefault = member.referencePointDefault?.format === 'own' && member.referencePointDefault.id === declared.id;
+			const words = declared.name || referencePointLabelOf(declared.point, member, formatList);
+			markList.push({ key: `declared:${declared.id}`, kind: 'declared', ...atOf(declared.point), isDefault, isOpen: mode.pointId === declared.id, label: words, title: `${words}${isDefault ? ': its default one' : ''}. Click to change it`, open: () => session.referencePointModeEnter(selected.groupId, selected.memberId, declared.id) });
+		}
+		return { guideList: [], markList };
+	}
+	markList.push({ key: 'default', kind: 'own', ...atOf(REFERENCE_POINT_DEFAULT), isDefault: true, title: `Its default reference point: ${referencePointLabelOf(REFERENCE_POINT_DEFAULT, member, formatList).replace(/^default \((.*)\)$/, '$1')}` });
+	// the reference points its constraint measures by, where it has one
+	const constraintType = member.constraint ? session.catalog.constraintTypeByType[member.constraint.type] : null;
+	const pointDefinitionList = (constraintType?.propertyList ?? []).filter(definition => definition.kind === 'referencePoint');
+	const context = pointDefinitionList.length ? session.constraintContextOf(selected.groupId, selected.memberId, constraintType, member.constraint, member.parentIdList, box, solved) : null;
+	const ownAtList = [];
+	const parentAtByIndex = {};
+	for (const definition of pointDefinitionList) {
+		const value = member.constraint[definition.id];
+		if (definition.of === 'self') {
+			const offset = context.pointOf(definition.id);
+			const at = { x: box.x + offset.x, y: box.y + offset.y };
+			ownAtList.push(at);
+			if (value?.format !== 'default') markList.push({ key: `own:${definition.id}`, kind: 'own', ...at, title: `${definition.label}: ${referencePointLabelOf(value, member, formatList)}` });
+		} else if (boxOf(selected.groupId, member.parentIdList[definition.of])) {
+			const at = context.pointOf(definition.id);
+			parentAtByIndex[definition.of] = at;
+			const parentSubject = session.memberSubjectOf(selected.groupId, member.parentIdList[definition.of]);
+			if (parentSubject.outline?.kind !== 'point') markList.push({ key: `parent:${definition.id}`, kind: 'parent', ...at, title: `${definition.label}: ${referencePointLabelOf(value, parentSubject, formatList)}` });
+		}
+	}
+	const guideList = member.parentIdList.flatMap((parentId, index) => {
 		const parentBox = boxOf(selected.groupId, parentId);
 		if (!parentBox) return [];
-		return [{ ...(group.memberById.get(parentId)?.layout ? {} : boxLinkOf(parentBox, box)), box: parentBox, isFromRoot: parentId === MEMBER_ROOT_ID }];
+		const isArranging = member.isArranged && index === 0;
+		const link = isArranging ? {} : parentAtByIndex[index] && ownAtList.length ? { from: parentAtByIndex[index], to: ownAtList[0] } : boxLinkOf(parentBox, box);
+		return [{ ...link, box: parentBox, isFromRoot: parentId === MEMBER_ROOT_ID }];
 	});
+	return { guideList, markList };
 }
 
 // a straight line between two boxes: from the middle of the side of each that faces the other

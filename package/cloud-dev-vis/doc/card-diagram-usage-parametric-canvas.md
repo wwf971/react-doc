@@ -104,15 +104,35 @@ A **parametric group** has one free place, its **origin** (the round mark with i
 
 | Constraint | Written | The member stands |
 | --- | --- | --- |
-| offset (the default) | `{ type: offset, x, y, point?, pointParent? }` | a point of its own at an offset from a point of its parent |
+| offset (the default) | `{ type: offset, x, y, point?, pointParent? }` | a reference point of its own at an offset from a reference point of its parent |
 | beside | `{ type: beside, side, gap, align?, shift? }` | on a side of its parent, its edge at a gap from the facing edge |
-| between | `{ type: between, t, x?, y?, point?, pointA?, pointB? }`, with `parentList: [a, b]` | a part of the way between a point of each of its two parents |
+| between | `{ type: between, t, x?, y?, point?, pointA?, pointB? }`, with `parentList: [a, b]` | a part of the way between a reference point of each of its two parents |
+| on lines | `{ type: locate, lineX?, lineY?, x?, y?, inset?, point? }`, under a locator | on the lines of its locator ([Locators](#locators)) |
 
-A drag on the canvas changes the constraint, not a position: drop a member and its gap, its offset or its place in a row is written. A member put under another parent, given another constraint, or taken out of its group stays where it stands. A **point** is a point of a box: `center`, `top`, `bottom-left` …, `{ side: top, offset: 0.667 }` or `{ x: 0.2, y: 0.9 }`. It is not a handle where lines attach: those belong to the lines, and a constraint does not follow them ([Points, handles and anchors](card-diagram-parametric-canvas.md#points-handles-and-anchors)).
+**A member put under another one with nothing else said is placed by an offset**: its default reference point `x`, `y` away from the default reference point of its parent. Change the two numbers in its edit card (**Placement**), or drag it.
+
+A drag on the canvas changes the constraint, not a position: drop a member and its gap, its offset or its place in a row is written. A member put under another parent, given another constraint, or taken out of its group stays where it stands.
+
+## Reference points
+
+A **reference point** is the point of a thing that a constraint places or measures from. It is not a handle where lines attach (those belong to the lines, and a constraint does not follow them), and not a resize handle: on the canvas it is a small **diamond** ([Reference points, handles and anchors](card-diagram-parametric-canvas.md#reference-points-handles-and-anchors)).
+
+- **Every thing has a default one**: the top left corner of its box; the origin of a locator. A constraint that names no reference point means the default one. Select a member and it is ringed; the reference points its constraint measures by are marked, on it and on its parent, with a dashed line between them.
+- **Choose another** in the edit card of the member (**Its reference point**, **Reference point of the parent**). What is offered follows the shape of the thing:
+
+| The thing | Offers | Written |
+| --- | --- | --- |
+| any box | nine names of its bounding box; fractions of it | `center`, `bottom-left`, `{ x: 0.2, y: 0.9 }` |
+| a box with straight edges | a point of an edge: a fraction along it, or the n-th of the points dividing it | `{ side: top, offset: 0.667 }`, `{ side: left, index: 2, count: 3 }` |
+| a round thing | a direction from its middle, on its outline: north, east, south, west, or an angle clockwise from north | `{ direction: north }`, `{ angle: 45 }` |
+| a polygon (diamond, hexagon …) | a corner, clockwise from the top; a direction | `{ vertex: 2 }` |
+| a locator | a line, or the crossing of two | `{ lineX: split, lineY: top }` |
+
+- **Give a thing reference points of its own**: its edit card, **Edit reference points** (or a right-click, *Reference points…*). The card then lists them, and the canvas shows each with its name. Add one, name it (*Inlet*), say where it is, and it is offered wherever a reference point of that thing is chosen. **Its default one** makes it the default. Removing one, or changing which is the default, moves nothing.
 
 ## Layouts and patterns
 
-A **layout member** places nothing itself and arranges what is put under it; a child of a layout has no constraint of its own.
+A **layout member** places nothing itself and arranges what is put under it; a child of a layout that arranges has no constraint of its own.
 
 | Layout | Written | Arranges |
 | --- | --- | --- |
@@ -128,6 +148,33 @@ A **pattern** is a layout whose children fill named **slots**: what each slot is
 | --- | --- | --- |
 | Captioned (`caption`) | `subject`, `caption` | `side` of the caption, `gap`, `align` |
 | Badged (`badge`) | `subject`, `badge` | `corner`, `inset` |
+
+## Locators
+
+A **locator** is a set of lines at places you set: vertical ones (x coordinates), horizontal ones (y coordinates), or both. It draws nothing itself. What you put under it stands on its lines, and **when you move a line, everything on it follows**: one locator replaces many single constraints. The tool bar has them under **Locators**; *Row of blocks* makes the classic case at once, blocks side by side whose widths are the gaps between the lines.
+
+<!--renderComp=DiagramText-->
+```text
+     ⌄ x1      ⌄ x2       ⌄ x3                ⌄ x4
+y1 › ┌─────────┬──────────┬───────────────────┐
+     │   xxx   │   yyy    │      zzzzzz       │
+y2 › └─────────┴──────────┴───────────────────┘
+```
+
+| To | Do |
+| --- | --- |
+| put something on its lines | put it under the locator (drag a row of the tree, or *Put under…*), then **Placed by: On lines** in its card. **Vertical line** and **To**: one line and no *To* puts its reference point on that line; a line and a *To* runs its box from one to the other, and the two lines then decide its width. The same with the horizontal lines for its height |
+| move a line | click the locator (its name, or a chevron) to focus it, then drag the chevron of the line. **Nothing moves until you drop it**: a dashed line shows where it will be. Shift: the lines after it move too. Drop it on **Drop here to cancel** at the bottom, or press Escape, to leave everything as it was |
+| add, name, remove a line | the **+** at the end of the row of chevrons; a click on a chevron opens its line in the edit card (its name, its place, *Remove line*). What stood on a removed line stays where it stands |
+| place the locator itself | like any member: drag it by what stands on it, or set its **Placement** (an offset from another member, beside one …) |
+| choose how it looks when you are not working on it | its card, **Shown when not focused**: *Chevrons only* (the default), *Faint lines*, *In full* (also when the diagram is read: for a locator the drawing is about), *Nothing*. Drag the dotted rail the chevrons stand on to move them out of the way: nothing else moves |
+
+```yaml
+- id: cols
+  layout: { type: locator, xList: [0, 120, 240, 480], yList: [0, 80] }
+- { id: a, node: block-a, parent: cols, constraint: { type: locate, lineX: ['1', '2'], lineY: ['1', '2'] } }
+- { id: b, node: block-b, parent: cols, constraint: { type: locate, lineX: ['2', '3'], lineY: ['1', '2'] } }
+```
 
 <!--renderComp=CardDiagram,title=A grid and two patterns-->
 ```yaml

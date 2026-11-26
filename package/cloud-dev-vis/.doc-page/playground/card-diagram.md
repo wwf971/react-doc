@@ -641,6 +641,103 @@ parametric:
         - { id: tick, node: tick, parent: runs }
 ```
 
+## Reference points and a locator
+
+Two groups. In **Points**, each shape hangs on a **reference point** of the one before: *Round* by its west point on the *Outlet* that *Parent* declares, *Hex* by its first corner 30, 30 from the point of *Round* at 135 degrees. In **Blocks**, a **locator** carries three blocks between its vertical lines. Press **Edit**, then:
+
+- click *Round*: the diamonds mark the reference points its constraint measures by, the ringed one its default; change **Its reference point** in its card (a round thing offers directions and an angle);
+- click *Parent*, then **Edit reference points** in its card: its points are listed and named on the canvas; add one, move it along an edge, make it the default (nothing moves);
+- click the name *Columns* (or a chevron) to focus the locator, then drag a chevron: nothing moves until you drop it; drop it on **Drop here to cancel** to give up; hold Shift to move the following lines too;
+- press the **+** after the last chevron for another line, click a chevron for its name and its removal;
+- change **Shown when not focused** of the locator, then click the empty canvas.
+
+<!--renderComp=CardDiagram,title=Reference points and a locator-->
+```yaml
+version: 1
+viewport:
+  size: { height: 560 }
+  featureList: [parametric-canvas]
+nodes:
+  - { id: box, renderer: { type: shape }, size: { width: 160, height: 90 }, data: { shape: rect, text: Parent }, handles: [] }
+  - { id: round, renderer: { type: shape }, size: { width: 110, height: 110 }, data: { shape: ellipse, text: Round }, handles: [] }
+  - { id: hex, renderer: { type: shape }, size: { width: 120, height: 90 }, data: { shape: hexagon, text: Hex }, handles: [] }
+  - { id: block-a, renderer: { type: shape }, size: { width: 100, height: 60 }, data: { shape: rect, text: xxx }, style: { fill: blue }, handles: [] }
+  - { id: block-b, renderer: { type: shape }, size: { width: 100, height: 60 }, data: { shape: rect, text: yyy }, style: { fill: teal }, handles: [] }
+  - { id: block-c, renderer: { type: shape }, size: { width: 100, height: 60 }, data: { shape: rect, text: zzzzzz }, style: { fill: amber }, handles: [] }
+  - { id: caption, renderer: { type: text }, data: { text: its top on the line Split, textSize: s, tone: slate }, handles: [] }
+parametric:
+  groupList:
+    - id: points
+      name: Points
+      root: { x: 40, y: 60 }
+      memberList:
+        - id: box
+          node: box
+          referencePointList:
+            - { id: outlet, name: Outlet, point: { side: right, index: 2, count: 3 } }
+        - { id: round, node: round, parent: box, constraint: { type: offset, x: 90, y: 0, point: { direction: west }, pointParent: outlet } }
+        - { id: hex, node: hex, parent: round, constraint: { type: offset, x: 30, y: 30, point: { vertex: 1 }, pointParent: { angle: 135 } } }
+    - id: blocks
+      name: Blocks
+      root: { x: 70, y: 360 }
+      memberList:
+        - id: cols
+          name: Columns
+          layout: { type: locator, xList: [0, 120, { id: split, at: 240, name: Split }, 480], yList: [0, 80] }
+        - { id: a, node: block-a, parent: cols, constraint: { type: locate, lineX: ['1', '2'], lineY: ['1', '2'] } }
+        - { id: b, node: block-b, parent: cols, constraint: { type: locate, lineX: ['2', split], lineY: ['1', '2'] } }
+        - { id: c, node: block-c, parent: cols, constraint: { type: locate, lineX: [split, '4'], lineY: ['1', '2'] } }
+        - { id: t, node: caption, parent: cols, constraint: { type: locate, lineX: split, y: 96, point: top } }
+```
+
+## Over and under
+
+The shape lies on the line and on the block. Press **Edit**, right-click the shape and choose **Send backward**: it goes under the line and stays over the block; **Send to back** puts it under the block too. Ctrl/⌘ + `]` and `[` do the same for what is selected, and the section **Depth** of the edit card shows the number the moves write. The diamond is written with `depth: 5`, the line under it with none.
+
+<!--renderComp=CardDiagram,title=Over and under-->
+```yaml
+version: 1
+viewport:
+  size: { height: 340 }
+nodes:
+  - id: block
+    renderer: { type: color-block }
+    position: { x: 0, y: 0 }
+    size: { width: 560, height: 240 }
+    data: { tone: blue, itemList: [{ id: label, text: A block behind }] }
+    style: { fill: blue }
+  - id: from
+    renderer: { type: card-note }
+    position: { x: 30, y: 70 }
+    size: { width: 140, height: auto }
+    data: { title: From, tone: amber }
+    handles: [{ id: out, direction: out, anchor: { side: right } }]
+  - id: to
+    renderer: { type: card-note }
+    position: { x: 390, y: 70 }
+    size: { width: 140, height: auto }
+    data: { title: To, tone: teal }
+    handles: [{ id: in, direction: in, anchor: { side: left } }]
+  - id: shape
+    renderer: { type: shape }
+    position: { x: 220, y: 30 }
+    size: { width: 120, height: 110 }
+    data: { shape: rect, text: Shape }
+    style: { fill: amber }
+  - id: top
+    renderer: { type: shape }
+    position: { x: 300, y: 110 }
+    size: { width: 100, height: 70 }
+    depth: 5
+    data: { shape: diamond, text: depth 5 }
+    style: { fill: violet }
+connections:
+  - id: line
+    source: { nodeId: from, handleId: out }
+    target: { nodeId: to, handleId: in }
+    style: { stroke: "#dc2626", strokeWidth: 3 }
+```
+
 ## Add your own
 
 Everything above is ordinary content: copy a block, or add one from the insert menu in edit mode.

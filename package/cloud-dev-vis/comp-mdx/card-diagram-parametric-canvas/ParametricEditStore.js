@@ -1,9 +1,11 @@
 import { computed, makeAutoObservable, observable, reaction } from 'mobx';
-import { MEMBER_ROOT_ID, PARAMETRIC_DATA_KEY, PARAMETRIC_FEATURE_ID, pointRead, groupKeyOf, memberIsFramedWhenRead, parametricLineListGet, parametricRead } from './ParametricData.js';
-import { parametricSolve } from './ParametricSolve.js';
+import { MEMBER_ROOT_ID, PARAMETRIC_DATA_KEY, PARAMETRIC_FEATURE_ID, groupKeyOf, memberIsFramedWhenRead, parametricLineListGet, parametricRead } from './ParametricData.js';
+import { constraintContextBuild, memberParentListOf, nodeOutlineOf, parametricSolve } from './ParametricSolve.js';
+import { OUTLINE_RECT, REFERENCE_SUBJECT_ORIGIN, outlineRead, referencePointLabelOf, referencePointOfOffset, referencePointRead, referencePointResolve, referencePointWrite } from './ParametricReferencePoint.js';
+import { locatorLineAtNext, locatorLineListWrite } from './ParametricLocator.js';
 import { toolListBuild, toolMapMerge } from './ParametricTool.js';
 import { createModeParamOf } from './ParametricCreateMode.js';
-import { actionListBuild, focusCardModelBuild, focusRectGet, nodeSectionListBuild } from './ParametricEditModel.js';
+import { actionListBuild, focusCardModelBuild, focusRectGet, modeCardModelBuild, nodeSectionListBuild } from './ParametricEditModel.js';
 import { DiagramPanelTreeStore } from '../card-diagram/DiagramPanelTreeStore.js';
 import { GRAPH_CAMERA_REST, panelGraphZoomClamp } from '../card-diagram/DiagramPanelGraph.jsx';
 
@@ -42,6 +44,14 @@ export function idRandomGet(idTakenList = [], length = 6) {
 //                 pages, the search); graph: the camera of its graph of relations. The panel itself
 //                 (folded, its tab, where the edit card stands) is the editor's (DiagramPanelStore)
 //   toolBar       the state of the tool bar (ParametricToolBar.jsx): the dropdown open
+//   mode          a mode of its own of the thing selected (card-diagram-parametric-canvas.md#modes-of-a-thing):
+//                 what its edit card and the canvas show instead of its settings, until it is left.
+//                 { kind: referencePoint, groupId, memberId, pointId? }: the reference points of a
+//                 member (one of them open); { kind: locatorLine, groupId, memberId, axis, lineId? }:
+//                 the lines of an axis of a locator (one of them open). It lasts while that member
+//                 is what is selected
+//   lineDrag      a line of a locator being dragged (ParametricLocatorLayer.jsx): nothing is written
+//                 or placed anew until it is dropped
 export class ParametricEditStore {
 	id = PARAMETRIC_FEATURE_ID;
 	focus = null;
@@ -53,6 +63,8 @@ export class ParametricEditStore {
 	toolBar = { openId: null, detailId: null, modeId: null };
 	// the menu of a thing of the panel (a right-click on an item of its tree): { x, y, target, label }
 	menu = null;
+	mode = null;
+	lineDrag = null;
 	// the tools changed here when no config keeps them (toolMapPatch absent): over toolMapGet
 	toolMapOwn = {};
 
@@ -63,9 +75,11 @@ export class ParametricEditStore {
 	// writes tools changed into what keeps the tool bar (a layer of the config); absent, they are
 	// kept here, for the session
 	// iconGet(name): an icon by its word (remove ...), from whoever draws
-	constructor({ store, registry, config = {}, canvas, isOnGet, catalog, toolMapGet, toolMapPatch, toolIconGet, iconGet, idGet = idRandomGet }) {
-		Object.assign(this, { store, registry, config, canvas, isOnGet, catalog, toolMapGet, toolMapPatch, toolIconGet, iconGet, idGet });
-		makeAutoObservable(this, { store: false, registry: false, config: false, canvas: false, isOnGet: false, catalog: false, toolMapGet: false, toolMapPatch: false, toolIconGet: false, iconGet: false, idGet: false, disposeList: false, tree: false, gesture: observable.ref, section: computed.struct, nodeOutlineList: computed.struct, connectionEndList: computed.struct, lineList: computed.struct, treeIndex: computed.struct }, { autoBind: true });
+	// layoutUiByType: what a layout type shows of itself in the editor, by its type, from whoever
+	// draws the feature ({ cardSectionListGet?, modeCardGet?, actionListGet?, CanvasLayer?: … }: a locator)
+	constructor({ store, registry, config = {}, canvas, isOnGet, catalog, toolMapGet, toolMapPatch, toolIconGet, iconGet, layoutUiByType = {}, idGet = idRandomGet }) {
+		Object.assign(this, { store, registry, config, canvas, isOnGet, catalog, toolMapGet, toolMapPatch, toolIconGet, iconGet, layoutUiByType, idGet });
+		makeAutoObservable(this, { store: false, registry: false, config: false, canvas: false, isOnGet: false, catalog: false, toolMapGet: false, toolMapPatch: false, toolIconGet: false, iconGet: false, layoutUiByType: false, idGet: false, disposeList: false, tree: false, gesture: observable.ref, lineDrag: observable.ref, section: computed.struct, nodeBriefList: computed.struct, connectionEndList: computed.struct, lineList: computed.struct, treeIndex: computed.struct }, { autoBind: true });
 		// a node or a line focused is the selection: the focus of a group lets go
 		this.disposeList = [reaction(() => Boolean(this.store.display), (isShown) => { if (isShown) this.focus = null; })];
 	}
@@ -79,12 +93,14 @@ export class ParametricEditStore {
 	// read by content (computed.struct), as what follows from them: a word typed in a node changes
 	// neither, so the model, the lines and the tree of the panel are not read again for it
 	get section() { return this.store.value[KEY] ?? {}; }
-	get nodeOutlineList() { return this.store.nodes.map(node => ({ id: node.id, around: node.around })); }
+	// what the section is read against of each node: that it is there, what is drawn around others,
+	// and its outline (the shape of its boundary, as its kind says it: its reference points)
+	get nodeBriefList() { return this.store.nodes.map(node => ({ id: node.id, around: node.around, outline: nodeOutlineOf(node, this.registry) })); }
 	get connectionEndList() { return this.store.connections.map(connection => ({ id: connection.id, source: { nodeId: connection.source?.nodeId }, target: { nodeId: connection.target?.nodeId } })); }
 	// the groups as written
 	get groupList() { return this.section.groupList ?? []; }
 	// the model of the draft (ParametricData.js); the draft is valid, so it reads
-	get model() { return parametricRead(this.section, { nodes: this.nodeOutlineList, catalog: this.catalog }); }
+	get model() { return parametricRead(this.section, { nodes: this.nodeBriefList, catalog: this.catalog }); }
 
 	groupGet(groupId) { return this.groupList.find(group => group.id === groupId); }
 	memberGet(groupId, memberId) { return (this.groupGet(groupId)?.memberList ?? []).find(member => member.id === memberId); }
@@ -154,6 +170,38 @@ export class ParametricEditStore {
 
 	focusClear() { this.focus = null; }
 
+	// ---------- a mode of the thing selected ----------
+
+	// the mode while the member it is of is what is selected, and still there
+	get modeShown() {
+		const mode = this.mode;
+		const selected = this.selected;
+		if (!mode || !selected || selected.groupId !== mode.groupId || selected.memberId !== mode.memberId) return null;
+		return this.groupModelGet(mode.groupId)?.memberById.has(mode.memberId) ? mode : null;
+	}
+
+	// the reference points of a member, in the place of its settings; pointId: one of them open
+	referencePointModeEnter(groupId, memberId, pointId = null) { this.memberSelect(groupId, memberId); this.mode = { kind: 'referencePoint', groupId, memberId, pointId }; }
+	// the lines of an axis of a locator; lineId: one of them open
+	locatorLineModeEnter(groupId, memberId, axis, lineId = null) { this.memberSelect(groupId, memberId); this.mode = { kind: 'locatorLine', groupId, memberId, axis, lineId }; }
+	// one level out: the thing open to its list, the list to the settings of the member
+	modeUp() {
+		const mode = this.modeShown;
+		if (!mode) { this.mode = null; return; }
+		if (mode.kind === 'referencePoint' && mode.pointId) this.mode = { ...mode, pointId: null };
+		else if (mode.kind === 'locatorLine' && mode.lineId) this.mode = { ...mode, lineId: null };
+		else this.mode = null;
+	}
+	modeLeave() { this.mode = null; }
+
+	// a member made what is selected: its node by the path of the editor, a layout by the focus
+	memberSelect(groupId, memberId) {
+		const selected = this.selected;
+		if (selected?.groupId === groupId && selected.memberId === memberId) return;
+		const member = this.memberGet(groupId, memberId);
+		if (member?.node) { this.focus = null; this.store.select(member.node); } else if (member) this.focusSet({ kind: 'member', groupId, memberId });
+	}
+
 	// ---------- hooks of the editor (DiagramVisualEdit.jsx: a session) ----------
 
 	get flowClassName() { return this.toolArmedId ? 'is-parametric-tool-armed' : ''; }
@@ -163,6 +211,8 @@ export class ParametricEditStore {
 		if (this.menu) { this.menu = null; return true; }
 		if (this.toolBar.openId) { this.toolBarClose(); return true; }
 		if (this.toolArmedId) { this.toolDisarm(); return true; }
+		if (this.lineDrag) { this.lineDrag = null; return true; }
+		if (this.modeShown) { this.modeUp(); return true; }
 		if (this.focusShown) { this.focus = null; return true; }
 		return false;
 	}
@@ -182,8 +232,12 @@ export class ParametricEditStore {
 
 	cardGet(editor) {
 		const focus = this.focusShown;
-		return focus ? { model: focusCardModelBuild(this, focus, editor), anchorRectGet: () => focusRectGet(this, focus, editor), close: this.focusClear } : null;
+		return focus ? { model: modeCardModelBuild(this, editor) ?? focusCardModelBuild(this, focus, editor), anchorRectGet: () => focusRectGet(this, focus, editor), close: this.focusClear } : null;
 	}
+
+	// the edit card of a node while it is in a mode of its own (its reference points): in the place
+	// of the card of its settings (DiagramEditCardModel.js: a session may answer the card)
+	cardModelGet(target, editor) { return target?.nodeId ? modeCardModelBuild(this, editor) : null; }
 
 	// what can be done on the empty canvas or with a thing (the panel of a double-click and of a right-click)
 	createActionListGet(target, editor) { return actionListBuild(this, target, editor, this.toolIconGet); }
@@ -342,14 +396,14 @@ export class ParametricEditStore {
 	// a layout member, into a group; with no group to go to, a group of its own at that place. A
 	// pattern (a layout type with slots) is made whole: a node of the kind each slot names fills it,
 	// all in the same step
-	layoutCreate(layout, position, target = null, { constraint } = {}) {
+	layoutCreate(layout, position, target = null, { constraint, childList } = {}) {
 		const layoutType = this.catalog.layoutTypeByType[layout?.type];
 		if (!layoutType) { this.store.message = `Unknown layout type ${layout?.type}.`; return null; }
 		const groupId = target?.groupId ?? this.idGet(this.groupList.map(group => group.id));
 		const memberId = target ? this.memberIdNext(groupId) : this.idGet([]);
 		const member = { id: memberId, layout: { ...layoutType.paramDefault, ...layout } };
 		const solved = target ? this.solve() : null;
-		const slotFill = this.slotFillBuild(layoutType, groupId, memberId);
+		const slotFill = this.slotFillBuild(layoutType, groupId, memberId, childList);
 		if (slotFill === null) return null;
 		const isChanged = this.store.changeApply((documentNext) => {
 			if (target) this.memberWrite(documentNext, groupId, member, target.parentId, position, { width: 0, height: 0 }, solved, constraint);
@@ -363,23 +417,25 @@ export class ParametricEditStore {
 		return isChanged ? memberId : null;
 	}
 
-	// the nodes that fill the slots of a pattern made whole, and their members under it ({ nodeList,
-	// memberList }; empty for a layout without slots); null, with the message, when a kind is missing
-	slotFillBuild(layoutType, groupId, memberId) {
+	// the nodes a layout is made with, and their members under it ({ nodeList, memberList }): those
+	// filling the slots of a pattern made whole, or the children a tool gives (childList: [{ kind,
+	// data?, style?, size?, constraint? }], each with the constraint it stands by: the blocks of a
+	// locator); empty otherwise. null, with the message, when a kind is missing
+	slotFillBuild(layoutType, groupId, memberId, childList) {
 		const nodeList = [];
 		const memberList = [];
 		const memberIdTakenList = [...(this.groupModelGet(groupId)?.memberList.map(member => member.id) ?? []), memberId];
-		for (const slot of layoutType.slotList ?? []) {
-			if (!slot.create) continue;
-			const entry = this.registry?.createEntryList.find(item => item.id === slot.create.kind);
-			if (!entry?.create) { this.store.message = `${layoutType.label} needs a ${slot.create.kind}, which this diagram has not.`; return null; }
+		const entryList = childList?.length ? childList.map(child => ({ create: child, constraint: child.constraint })) : (layoutType.slotList ?? []).filter(slot => slot.create).map(slot => ({ create: slot.create, slot: slot.id }));
+		for (const { create, slot, constraint } of entryList) {
+			const entry = this.registry?.createEntryList.find(item => item.id === create.kind);
+			if (!entry?.create) { this.store.message = `${layoutType.label} needs a ${create.kind}, which this diagram has not.`; return null; }
 			const base = entry.create(prefix => idNextOf(prefix, [...this.store.nodes, ...nodeList]));
-			const size = { ...(base.size ?? {}), ...(slot.create.size ?? {}) };
+			const size = { ...(base.size ?? {}), ...(create.size ?? {}) };
 			const { position: _position, ...rest } = base;
-			nodeList.push({ ...rest, data: { ...base.data, ...(slot.create.data ?? {}) }, ...(Object.keys(size).length ? { size } : {}), ...(slot.create.style ? { style: slot.create.style } : {}) });
+			nodeList.push({ ...rest, data: { ...base.data, ...(create.data ?? {}) }, ...(Object.keys(size).length ? { size } : {}), ...(create.style ? { style: create.style } : {}) });
 			const childId = this.idGet(memberIdTakenList);
 			memberIdTakenList.push(childId);
-			memberList.push({ id: childId, node: nodeList[nodeList.length - 1].id, parent: memberId, slot: slot.id });
+			memberList.push({ id: childId, node: nodeList[nodeList.length - 1].id, parent: memberId, ...(slot ? { slot } : {}), ...(constraint ? { constraint } : {}) });
 		}
 		return { nodeList, memberList };
 	}
@@ -472,15 +528,68 @@ export class ParametricEditStore {
 	}
 
 
-	// the constraint of a type, as written, that puts a box of `size` at `position` under parents:
-	// inputBase over the defaults of the type, then the parameters a place decides (fromPlace)
-	constraintAtPlace(type, inputBase, groupId, memberId, parentIdList, position, size, solved) {
+	// ---------- reference points, read ----------
+
+	get formatList() { return this.catalog.referenceFormatList; }
+	// a reference point as written (what an edit card writes), read as the definition of a declared one
+	referencePointReadOf(written) { return referencePointRead(written, 'point', this.formatList, { isOwnAllowed: false }); }
+
+	// the subject of the reference points of a member (ParametricReferencePoint.js): its outline,
+	// the points it declares, its default; the origin of the group for `root`
+	memberSubjectOf(groupId, memberId) {
+		return memberId === MEMBER_ROOT_ID ? REFERENCE_SUBJECT_ORIGIN : this.groupModelGet(groupId)?.memberById.get(memberId) ?? REFERENCE_SUBJECT_ORIGIN;
+	}
+
+	// the subject of a member not written yet: a node of the diagram, or a layout
+	memberSubjectNewOf(member) {
+		if (member.node) return { outline: outlineRead(nodeOutlineOf(this.store.nodeGet(member.node), this.registry)), referencePointList: [], referencePointDefault: null };
+		const layoutType = this.catalog.layoutTypeByType[member.layout?.type];
+		return { outline: layoutType?.outlineOf ? outlineRead(layoutType.outlineOf(layoutType.read(member.layout, 'layout'))) : OUTLINE_RECT, referencePointList: [], referencePointDefault: null };
+	}
+
+	// what the constraint of a member is solved with (ParametricSolve.js: constraintContextBuild),
+	// from a solve. subjectById: subjects as they will be, for a change being written (a default
+	// reference point changed, a line removed, a member not written yet)
+	constraintContextOf(groupId, memberId, constraintType, constraint, parentIdList, size, solved, subjectById = {}) {
+		const subjectOf = id => subjectById[id] ?? this.memberSubjectOf(groupId, id);
+		return constraintContextBuild(this.catalog, constraintType, constraint, {
+			member: subjectOf(memberId), size,
+			parentList: parentIdList.map(subjectOf),
+			parentBoxList: parentIdList.map(parentId => solved.boxByKey.get(groupKeyOf(groupId, parentId))),
+		});
+	}
+
+	// the constraint of a type, as written, that puts a box of `size` exactly at `position` under
+	// parents: inputBase over the defaults of the type, then the parameters a place decides
+	// (fromPlace). isNew: a constraint being made for a member placed otherwise until now (on the
+	// lines of a locator: the nearest ones)
+	constraintAtPlace(type, inputBase, groupId, memberId, parentIdList, position, size, solved, { subjectById, isNew = false } = {}) {
 		const constraintType = this.catalog.constraintTypeByType[type];
 		if (!constraintType) throw new Error(`Unknown constraint type ${type}.`);
 		if (constraintType.parentCount !== parentIdList.length) throw new Error(`A ${constraintType.label.toLowerCase()} constraint has ${constraintType.parentCount === 1 ? 'one parent' : `${constraintType.parentCount} parents`}.`);
 		const input = { ...constraintType.paramDefault, ...inputBase, type };
-		const read = constraintType.read(input, { field: 'constraint', pointRead });
-		return constraintType.fromPlace(input, read, { size, parentBoxList: parentIdList.map(parentId => solved.boxByKey.get(groupKeyOf(groupId, parentId))) }, position);
+		const context = this.constraintContextOf(groupId, memberId, constraintType, null, parentIdList, size, solved, subjectById);
+		const reason = constraintType.parentReasonGet?.(context.parentList);
+		if (reason) throw new Error(reason);
+		const read = constraintType.read(input, { field: 'constraint', referencePointRead: (value, key) => referencePointRead(value, key, this.formatList), parentList: context.parentList });
+		const contextRead = this.constraintContextOf(groupId, memberId, constraintType, read, parentIdList, size, solved, subjectById);
+		return constraintType.fromPlace(input, read, { ...contextRead, isExact: true, isNew }, position);
+	}
+
+	// the constraints of members written again so that each stays where a solve has it, under
+	// subjects as they will be: what keeps "nothing moves" when a reference point they measure by
+	// goes or another becomes the default. inputOf(member): its constraint as written, changed where
+	// the change asks (a key naming what is gone taken away)
+	placesKeepWrite(documentNext, groupId, memberIdList, solved, { subjectById = {}, inputOf } = {}) {
+		const group = this.groupModelGet(groupId);
+		for (const memberId of memberIdList) {
+			const member = group.memberById.get(memberId);
+			if (!member || member.isArranged || !member.constraint) continue;
+			const box = solved.boxByKey.get(groupKeyOf(groupId, memberId));
+			const input = inputOf?.(member) ?? this.memberGet(groupId, memberId).constraint ?? { type: member.constraint.type };
+			const constraint = this.constraintAtPlace(member.constraint.type, { ...input, type: member.constraint.type }, groupId, memberId, member.parentIdList, { x: box.x, y: box.y }, { width: box.width, height: box.height }, solved, { subjectById });
+			documentNext.setIn([...this.memberPathOf(groupId, memberId), 'constraint'], documentNext.createNode(constraint));
+		}
 	}
 
 	// a member written into a group under a parent so that its box stands at `position`: by an
@@ -490,11 +599,19 @@ export class ParametricEditStore {
 		const parent = parentId === MEMBER_ROOT_ID ? null : this.memberGet(groupId, parentId);
 		if (parentId !== MEMBER_ROOT_ID && !parent) throw new Error('Unknown parent.');
 		const written = { ...member, ...(parentId === MEMBER_ROOT_ID ? {} : { parent: parentId }) };
-		if (!parent?.layout) written.constraint = constraint ?? this.constraintAtPlace('offset', {}, groupId, member.id, [parentId], position, size, solved);
+		// the default constraint: its default reference point at an offset from that of its parent
+		if (!this.layoutArrangesOf(parent)) written.constraint = constraint ?? this.constraintAtPlace('offset', {}, groupId, member.id, [parentId], position, size, solved, { subjectById: { [member.id]: this.memberSubjectNewOf(member) } });
 		const groupPath = [KEY, 'groupList', this.groupIndexOf(groupId)];
 		if (!documentNext.hasIn([...groupPath, 'memberList'])) documentNext.setIn([...groupPath, 'memberList'], documentNext.createNode([]));
 		documentNext.addIn([...groupPath, 'memberList'], documentNext.createNode(written));
 		if (member.node) this.nodePositionDrop(documentNext, member.node);
+	}
+
+	// the layout type of a member written, when it is a layout that arranges its children (it then
+	// places them: they write no constraint); null for a locator, which leaves each its own
+	layoutArrangesOf(memberWritten) {
+		const layoutType = memberWritten?.layout ? this.catalog.layoutTypeByType[memberWritten.layout.type] : null;
+		return layoutType && !layoutType.isChildConstrained ? layoutType : null;
 	}
 
 	// a free node into a group, under its origin (or a parent), where it stands
@@ -517,7 +634,7 @@ export class ParametricEditStore {
 		if (parentIdNew === memberId) throw new Error('A member cannot follow itself.');
 		for (const key of ['parentList', 'slot']) if (documentNext.hasIn([...path, key])) documentNext.deleteIn([...path, key]);
 		if (parentIdNew === MEMBER_ROOT_ID) { if (documentNext.hasIn([...path, 'parent'])) documentNext.deleteIn([...path, 'parent']); } else documentNext.setIn([...path, 'parent'], parentIdNew);
-		if (parentNew?.layout) {
+		if (this.layoutArrangesOf(parentNew)) {
 			if (documentNext.hasIn([...path, 'constraint'])) documentNext.deleteIn([...path, 'constraint']);
 			// a pattern takes it into the first slot no other member fills; a pattern full refuses it
 			const slotList = this.catalog.layoutTypeByType[parentNew.layout.type]?.slotList;
@@ -535,7 +652,23 @@ export class ParametricEditStore {
 			return;
 		}
 		const box = solved.boxByKey.get(groupKeyOf(groupId, memberId));
-		documentNext.setIn([...path, 'constraint'], documentNext.createNode(this.constraintAtPlace(type, {}, groupId, memberId, [parentIdNew], { x: box.x, y: box.y }, { width: box.width, height: box.height }, solved)));
+		// a size its constraint dictated until now (between two lines) becomes its own
+		this.sizeDictatedKeepWrite(documentNext, groupId, memberId, solved);
+		// a type that cannot place it under that parent (on lines, under what is no locator): an offset
+		const typeUsed = this.catalog.constraintTypeByType[type]?.parentReasonGet?.([this.memberSubjectOf(groupId, parentIdNew)]) ? 'offset' : type;
+		documentNext.setIn([...path, 'constraint'], documentNext.createNode(this.constraintAtPlace(typeUsed, {}, groupId, memberId, [parentIdNew], { x: box.x, y: box.y }, { width: box.width, height: box.height }, solved, { isNew: true })));
+	}
+
+	// the size the constraint of a member dictates (between two lines of a locator), written as the
+	// size of its node: for a change after which the constraint no longer decides it, so nothing
+	// changes size
+	sizeDictatedKeepWrite(documentNext, groupId, memberId, solved) {
+		const group = this.groupModelGet(groupId);
+		const member = group?.memberById.get(memberId);
+		if (!member?.nodeId || !member.constraint) return;
+		const dictated = this.catalog.constraintTypeByType[member.constraint.type].sizeOf?.(member.constraint, { parentList: memberParentListOf(group, member) });
+		const box = solved.boxByKey.get(groupKeyOf(groupId, memberId));
+		for (const axis of ['width', 'height']) if (dictated?.[axis] !== undefined && box) documentNext.setIn([...this.store.nodePathGet(member.nodeId), 'size', axis], Math.max(1, Math.round(box[axis])));
 	}
 
 	memberParentSet(groupId, memberId, parentIdNew, option) {
@@ -570,7 +703,10 @@ export class ParametricEditStore {
 				if (!other.sizeBinding) continue;
 				for (const axis of ['width', 'height']) if (other.sizeBinding[axis]?.memberId === memberId) documentNext.deleteIn([...this.memberPathOf(groupId, other.id), 'size', axis]);
 			}
-			if (member.node && !isNodeRemoved) this.nodePositionWrite(documentNext, member.node, solved.positionById.get(member.node));
+			if (member.node && !isNodeRemoved) {
+				this.nodePositionWrite(documentNext, member.node, solved.positionById.get(member.node));
+				this.sizeDictatedKeepWrite(documentNext, groupId, memberId, solved);
+			}
 			documentNext.deleteIn(this.memberPathOf(groupId, memberId));
 			if (member.node && isNodeRemoved) {
 				this.store.endpointsDetach(documentNext, endpoint => endpoint.nodeId === member.node, positionGet);
@@ -606,7 +742,7 @@ export class ParametricEditStore {
 		const boxOf = memberId => solved.boxByKey.get(groupKeyOf(group.id, memberId));
 		const size = { width: boxOf(member.id).width, height: boxOf(member.id).height };
 		const parentDirect = group.memberById.get(member.parentIdList[0]);
-		if (parentDirect?.layout) {
+		if (member.isArranged) {
 			const layoutType = this.catalog.layoutTypeByType[parentDirect.layout.type];
 			if (!layoutType.indexFromPlace) return false;
 			const siblingList = group.childListOf(parentDirect.id).filter(item => item.id !== member.id);
@@ -614,7 +750,7 @@ export class ParametricEditStore {
 		}
 		const constraintType = this.catalog.constraintTypeByType[member.constraint.type];
 		const input = this.memberGet(group.id, member.id).constraint ?? { type: member.constraint.type };
-		const written = constraintType.fromPlace(input, member.constraint, { size, parentBoxList: member.parentIdList.map(boxOf) }, position);
+		const written = constraintType.fromPlace(input, member.constraint, this.constraintContextOf(group.id, member.id, constraintType, member.constraint, member.parentIdList, size, solved), position);
 		return this.store.changeApply(documentNext => documentNext.setIn([...this.memberPathOf(group.id, member.id), 'constraint'], documentNext.createNode(written)));
 	}
 
@@ -629,10 +765,11 @@ export class ParametricEditStore {
 		if (!member) return false;
 		const solved = this.solve();
 		const size = { width: Math.round(width), height: Math.round(height) };
-		const parentDirect = group.memberById.get(member.parentIdList[0]);
+		// an axis its constraint or a binding decides is not the node's to write
+		const axisGivenList = this.memberSizeGivenAxisListOf(group.id, member.id);
 		this.store.changeApply((documentNext) => {
-			for (const axis of axisList) documentNext.setIn([...this.store.nodePathGet(nodeId), 'size', axis], size[axis]);
-			if (parentDirect?.layout) return;
+			for (const axis of axisList) if (!axisGivenList.includes(axis)) documentNext.setIn([...this.store.nodePathGet(nodeId), 'size', axis], size[axis]);
+			if (member.isArranged) return;
 			const input = this.memberGet(group.id, member.id).constraint ?? { type: member.constraint.type };
 			const constraint = this.constraintAtPlace(member.constraint.type, input, group.id, member.id, member.parentIdList, { x: Math.round(x), y: Math.round(y) }, size, solved);
 			documentNext.setIn([...this.memberPathOf(group.id, member.id), 'constraint'], documentNext.createNode(constraint));
@@ -640,12 +777,39 @@ export class ParametricEditStore {
 		return true;
 	}
 
+	// the axes of the size of a member that its node does not decide: bound to another member, or
+	// dictated by its constraint (between two lines of a locator). Its resize handles leave them alone
+	memberSizeGivenAxisListOf(groupId, memberId) {
+		const group = this.groupModelGet(groupId);
+		const member = group?.memberById.get(memberId);
+		if (!member) return [];
+		const dictated = member.constraint ? this.catalog.constraintTypeByType[member.constraint.type].sizeOf?.(member.constraint, { parentList: memberParentListOf(group, member) }) ?? {} : {};
+		return ['width', 'height'].filter(axis => member.sizeBinding?.[axis] || dictated[axis] !== undefined);
+	}
+
+	// a hook of the editor (DiagramRender.jsx): what the resize handles of a node change, less
+	// what a group decides for it
+	nodeResizeAxisListGet(nodeId, axisList) {
+		const at = this.memberOfNode(nodeId);
+		if (!at) return axisList;
+		const axisGivenList = this.memberSizeGivenAxisListOf(at.groupId, at.memberId);
+		return axisList.filter(axis => !axisGivenList.includes(axis));
+	}
+
 	// a parameter of the constraint of a member. groupKey: a value being typed, one step
 	memberConstraintParamSet(groupId, memberId, key, value, { groupKey = null } = {}) {
+		return this.memberConstraintPatch(groupId, memberId, { [key]: value }, { groupKey });
+	}
+
+	// keys of the constraint of a member written together (undefined: the key taken away, the
+	// constraint then reads its default for it)
+	memberConstraintPatch(groupId, memberId, patch, { groupKey = null } = {}) {
 		return this.store.changeApply((documentNext) => {
 			const path = [...this.memberPathOf(groupId, memberId), 'constraint'];
 			if (!documentNext.hasIn(path)) documentNext.setIn(path, documentNext.createNode({ type: 'offset' }));
-			documentNext.setIn([...path, key], value !== null && typeof value === 'object' ? documentNext.createNode(value) : value);
+			for (const [key, value] of Object.entries(patch)) {
+				if (value === undefined) { if (documentNext.hasIn([...path, key])) documentNext.deleteIn([...path, key]); } else documentNext.setIn([...path, key], value !== null && typeof value === 'object' ? documentNext.createNode(value) : value);
+			}
 		}, { groupKey });
 	}
 
@@ -659,7 +823,7 @@ export class ParametricEditStore {
 		const constraintType = this.catalog.constraintTypeByType[type];
 		if (!member || !constraintType) return false;
 		return this.store.changeApply((documentNext) => {
-			if (group.memberById.get(member.parentIdList[0])?.layout) throw new Error('Its layout places it: it has no constraint of its own.');
+			if (member.isArranged) throw new Error('Its layout places it: it has no constraint of its own.');
 			const parentIdList = member.parentIdList.slice(0, constraintType.parentCount);
 			if (parentIdList.length < constraintType.parentCount) {
 				const descendantIdSet = new Set(group.descendantListOf(memberId).map(item => item.id));
@@ -669,7 +833,8 @@ export class ParametricEditStore {
 			}
 			const path = this.memberPathOf(groupId, memberId);
 			const box = solved.boxByKey.get(groupKeyOf(groupId, memberId));
-			const constraint = this.constraintAtPlace(type, {}, groupId, memberId, parentIdList, { x: box.x, y: box.y }, { width: box.width, height: box.height }, solved);
+			this.sizeDictatedKeepWrite(documentNext, groupId, memberId, solved);
+			const constraint = this.constraintAtPlace(type, {}, groupId, memberId, parentIdList, { x: box.x, y: box.y }, { width: box.width, height: box.height }, solved, { isNew: true });
 			for (const key of ['parent', 'parentList']) if (documentNext.hasIn([...path, key])) documentNext.deleteIn([...path, key]);
 			if (parentIdList.length > 1) documentNext.setIn([...path, 'parentList'], documentNext.createNode(parentIdList));
 			else if (parentIdList[0] !== MEMBER_ROOT_ID) documentNext.setIn([...path, 'parent'], parentIdList[0]);
@@ -711,6 +876,229 @@ export class ParametricEditStore {
 		});
 	}
 
+	// ---------- reference points (ParametricReferencePoint.js) ----------
+
+	// the reference point a new one of a member starts as: the first thing its outline offers that
+	// is not its default (a box: the middle of its left edge; a round thing: north; a polygon: its
+	// first corner; a locator: its first lines)
+	referencePointStartOf(outline) {
+		if (outline.kind === 'ellipse') return { format: 'angle', angle: 0 };
+		if (outline.kind === 'polygon') return { format: 'vertex', vertex: 1 };
+		if (outline.kind === 'lines') return { format: 'line', lineX: outline.xList[0]?.id ?? null, lineY: outline.yList[0]?.id ?? null };
+		return { format: 'edge', side: 'left', index: 1, count: 2 };
+	}
+
+	// the reference points a member declares, as written
+	memberReferencePointListWrittenOf(groupId, memberId) { return this.memberGet(groupId, memberId)?.referencePointList ?? []; }
+
+	// a reference point declared by a member: answers its id
+	memberReferencePointAdd(groupId, memberId, { point, name = '' } = {}) {
+		const member = this.groupModelGet(groupId)?.memberById.get(memberId);
+		if (!member) return null;
+		const idTakenList = member.referencePointList.map(item => item.id);
+		let index = idTakenList.length + 1;
+		while (idTakenList.includes(`p${index}`)) index += 1;
+		const id = `p${index}`;
+		const written = { id, ...(name ? { name } : {}), point: referencePointWrite(point ?? this.referencePointStartOf(member.outline), this.formatList) };
+		const isChanged = this.store.changeApply((documentNext) => {
+			const path = [...this.memberPathOf(groupId, memberId), 'referencePointList'];
+			if (!documentNext.hasIn(path)) documentNext.setIn(path, documentNext.createNode([]));
+			documentNext.addIn(path, documentNext.createNode(written));
+		});
+		return isChanged ? id : null;
+	}
+
+	// its name, or where it is (a definition, as read). Moving a reference point moves what is
+	// measured by it: that is what it is for. groupKey: a value being typed
+	memberReferencePointSet(groupId, memberId, pointId, { name, point } = {}, { groupKey = null } = {}) {
+		const index = this.memberReferencePointListWrittenOf(groupId, memberId).findIndex(item => item.id === pointId);
+		if (index < 0) return false;
+		return this.store.changeApply((documentNext) => {
+			const path = [...this.memberPathOf(groupId, memberId), 'referencePointList', index];
+			if (name !== undefined) { if (name) documentNext.setIn([...path, 'name'], name); else if (documentNext.hasIn([...path, 'name'])) documentNext.deleteIn([...path, 'name']); }
+			if (point !== undefined) {
+				const written = referencePointWrite(point, this.formatList);
+				if (written === undefined || point.format === 'own') throw new Error('A declared reference point says where it is itself.');
+				documentNext.setIn([...path, 'point'], typeof written === 'object' ? documentNext.createNode(written) : written);
+			}
+		}, { groupKey });
+	}
+
+	// every reference point parameter of the constraints of a group that is read on a member (its
+	// own, of: self; of those following it, of: its place among their parents): what a change of
+	// the points of that member touches. [{ memberId, key, definition }]
+	referencePointUseListOf(groupId, memberId) {
+		const group = this.groupModelGet(groupId);
+		const result = [];
+		for (const member of group?.memberList ?? []) {
+			if (!member.constraint) continue;
+			for (const definition of this.catalog.constraintTypeByType[member.constraint.type].propertyList ?? []) {
+				if (definition.kind !== 'referencePoint') continue;
+				const subjectId = definition.of === 'self' ? member.id : member.parentIdList[definition.of];
+				if (subjectId === memberId) result.push({ memberId: member.id, key: definition.id, definition: member.constraint[definition.id] });
+			}
+		}
+		return result;
+	}
+
+	// a declared reference point goes: what was measured by it is measured by the same place of
+	// the box, written out, so nothing moves
+	memberReferencePointRemove(groupId, memberId, pointId) {
+		const group = this.groupModelGet(groupId);
+		const member = group?.memberById.get(memberId);
+		const index = this.memberReferencePointListWrittenOf(groupId, memberId).findIndex(item => item.id === pointId);
+		if (!member || index < 0) return false;
+		const box = this.solve().boxByKey.get(groupKeyOf(groupId, memberId));
+		const inPlace = referencePointWrite(referencePointOfOffset(referencePointResolve({ format: 'own', id: pointId }, member, box, this.formatList), box), this.formatList);
+		const isChanged = this.store.changeApply((documentNext) => {
+			const path = this.memberPathOf(groupId, memberId);
+			for (const use of this.referencePointUseListOf(groupId, memberId)) {
+				if (use.definition?.format === 'own' && use.definition.id === pointId) documentNext.setIn([...this.memberPathOf(groupId, use.memberId), 'constraint', use.key], typeof inPlace === 'object' ? documentNext.createNode(inPlace) : inPlace);
+			}
+			if (member.referencePointDefault?.format === 'own' && member.referencePointDefault.id === pointId) documentNext.setIn([...path, 'referencePointDefault'], typeof inPlace === 'object' ? documentNext.createNode(inPlace) : inPlace);
+			documentNext.deleteIn([...path, 'referencePointList', index]);
+			if (documentNext.getIn([...path, 'referencePointList'])?.items?.length === 0) documentNext.deleteIn([...path, 'referencePointList']);
+		});
+		if (isChanged && this.mode?.kind === 'referencePoint' && this.mode.pointId === pointId) this.mode = { ...this.mode, pointId: null };
+		return isChanged;
+	}
+
+	// the default reference point of a member: one it declares (its id), a definition, or null (that
+	// of its outline again). What is measured by its default (its own offset, the offsets of what
+	// follows it) is written again so that nothing moves
+	memberReferencePointDefaultSet(groupId, memberId, value) {
+		const group = this.groupModelGet(groupId);
+		const member = group?.memberById.get(memberId);
+		if (!member) return false;
+		const definition = value === null || value === undefined ? null : typeof value === 'string' ? { format: 'own', id: value } : value;
+		if (definition?.format === 'own' && !member.referencePointList.some(item => item.id === definition.id)) { this.store.message = `It declares no reference point "${definition.id}".`; return false; }
+		const solved = this.solve();
+		const affectedIdList = [...new Set(this.referencePointUseListOf(groupId, memberId).filter(use => !use.definition || use.definition.format === 'default').map(use => use.memberId))];
+		return this.store.changeApply((documentNext) => {
+			const path = [...this.memberPathOf(groupId, memberId), 'referencePointDefault'];
+			const written = referencePointWrite(definition, this.formatList);
+			if (written === undefined) { if (documentNext.hasIn(path)) documentNext.deleteIn(path); } else documentNext.setIn(path, typeof written === 'object' ? documentNext.createNode(written) : written);
+			this.placesKeepWrite(documentNext, groupId, affectedIdList, solved, { subjectById: { [memberId]: { ...member, referencePointDefault: definition } } });
+		});
+	}
+
+	// ---------- the lines of a locator (ParametricLocator.js) ----------
+
+	// the lines of an axis ('x': its vertical lines, 'y': its horizontal ones) of a locator, as read
+	locatorLineListOf(groupId, memberId, axis) {
+		const layout = this.groupModelGet(groupId)?.memberById.get(memberId)?.layout;
+		return layout?.type === 'locator' ? layout[axis === 'x' ? 'xList' : 'yList'] : [];
+	}
+
+	locatorLineListWriteIn(documentNext, groupId, memberId, axis, lineList) {
+		const path = [...this.memberPathOf(groupId, memberId), 'layout', axis === 'x' ? 'xList' : 'yList'];
+		if (lineList.length) documentNext.setIn(path, documentNext.createNode(locatorLineListWrite(lineList)));
+		else if (documentNext.hasIn(path)) documentNext.deleteIn(path);
+	}
+
+	// a line added to an axis: after its last one unless a place is given; answers its id
+	locatorLineAdd(groupId, memberId, axis, { at, name = '' } = {}) {
+		const lineList = this.locatorLineListOf(groupId, memberId, axis);
+		if (this.groupModelGet(groupId)?.memberById.get(memberId)?.layout?.type !== 'locator') return null;
+		const id = this.idGet(lineList.map(line => line.id), 4);
+		const isChanged = this.store.changeApply(documentNext => this.locatorLineListWriteIn(documentNext, groupId, memberId, axis, [...lineList, { id, at: Math.round(at ?? locatorLineAtNext(lineList)), name }]));
+		return isChanged ? id : null;
+	}
+
+	// the place or the name of a line. isFollowerShifted: the lines after it on its axis move as
+	// far (the gap before it changes, the others keep theirs). What stands on the lines follows
+	locatorLineSet(groupId, memberId, axis, lineId, { at, name } = {}, { groupKey = null, isFollowerShifted = false } = {}) {
+		const lineList = this.locatorLineListOf(groupId, memberId, axis);
+		const line = lineList.find(item => item.id === lineId);
+		if (!line) return false;
+		const delta = at === undefined ? 0 : Math.round(at) - line.at;
+		const listNext = lineList.map((item) => {
+			if (item.id === lineId) return { ...item, ...(at !== undefined ? { at: Math.round(at) } : {}), ...(name !== undefined ? { name } : {}) };
+			return isFollowerShifted && delta && item.at > line.at ? { ...item, at: item.at + delta } : item;
+		});
+		return this.store.changeApply(documentNext => this.locatorLineListWriteIn(documentNext, groupId, memberId, axis, listNext), { groupKey });
+	}
+
+	// a line goes: what stood on it stays where it stands, measured from what is left (a box that
+	// ran to it keeps its size as its own)
+	locatorLineRemove(groupId, memberId, axis, lineId) {
+		const group = this.groupModelGet(groupId);
+		const locator = group?.memberById.get(memberId);
+		const lineList = this.locatorLineListOf(groupId, memberId, axis);
+		if (!locator || !lineList.some(line => line.id === lineId)) return false;
+		if (locator.layout.xList.length + locator.layout.yList.length <= 1) { this.store.message = 'A locator keeps at least one line.'; return false; }
+		const key = axis === 'x' ? 'lineX' : 'lineY';
+		const listNext = lineList.filter(line => line.id !== lineId);
+		const layoutNext = { ...locator.layout, [axis === 'x' ? 'xList' : 'yList']: listNext };
+		const solved = this.solve();
+		// a definition as written with the line taken out of it: the origin of the locator on that axis
+		const pointWithout = written => (!written || typeof written !== 'object' || Array.isArray(written) || String(written[key] ?? '') !== lineId ? written : { ...written, [key]: null });
+		const followerList = group.memberList.filter(member => member.parentIdList.includes(memberId) && member.constraint);
+		const isChanged = this.store.changeApply((documentNext) => {
+			const path = this.memberPathOf(groupId, memberId);
+			// the points the locator declares, and its default, no longer name the line
+			const pointListWritten = this.memberReferencePointListWrittenOf(groupId, memberId);
+			pointListWritten.forEach((item, index) => {
+				const next = pointWithout(item.point);
+				if (next !== item.point) documentNext.setIn([...path, 'referencePointList', index, 'point'], documentNext.createNode(next));
+			});
+			const defaultWritten = this.memberGet(groupId, memberId).referencePointDefault;
+			const defaultNext = pointWithout(defaultWritten);
+			if (defaultNext !== defaultWritten) documentNext.setIn([...path, 'referencePointDefault'], documentNext.createNode(defaultNext));
+			this.locatorLineListWriteIn(documentNext, groupId, memberId, axis, listNext);
+			const outline = outlineRead(this.catalog.layoutTypeByType.locator.outlineOf(layoutNext));
+			const subjectById = { [memberId]: { ...locator, layout: layoutNext, outline, referencePointList: locator.referencePointList.map(item => (item.point.format === 'line' && item.point[key] === lineId ? { ...item, point: { ...item.point, [key]: null } } : item)), referencePointDefault: locator.referencePointDefault?.format === 'line' && locator.referencePointDefault[key] === lineId ? { ...locator.referencePointDefault, [key]: null } : locator.referencePointDefault } };
+			// what follows it: a box that ran to the line keeps its size, and every constraint is
+			// written again without the line, so that its member stays where it stands
+			for (const follower of followerList) {
+				const written = this.memberGet(groupId, follower.id).constraint ?? {};
+				const isSpanGone = Array.isArray(written[key]) && written[key].map(String).includes(lineId);
+				if (isSpanGone) this.sizeDictatedAxisKeepWrite(documentNext, groupId, follower.id, solved, axis === 'x' ? 'width' : 'height');
+			}
+			this.placesKeepWrite(documentNext, groupId, followerList.map(member => member.id), solved, {
+				subjectById,
+				inputOf: (member) => {
+					const written = { ...(this.memberGet(groupId, member.id).constraint ?? { type: member.constraint.type }) };
+					for (const [name, value] of Object.entries(written)) {
+						if (name === key && (Array.isArray(value) ? value.map(String).includes(lineId) : String(value) === lineId)) delete written[name];
+						else written[name] = pointWithout(value);
+					}
+					return written;
+				},
+			});
+		});
+		if (isChanged && this.mode?.kind === 'locatorLine' && this.mode.lineId === lineId) this.mode = { ...this.mode, lineId: null };
+		return isChanged;
+	}
+
+	// one axis of a size a constraint dictates, written as the size of the node
+	sizeDictatedAxisKeepWrite(documentNext, groupId, memberId, solved, axis) {
+		const member = this.groupModelGet(groupId)?.memberById.get(memberId);
+		const box = solved.boxByKey.get(groupKeyOf(groupId, memberId));
+		if (member?.nodeId && box) documentNext.setIn([...this.store.nodePathGet(member.nodeId), 'size', axis], Math.max(1, Math.round(box[axis])));
+	}
+
+	// where the chevrons of a locator stand (chevronX, chevronY): a number from its origin, or null
+	// (beside its lines again). Nothing else moves
+	locatorChevronSet(groupId, memberId, key, value, { groupKey = null } = {}) {
+		return this.store.changeApply((documentNext) => {
+			const path = [...this.memberPathOf(groupId, memberId), 'layout', key];
+			if (value === null || value === undefined) { if (documentNext.hasIn(path)) documentNext.deleteIn(path); } else documentNext.setIn(path, Math.round(value));
+		}, { groupKey });
+	}
+
+	// a line of a locator dragged on the canvas: held here while the drag lasts ({ groupId, memberId,
+	// axis, lineId, at, isFollowerShifted, isOverCancel }), so nothing is solved or drawn anew until
+	// it is dropped; dropped, it is written as one step, unless it was let go over the cancel area
+	lineDragSet(lineDrag) { this.lineDrag = lineDrag; }
+	lineDragEnd({ isCancelled = false } = {}) {
+		const drag = this.lineDrag;
+		this.lineDrag = null;
+		if (!drag || isCancelled || drag.isOverCancel) return false;
+		if (drag.axis === 'chevronX' || drag.axis === 'chevronY') return this.locatorChevronSet(drag.groupId, drag.memberId, drag.axis, drag.at);
+		return this.locatorLineSet(drag.groupId, drag.memberId, drag.axis, drag.lineId, { at: drag.at }, { isFollowerShifted: drag.isFollowerShifted });
+	}
+
 	// ---------- what the panel lists ----------
 
 	// the words of a node in a list: what it says, then its kind. Read off the draft the canvas
@@ -727,7 +1115,9 @@ export class ParametricEditStore {
 		const member = this.memberGet(groupId, memberId);
 		if (!member) return { label: memberId, kindLabel: '' };
 		if (member.node) return this.nodeLabelOf(member.node);
-		return { label: member.name || this.catalog.layoutTypeByType[member.layout?.type]?.label || 'Layout', kindLabel: 'Layout', isNameDefault: !member.name };
+		// a layout that arranges nothing is called by what it is (a locator)
+		const layoutType = this.catalog.layoutTypeByType[member.layout?.type];
+		return { label: member.name || layoutType?.label || 'Layout', kindLabel: layoutType?.isChildConstrained ? layoutType.label : 'Layout', isNameDefault: !member.name };
 	}
 
 	// how a member is placed, in a few words
@@ -737,9 +1127,16 @@ export class ParametricEditStore {
 		if (!member) return '';
 		const parentDirect = group.memberById.get(member.parentIdList[0]);
 		// a child of a pattern is its slot: the subject, the caption
-		const layoutParent = parentDirect?.layout ? this.catalog.layoutTypeByType[parentDirect.layout.type] : null;
+		const layoutParent = member.isArranged ? this.catalog.layoutTypeByType[parentDirect.layout.type] : null;
 		const slot = layoutParent?.slotList?.find(item => item.id === member.slot);
-		const placed = slot ? `its ${slot.label.toLowerCase()}` : layoutParent ? `in its ${layoutParent.label.toLowerCase()}` : this.catalog.constraintTypeByType[member.constraint.type].summaryOf(member.constraint);
+		const constraintType = member.constraint ? this.catalog.constraintTypeByType[member.constraint.type] : null;
+		const parentList = memberParentListOf(group, member);
+		// the words of a reference point a constraint names: of the member, or of the parent it is of
+		const pointLabelOf = (key) => {
+			const of = constraintType?.propertyList?.find(definition => definition.id === key)?.of;
+			return referencePointLabelOf(member.constraint[key], of === undefined || of === 'self' ? member : parentList[of], this.formatList).toLowerCase();
+		};
+		const placed = slot ? `its ${slot.label.toLowerCase()}` : layoutParent ? `in its ${layoutParent.label.toLowerCase()}` : constraintType.summaryOf(member.constraint, { pointLabelOf, parentList });
 		return member.layout ? `${this.catalog.layoutTypeByType[member.layout.type].summaryOf(member.layout)} · ${placed}` : placed;
 	}
 

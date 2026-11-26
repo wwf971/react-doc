@@ -173,7 +173,9 @@ export {
   Key,
   Zap,
   Send,
+  Ruler,
   SeparatorHorizontal,
+  SeparatorVertical,
   CircleAlert,
   FileSpreadsheet,
   Shapes,
@@ -214,6 +216,9 @@ export {
   RemoveFormatting,
   Brackets,
   Paintbrush,
+  // what is drawn over what in a diagram (cloud-dev-vis: card-diagram/DiagramDepth.js)
+  BringToFront,
+  SendToBack,
 } from 'lucide-react';
 export { FrameworkProvider, usePathname } from 'fumadocs-core/framework';
 export { default as Link } from 'fumadocs-core/link';

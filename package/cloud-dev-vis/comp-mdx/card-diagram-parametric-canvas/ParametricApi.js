@@ -1,6 +1,7 @@
 import { MEMBER_ROOT_ID, PARAMETRIC_FEATURE_ID, groupKeyOf } from './ParametricData.js';
 import { ParametricEditStore } from './ParametricEditStore.js';
 import { toolListBuild } from './ParametricTool.js';
+import { referencePointWrite } from './ParametricReferencePoint.js';
 
 // The apis of the parametric canvas (card-diagram-parametric-canvas.md#for-an-agent): what the tool
 // bar, the panel and the edit card do to the groups of a diagram, for an agent or a script. They
@@ -44,6 +45,10 @@ export function parametricApiListBuild({ catalog, toolMap }) {
 								return {
 									id: member.id, name: member.name || undefined, nodeId: member.nodeId ?? undefined, layout: member.layout ?? undefined,
 									parentIdList: member.parentIdList, slot: member.slot ?? undefined, constraint: member.constraint ?? undefined,
+									// the reference points it declares and its default one, as written (that of its outline when absent)
+									outline: member.outline.kind,
+									referencePointList: member.referencePointList.length ? member.referencePointList.map(item => ({ id: item.id, name: item.name || undefined, point: referencePointWrite(item.point, catalog.referenceFormatList) })) : undefined,
+									referencePointDefault: referencePointWrite(member.referencePointDefault, catalog.referenceFormatList),
 									summary: session.memberSummaryOf(group.id, member.id),
 									box: box ? { x: Math.round(box.x), y: Math.round(box.y), width: Math.round(box.width), height: Math.round(box.height) } : undefined,
 								};
@@ -51,6 +56,7 @@ export function parametricApiListBuild({ catalog, toolMap }) {
 						})),
 						constraintTypeList: catalog.constraintTypeList.map(item => item.type),
 						layoutTypeList: catalog.layoutTypeList.map(item => ({ type: item.type, slotList: item.slotList?.map(slot => slot.id) })),
+						referenceFormatList: catalog.referenceFormatList.map(item => ({ id: item.id, outlineKindList: item.outlineKindList })),
 						toolList: toolListBuild(toolMap).filter(tool => tool.type === 'tool').map(tool => ({ id: tool.id, label: tool.label, create: tool.create })),
 					};
 				} finally { done(); }
@@ -77,6 +83,36 @@ export function parametricApiListBuild({ catalog, toolMap }) {
 				if (constraintType) return session.memberConstraintTypeSet(groupId, memberId, constraintType);
 				if (!key) { session.store.message = 'Say constraintType, or the key and the value of a parameter.'; return false; }
 				return of === 'layout' ? session.memberLayoutParamSet(groupId, memberId, key, value) : session.memberConstraintParamSet(groupId, memberId, key, value);
+			})),
+			changeApi({ name: 'parametricReferencePointSet', label: 'Change the reference points of a member', description: 'The points a constraint places or measures from. add: declares one (answers its id); set: its name or where it is; remove: takes it away, what was measured by it measured by the same place of the box; default: makes one its default reference point (pointId absent: that of its outline again), nothing moving.', paramList: [
+				groupParam, memberParam,
+				{ name: 'action', type: 'string', isRequired: true, valueList: ['add', 'set', 'remove', 'default'], description: 'what to do' },
+				{ name: 'pointId', type: 'string', description: 'the id of a declared reference point (set, remove, default)' },
+				{ name: 'name', type: 'string', description: 'its name (add, set)' },
+				{ name: 'point', type: 'any', description: 'where it is, as written: center, { side: left, index: 2, count: 3 }, { angle: 45 }, { vertex: 2 }, { lineX, lineY } (add, set)' },
+			] }, withSession((session, { groupId, memberId, action, pointId, name, point }) => {
+				const read = () => (point === undefined ? undefined : session.referencePointReadOf(point));
+				if (action === 'add') return session.memberReferencePointAdd(groupId, memberId, { point: read(), name });
+				if (action === 'set') return session.memberReferencePointSet(groupId, memberId, pointId, { name, point: read() });
+				if (action === 'remove') return session.memberReferencePointRemove(groupId, memberId, pointId);
+				if (action === 'default') return session.memberReferencePointDefaultSet(groupId, memberId, pointId || null);
+				session.store.message = 'action is one of add, set, remove, default.';
+				return false;
+			})),
+			changeApi({ name: 'parametricLocatorLineSet', label: 'Change the lines of a locator', description: 'add: a line on an axis (after its last one unless a place is given; answers its id); set: its place or its name (what stands on it follows; isFollowerShifted: the lines after it move as far); remove: what stood on it stays where it stands.', paramList: [
+				groupParam, memberParam,
+				{ name: 'axis', type: 'string', isRequired: true, valueList: ['x', 'y'], description: 'x: its vertical lines; y: its horizontal lines' },
+				{ name: 'action', type: 'string', isRequired: true, valueList: ['add', 'set', 'remove'], description: 'what to do' },
+				{ name: 'lineId', type: 'string', description: 'the id of the line (set, remove)' },
+				{ name: 'at', type: 'number', description: 'its place from the origin of the locator (add, set)' },
+				{ name: 'name', type: 'string', description: 'its name (add, set)' },
+				{ name: 'isFollowerShifted', type: 'boolean', description: 'set: the lines after it move as far' },
+			] }, withSession((session, { groupId, memberId, axis, action, lineId, at, name, isFollowerShifted }) => {
+				if (action === 'add') return session.locatorLineAdd(groupId, memberId, axis, { at, name });
+				if (action === 'set') return session.locatorLineSet(groupId, memberId, axis, lineId, { at, name }, { isFollowerShifted: isFollowerShifted === true });
+				if (action === 'remove') return session.locatorLineRemove(groupId, memberId, axis, lineId);
+				session.store.message = 'action is one of add, set, remove.';
+				return false;
 			})),
 			changeApi({ name: 'parametricMemberRemove', label: 'Take a member out of its group', description: 'What followed it follows its parent, where it stands; its node stays, free, unless isNodeRemoved.', paramList: [
 				groupParam, memberParam, { name: 'isNodeRemoved', type: 'boolean', description: 'its node goes with it' },

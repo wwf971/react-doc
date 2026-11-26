@@ -128,7 +128,9 @@ export const DiagramNode = observer(function DiagramNode({ id, data }) {
 	// the node selected is resized by the handles on the frame of its selection, in what its box can
 	// change (DiagramNodeResize.js: the same rule for every node); not where the structure is given
 	const contract = registry?.kindByType[node.renderer?.type]?.contract;
-	const resizeAxisList = isSelectedWhole && !editor.isLocked && !editor.store.isStructureFixed ? nodeResizeAxisListOf(node, contract) : [];
+	// a feature of the editor placing the node may decide a part of its size itself (a session's
+	// nodeResizeAxisListGet: between two lines of a locator), which its handles then leave alone
+	const resizeAxisList = isSelectedWhole && !editor.isLocked && !editor.store.isStructureFixed ? (editor.featureList ?? []).reduce((axisList, session) => session.nodeResizeAxisListGet?.(id, axisList) ?? axisList, nodeResizeAxisListOf(node, contract)) : [];
 	return (
 		<div ref={root} className={`doc-vis-node${node.isBackground && !editor ? ' is-background' : ''}${node.size.height === 'auto' ? ' is-height-auto' : ''}${node.isDerived ? ' is-derived' : ''}`} data-search={searchMark.state ?? undefined} data-selected={isSelectedWhole ? '' : undefined} style={{ height: node.size.height === 'auto' ? 'auto' : '100%' }}>
 			<div ref={contentRef} className="doc-vis-node-content not-prose" style={nodeStyleVarsOf(node)}>

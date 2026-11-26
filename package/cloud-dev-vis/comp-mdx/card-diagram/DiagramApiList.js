@@ -4,7 +4,8 @@ import { blockDataGet, blockLocate, docModelEnsure } from '../../../../main/comp
 import { DiagramEditStore } from './DiagramEditStore.js';
 import { diagramCanvasFind, diagramCanvasListGet } from './DiagramCanvasRegistry.js';
 import { lineTypeList } from './DiagramERData.js';
-import { ROUTE_DIRECTION_LIST, routeOverlapListGet, routeResolve, routeTypeHasAnchors, routeTypeIsBezier } from './DiagramRoute.js';
+import { ROUTE_DIRECTION_LIST, routeOverlapListGet, routePathPolylineGet, routeResolve, routeTypeHasAnchors, routeTypeIsBezier } from './DiagramRoute.js';
+import { DEPTH_MOVE_LIST, depthTargetOfKey } from './DiagramDepth.js';
 
 // The apis a diagram component exposes (doc_page_impl_api.md#the-apis-of-a-component,
 // card-diagram-connection-line.md#the-apis): what the edit card does to a connection line,
@@ -96,6 +97,25 @@ function placeInputGet({ x, y, along, offsetX, offsetY }, ends) {
 	if (x === undefined || y === undefined) return { message: 'a place on the canvas needs both x and y' };
 	if (!ends) return { message: 'x and y need the diagram drawn on the page, to know where the ends of the line are: open the document, or give along, offsetX and offsetY' };
 	return { input: { point: { x, y }, ends, ...(along !== undefined ? { along } : {}) } };
+}
+
+// where the nodes and the lines of a diagram are drawn on its canvas, for a step in depth
+// (DiagramEditStore.depthMove: keys of DiagramDepth.js); undefined when it is not drawn on the page
+function depthGeometryOf(canvas) {
+	const geometry = canvas?.geometryGet?.();
+	if (!geometry) return undefined;
+	const dById = new Map((canvas.lineListGet?.() ?? []).map(line => [line.id, line.d]));
+	return {
+		rectOf: (key) => {
+			const target = depthTargetOfKey(key);
+			if (target.nodeId !== undefined) return geometry.rectOf(target.nodeId);
+			const pointList = dById.has(target.connectionId) ? routePathPolylineGet(dById.get(target.connectionId)) : [];
+			if (!pointList.length) return null;
+			const xList = pointList.map(point => point.x);
+			const yList = pointList.map(point => point.y);
+			return { x: Math.min(...xList), y: Math.min(...yList), width: Math.max(...xList) - Math.min(...xList), height: Math.max(...yList) - Math.min(...yList) };
+		},
+	};
 }
 
 // lines of a canvas on top of each other (card-diagram-usage.md#no-lines-on-top-of-each-other)
@@ -241,6 +261,29 @@ export function diagramApiListBuild(registry) {
 			if (!store.nodeGet(nodeId)) return false;
 			if (viewId) store.cardViewSet(nodeId, viewId);
 			return store.rowBreakInsert(nodeId, { afterRowId, text });
+		}),
+		readApi({
+			name: 'diagramDepthListGet',
+			label: 'Read what is drawn over what in a diagram',
+			description: 'The nodes and the lines in drawing order, from the bottom to the top, each with its depth (0 when it writes none). At one depth a background (a color block) is under the lines, the lines under the nodes, and what is written later over what is written earlier.',
+			paramList: [],
+		}, store => ({ orderList: store.depthOrderList.map(item => ({ kind: item.kind, id: item.id, depth: item.depth })) })),
+		changeApi({
+			name: 'diagramDepthSet',
+			label: 'Put a node or a line over or under the others',
+			description: 'Its depth as a number (a higher one is drawn over a lower one; 0 takes the key away), or a move in the drawing order: front (over everything), back (under everything), forward (just over the nearest thing lying on it), backward (just under the nearest under it). A move writes the depths that give exactly that order, as few as possible, and is refused when there is nothing to pass. forward and backward pass the nearest thing that overlaps it when the diagram is drawn on the page, else the next thing in the order.',
+			paramList: [
+				{ name: 'nodeId', type: 'string', description: 'the node' },
+				{ name: 'connectionId', type: 'string', description: 'the line, in the place of a node' },
+				{ name: 'depth', type: 'number', description: 'its depth' },
+				{ name: 'move', type: 'string', valueList: DEPTH_MOVE_LIST, description: 'a move in the drawing order, in the place of a depth' },
+			],
+		}, (store, { nodeId, connectionId, depth, move }, endsGet, diagram) => {
+			if ((nodeId === undefined) === (connectionId === undefined)) { store.message = 'Say nodeId or connectionId, one of them.'; return false; }
+			const target = nodeId === undefined ? { connectionId } : { nodeId };
+			if (move !== undefined) return store.depthMove(target, move, { geometry: depthGeometryOf(diagram.canvas) });
+			if (depth === undefined) { store.message = 'Say its depth, or a move.'; return false; }
+			return store.depthSet(target, depth);
 		}),
 		changeApi({ name: 'connectionLineTypeSet', label: 'Set the line type of a connection', description: 'A route is kept between the right-angled types and dropped on any other change.', paramList: [connectionParam, { name: 'lineType', type: 'string', isRequired: true, valueList: lineTypeList, description: 'the line type' }] },
 			(store, { connectionId, lineType }) => store.connectionSet(connectionId, 'lineType', lineType)),
