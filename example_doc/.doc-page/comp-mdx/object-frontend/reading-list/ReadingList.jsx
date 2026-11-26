@@ -427,6 +427,27 @@ const readingListBookToken = cellTokenDefine({
     );
   }),
   slashAction: readingListBookSlashAction,
+  // typed as its value while a cell is typed (main/doc_page_impl_edit_cell.md#a-token-typed-as-its-value):
+  // the book's name stands in the text, under the label of its path, and is typed where it
+  // stands; saving the cell renames the book (its name, and the title of its data)
+  valueInline: {
+    read: (token, cell) => {
+      const service = cell.context.service;
+      const asset = service?.isEditable ? service.assetGet(token.data.path) : undefined;
+      return asset?.name ? asset.name : undefined;
+    },
+    write: async (token, text, cell) => {
+      const service = cell.context.service;
+      const asset = service?.assetGet(token.data.path);
+      if (!asset) return { code: -1, message: `no book is at ${token.data.path}` };
+      const name = text.trim();
+      if (!name) return { code: -1, message: 'a book needs a title' };
+      const renamed = await service.assetMetaSet(asset.key, { name });
+      if (renamed?.code !== 0) return renamed;
+      const data = service.assetDataGet(asset.key).data ?? {};
+      return service.assetWrite(asset.key, { ...data, title: name }, `the title of ${name}`);
+    },
+  },
 });
 
 // the cell of the list's texts: its own kind first, then the kinds of the page (a link, a

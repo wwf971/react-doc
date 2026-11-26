@@ -69,6 +69,24 @@
 //                  typed at once); undefined beside a token drawn (where 'value')
 //     cardPlaceList   where the card is offered: ['value', 'surface'] (the default).
 //                  ['surface'] keeps a click on the drawn token doing what it does
+//
+//     how its value is typed where it stands (doc_page_impl_edit_cell.md#a-token-typed-as-its-value)
+//     valueInline  optional, for a token that reads a string kept as it is (not made of others,
+//                  not worked out, not formatted): while the cell is typed the token is not
+//                  written out, its value is, typed in place under a small label naming it.
+//       read(token, cell) -> string | undefined
+//                  the value as kept, which its words are while typed; undefined: not such a
+//                  value now (a value made of others, one that cannot be written), and the
+//                  token is written out as any other
+//       write(token, text, cell) -> { code, message } | a promise of one
+//                  keeps a value typed: called when the owner saves the cell
+//                  (cellValueListWrite), not while it is typed
+//       labelGet(token, cell) -> string
+//                  optional: the label over its words; absent: the body of the token
+//                  (name/jp/last)
+//                  the card of such a token is told so (isValueInline): what it offers beside
+//                  the value (a version, another path) is there, the value itself is typed in
+//                  the text
 //   })
 //
 // token: { kind, name, raw, body, data, start, end } (lib/doc-cell.js);
@@ -90,6 +108,7 @@ export function cellTokenDefine(options = {}) {
   for (const key of ['read', 'textGet']) {
     if (options[key] !== undefined && typeof options[key] !== 'function') throw new Error(`cellTokenDefine: ${key} of ${name} must be a function.`);
   }
+  const valueInline = valueInlineRead(name, options.valueInline);
   return Object.freeze({
     name,
     label: String(options.label ?? name),
@@ -103,7 +122,17 @@ export function cellTokenDefine(options = {}) {
     isTriggerDirect: options.isTriggerDirect !== false,
     Card: options.Card,
     cardPlaceList: Object.freeze(cardPlaceListRead(name, options.cardPlaceList)),
+    valueInline,
   });
+}
+
+function valueInlineRead(name, valueInline) {
+  if (valueInline === undefined || valueInline === null) return undefined;
+  if (typeof valueInline !== 'object' || typeof valueInline.read !== 'function' || typeof valueInline.write !== 'function') {
+    throw new Error(`cellTokenDefine: valueInline of ${name} must be { read(token, cell), write(token, text, cell), labelGet? }.`);
+  }
+  if (valueInline.labelGet !== undefined && typeof valueInline.labelGet !== 'function') throw new Error(`cellTokenDefine: valueInline.labelGet of ${name} must be a function.`);
+  return Object.freeze({ read: valueInline.read, write: valueInline.write, labelGet: valueInline.labelGet });
 }
 
 const CARD_PLACE_LIST = ['value', 'surface'];

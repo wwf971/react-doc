@@ -2,7 +2,7 @@
 
 # Portals: Design
 
-A doc page holds more than documents: its frontend objects keep a small system each (the papers of a person, a reading list, a migration), with modes to work on it. Placed in a document, a mode is a block among text. A **portal** shows the same system **as an app of its own, in the whole window**: no side panel, no document around it, a layout made for the work. The documents themselves are one portal among them, the one every doc page has, so a page with portals is one thing shown several ways, switched at its top left.
+A doc page holds more than documents: its frontend objects keep a small system each (the documents of a person in cv, a reading list, a migration), with modes to work on it. Placed in a document, a mode is a block among text. A **portal** shows the same system **as an app of its own, in the whole window**: no side panel, no document around it, a layout made for the work. The documents themselves are one portal among them, the one every doc page has, so a page with portals is one thing shown several ways, switched at its top left.
 
 <!--renderComp=DiagramText-->
 ```text
@@ -111,8 +111,8 @@ config.objectFrontend                    the api of the object providing it, as 
 ```
 
 - **The address is the truth of where the reader is.** A component keeps the place it shows in `at` and reads it back from there, so Back and Forward work, a place is sent as a link, and a reload opens it. What only its look adds (a width, a camera) is its own state.
-- **A portal has its own reading and editing.** No document stands around it, so the portal says whether its objects are changed: `editSet(true)` is its Edit switch. `config.objectFrontend.isEditable` follows it (the object writable, and the portal editing), exactly as it follows the edit mode of a document for a block ([Reading and editing](doc_page_impl_obj_frontend.md#reading-and-editing)).
-- **It draws the modes of its object, it does not rebuild them.** `ObjectFrontendMode { object, mode, param, docState, onBlockChange }` draws a mode of any frontend object where no document is ([A mode outside a document](doc_page_impl_obj_frontend.md#a-mode-outside-a-document)): a paper on its sheet inside an app is the mode that draws it in a document, cells, cards and pages included. A mode asking to switch its block is answered by the portal (`onBlockChange`), which makes of it what an app does: usually another place.
+- **A portal has its own reading and editing.** No document stands around it, so the portal says whether its objects are changed: `editSet(true)` is its Edit switch. `config.objectFrontend.isEditable` follows it (the object writable, and the portal editing), exactly as it follows the edit mode of a document for a block ([Reading and editing](doc_page_impl_obj_frontend.md#reading-and-editing)). Its `docState` says `isEditDirect`: the portal's Edit is the edit of what it shows, so a mode with an edit session of its own (the sheet of a CV, with its own Edit in a document) is in it while the portal is edited and shows no switch of its own; the reader presses one Edit, not two ([The state of the document](doc_page_impl_mdx_comp.md#the-state-of-the-document)).
+- **It draws the modes of its object, it does not rebuild them.** `ObjectFrontendMode { object, mode, param, docState, onBlockChange }` draws a mode of any frontend object where no document is ([A mode outside a document](doc_page_impl_obj_frontend.md#a-mode-outside-a-document)): a document of cv on its sheet inside an app is the mode that draws it in a document, cells, cards and pages included. A mode asking to switch its block is answered by the portal (`onBlockChange`), which makes of it what an app does: usually another place.
 - **Everything of the page is still there**: its stores (`useDocStores`), the shared parts ([Reuse before building](../AGENTS.md#reuse-before-building-the-shared-parts-of-the-page)), the dialogs of the page over the portal (the settings panel, the command palette, a `PanelPopup` it opens). A portal brings a look, not a second page.
 - **Separate folders.** The components of a portal lie in a group of their own in the component folder (`comp-mdx/…/portal/`, with its `comp.yaml`), apart from the modes; what several portals of a package share, apart from each look ([The components of a doc page](doc_page_impl_mdx_comp.md#components-of-a-doc-page)).
 
@@ -180,7 +180,7 @@ The page is never left blank, and never trapped: the note has the switcher too w
 
 - **A portal's address names no document, a document's names no portal** (`portalLocationSearchBuild`, `DocStore.toBrowserHref`): each is whole, so a link is one or the other.
 - **Opening a portal is a step of the history**, and so is a place inside it (`atSet`; `historyMode: 'replace'` for a change that is none, a filter typed). Back leaves the place, then the portal, then the document before it.
-- **A navigation of the documents shows the documents.** A link to a document followed inside an app (in a cell of a paper, from the command palette) closes the portal and opens that document: an app never has to know about documents to be left by one.
+- **A navigation of the documents shows the documents.** A link to a document followed inside an app (in a cell of a CV, from the command palette) closes the portal and opens that document: an app never has to know about documents to be left by one.
 - **What the page opens with.** The portal the address names; else, where the address names no document either, the portal of `PortalDefault`; else the documents. This is how a deployment is fronted by a portal: the address of the site opens the app, and a link to a document still opens the document.
 - **A page embedded without an address** (`routeMode: 'memory'`) keeps the portal and its place in the store only.
 
@@ -218,7 +218,7 @@ The command palette and an agent switch portals with them ([Unified api registry
 
 The reading lists of `example_doc` provide the portal **Library** (`.doc-page/type.yaml`, `portalList` of `example.reading-list`): the smallest useful portal, which draws nothing of the list itself. It lays out two modes the type has already, the shelf and the book chosen, side by side (`ObjectFrontendMode`), keeps what is shown in its place (`find?status=want#/book/sci-fi/dune`), and has an Edit switch and a way to the documents in its bar. The page has two reading lists, so two libraries; the short list names its own in its `portal.yaml`. `example_doc/portal.md` shows them.
 
-The package cv provides two portals over one state, in two looks (`@cv-dev/cv/doc/cv-portal.md`): a desk in Material UI and an archive room in 3D.
+The package cv provides two portals over one state, in two looks (`@cv-dev/cv/doc/cv-portal.md`): a desk in Material UI and an archive room in 3D. Its doc page names the desk in `PortalDefault`, so the page it publishes on GitHub Pages opens on the app, its pages one click away; the desk's words come in English and Japanese, by a language of the package's own.
 
 Zatelier Drawboard provides one portal per project (`@react-doc-db-migration-tool/zatelier/drawboard/doc/zdb_impl_portal.md`): the face of a desktop app made for a browser, every place an address, writing the entry of its own object (its folders, the order of its drawings) while it is shown.
 

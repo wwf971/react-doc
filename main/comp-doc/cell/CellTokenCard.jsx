@@ -18,12 +18,14 @@ import './Cell.css';
 //                     window has no room; kept in the window, what does not fit scrolls inside) |
 //                     'below' (its left edge at the token's, under it, standing in the page: as
 //                     tall as it is, it may go past the bottom of the window, and the page scrolls
-//                     to the rest of it; cardHostGet says in which box)
+//                     to the rest of it; cellTokenCardHostGet says in which box)
 //   part, cell        the token and its cell
 //   where             'value' | 'surface': handed to the Card
 //   markedBy          how the token came to be marked in the typed text ('pointer', 'key', 'open',
 //                     'insert': a slash action just wrote it), handed to the Card: one opened on a
 //                     token just made may take the focus, to go on with it at once
+//   isValueInline     the token is typed as its value (doc_page_impl_edit_cell.md#a-token-typed-as-its-value):
+//                     its value is typed in the text, the card offers the rest; handed to the Card
 //   tokenSet(change)  the token written again ({ body?, param? }), or taken out (null)
 //   close(how)        how: 'escape' | 'button' | 'outside' (a pointer going down outside the card
 //                     and outside isInsideGet(target): the token, the surface it is typed in) |
@@ -34,12 +36,12 @@ import './Cell.css';
 // typed in (a block: as wide as the block, so a text breaks into the lines it will have there;
 // twice the usual width where no place is known), 'normal' gives the usual width back. What is
 // wide is the kind's to say (a value that is a text), never the frame's
-export function CellTokenCard({ anchorRectGet, observeElementGet, placeRectGet, placement = 'right', part, cell, where = 'value', markedBy, tokenSet, close, isInsideGet }) {
+export function CellTokenCard({ anchorRectGet, observeElementGet, placeRectGet, placement = 'right', part, cell, where = 'value', markedBy, isValueInline = false, tokenSet, close, isInsideGet }) {
   const cardRef = useRef(null);
   const [place, placeSet] = useState(null);
   const [widthMode, widthModeSet] = useState('normal');
-  // the box it stands in, chosen once (a card under a token: cardHostGet; beside one: the body)
-  const [host] = useState(() => (placement === 'below' ? cardHostGet(observeElementGet?.()) : document.body));
+  // the box it stands in, chosen once (a card under a token: cellTokenCardHostGet; beside one: the body)
+  const [host] = useState(() => (placement === 'below' ? cellTokenCardHostGet(observeElementGet?.()) : document.body));
   const placeRectGetRef = useRef(placeRectGet);
   placeRectGetRef.current = placeRectGet;
   const closeRef = useRef(close);
@@ -98,15 +100,28 @@ export function CellTokenCard({ anchorRectGet, observeElementGet, placeRectGet, 
     };
     const keyDownHandle = (event) => {
       if (event.key !== 'Escape' || event.defaultPrevented || isInPopupOwn(event.target)) return;
+      // a key typed in what the card holds (a value typed in place) goes to that first: it puts its
+      // text back and keeps the key, and the card stays (keyDownHandleAfter closes it otherwise).
+      // Closed first, the card would hand the focus back to the typed text, and the field, left,
+      // would keep what was typed
+      if (cardRef.current?.contains(event.target)) return;
       event.preventDefault();
       event.stopPropagation();
       closeRef.current('escape');
     };
+    // the same key on its way back up from inside the card: nothing there kept it
+    const keyDownHandleAfter = (event) => {
+      if (event.key !== 'Escape' || event.defaultPrevented || !cardRef.current?.contains(event.target)) return;
+      event.preventDefault();
+      closeRef.current('escape');
+    };
     document.addEventListener('pointerdown', pointerDownHandle, true);
     document.addEventListener('keydown', keyDownHandle, true);
+    document.addEventListener('keydown', keyDownHandleAfter);
     return () => {
       document.removeEventListener('pointerdown', pointerDownHandle, true);
       document.removeEventListener('keydown', keyDownHandle, true);
+      document.removeEventListener('keydown', keyDownHandleAfter);
     };
   }, []);
 
@@ -132,7 +147,7 @@ export function CellTokenCard({ anchorRectGet, observeElementGet, placeRectGet, 
       </div>
       {/* the Card may close itself when its work is done (close()): the kind decides, e.g. after a
           value is saved; the token stays, and a click on it opens the card again */}
-      <Card token={part} cell={cell} tokenSet={tokenSet} close={(how = 'done') => close(how)} widthSet={widthSet} where={where} markedBy={markedBy} />
+      <Card token={part} cell={cell} tokenSet={tokenSet} close={(how = 'done') => close(how)} widthSet={widthSet} where={where} markedBy={markedBy} isValueInline={isValueInline} />
     </div>,
     host,
   );
@@ -179,7 +194,7 @@ function tokenCardPlaceRightGet(rect, widthCardNow, heightCard, widthWide) {
 // sideways (overflow-x: clip, a layout's grid) cuts nothing under the token. The page's scroller is
 // itself the host when it is positioned and nothing inside it is; else the body, whose scroll is
 // the window's
-function cardHostGet(element) {
+export function cellTokenCardHostGet(element) {
   let host;
   let scrollerLast;
   for (let one = element?.parentElement; one && one !== document.body && one !== document.documentElement; one = one.parentElement) {
@@ -199,7 +214,7 @@ function cardHostGet(element) {
 }
 
 // under the token, its left edge at the token's, kept inside the width of the window, in the
-// coordinates of the box it stands in (cardHostGet). As tall as it is: one going past the bottom of
+// coordinates of the box it stands in (cellTokenCardHostGet). As tall as it is: one going past the bottom of
 // the window is scrolled to, as anything else there. A wide card stands under the place the token
 // is typed in, its left edge at the place's
 function tokenCardPlaceBelowGet(rect, widthCardNow, widthWide, placeRect, host) {

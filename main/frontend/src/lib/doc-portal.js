@@ -12,7 +12,7 @@ import { rankOrderCompare } from './doc-rank.js';
 //   portalList:
 //     - id: archive                 its name in its provider: letters, digits, "_" and "-"
 //       label: Archive              how it is named for people
-//       description: the papers of a person, filed as in an archive
+//       description: the documents of a person, filed as in an archive
 //       icon: archive               a name of the page's icon set; absent: the component's own icon
 //       color: "#2f6f5e"            the ground of its icon tile (a css color)
 //       comp: CvPortalArchive       the component drawing it: one exposing "portal"

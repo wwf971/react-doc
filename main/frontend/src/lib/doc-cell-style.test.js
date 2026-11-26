@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-  cellStyleCaretInsertStyleGet, cellStyleCaretIsBetween, cellStyleCaretSideDefaultGet, cellStyleCaretStyleGet, cellStyleInsertRangeGet,
+  CELL_VALUE_KEY, cellStyleCaretInsertStyleGet, cellStyleCaretIsBetween, cellStyleCaretSideDefaultGet, cellStyleCaretStyleGet, cellStyleInsertRangeGet,
   cellStyleMerge, cellStyleOffsetMapGet, cellStyleRangeChange, cellStyleRangeSet, cellStyleRangeStateGet, cellStyleSegAtGet,
   cellStyleSegListNormalize, cellStyleSegListRead, cellStyleSegListSlice, cellStyleSegListSplice, cellStyleSpecRead, cellStyleSpecWrite,
-  cellStyleTextBareGet, cellStyleTextIsStyled, cellStyleTextWrite,
+  cellStyleTextBareGet, cellStyleTextIsStyled, cellStyleTextWrite, cellStyleValueKeyGet, cellStyleValueOffsetMapGet, cellStyleValueTextKeptGet,
 } from './doc-cell-style.js';
 import { cellLinkMatchList, cellRangeRead, cellTextConcat, cellTextParse, cellTextPlainGet, cellTextRangeReplace, cellTextSlice, cellTextStyledParse } from './doc-cell.js';
 import { cellTokenDefine } from '../../../comp-doc/cell/cell-define.js';
@@ -227,3 +227,44 @@ test('the store: a cell reads the styles of its texts, or not', async () => {
   store.styleRawSet(true);
   assert.equal(store.isStyleRaw, true);
 });
+
+// ---------- a token typed as its value (doc_page_impl_edit_cell.md#a-token-typed-as-its-value) ----------
+
+const valueOf = (key) => ({ [CELL_VALUE_KEY]: key });
+const rawByKey = { v1: '{{address/jp/postal}}', v2: '{{name/jp/last}}' };
+const rawOf = (key) => rawByKey[key];
+
+test('the words of a value are a segment of their own: never cut, never joined to words, kept while empty', () => {
+  assert.equal(cellStyleValueKeyGet(valueOf('v1')), 'v1');
+  assert.equal(cellStyleValueKeyGet({ b: true }), '');
+  const segList = cellStyleSegListNormalize([
+    { text: '〒', style: {} }, { text: '100-0001', style: valueOf('v1') }, { text: '', style: valueOf('v2') }, { text: 'a\n{{x}}', style: valueOf('v1') },
+  ], { rangePlainList: [{ start: 12, end: 17 }] });
+  // a line break and words that read as a token stay in the value; the empty one stays where it stood
+  assert.deepEqual(shapeOf(segList), [['〒', ''], ['100-0001', 'cell-value=v1'], ['', 'cell-value=v2'], ['a\n{{x}}', 'cell-value=v1']]);
+  // a text put at the caret of an empty value comes before it; the empty value stays
+  assert.deepEqual(shapeOf(cellStyleSegListSplice([{ text: 'ab', style: {} }, { text: '', style: valueOf('v2') }], 2, 2, [{ text: 'X', style: {} }])), [['abX', ''], ['', 'cell-value=v2']]);
+  // its words take no style, and are no words of a style asked about
+  assert.equal(cellStyleRangeStateGet([{ text: 'ab', style: { b: true } }, { text: 'cd', style: valueOf('v1') }], 0, 4).styleCommon.b, true);
+  assert.equal(cellStyleRangeStateGet([{ text: 'cd', style: valueOf('v1') }], 0, 2).isStylable, false);
+  // the caret at the end of a value goes on in it; at its start with what is before it
+  const caretEnd = cellStyleCaretStyleGet([{ text: '山田', style: valueOf('v2') }, { text: ' 様', style: {} }], 2);
+  assert.equal(cellStyleCaretIsBetween(caretEnd), true);
+  assert.equal(cellStyleValueKeyGet(cellStyleCaretInsertStyleGet(caretEnd, cellStyleCaretSideDefaultGet(caretEnd))), 'v2');
+});
+
+test('a typed text with values is kept with its tokens, its offsets brought over both ways', () => {
+  const segList = [{ text: '〒', style: {} }, { text: '100-0001', style: valueOf('v1') }, { text: ' 東京', style: { b: true } }];
+  assert.equal(cellStyleValueTextKeptGet(segList, rawOf), '〒{{address/jp/postal}}[[ 東京|b]]');
+  // a cell whose words take no style keeps words as they are
+  assert.equal(cellStyleValueTextKeptGet([{ text: '[[a|b]] ', style: {} }, { text: '山田', style: valueOf('v2') }], rawOf, { isStyled: false }), '[[a|b]] {{name/jp/last}}');
+  // a value whose words were cut apart is one token, where its words first stand; an empty value too
+  assert.equal(cellStyleValueTextKeptGet([{ text: '山', style: valueOf('v2') }, { text: '\n', style: {} }, { text: '田', style: valueOf('v2') }], rawOf), '{{name/jp/last}}\n');
+  assert.equal(cellStyleValueTextKeptGet([{ text: '', style: valueOf('v2') }], rawOf), '{{name/jp/last}}');
+  const map = cellStyleValueOffsetMapGet(segList, rawOf);
+  assert.deepEqual(map.valueRangeList, [{ key: 'v1', start: 1, end: 9, bareStart: 1, bareEnd: 22 }]);
+  // in the words of a value: the start of its token; at their end: its end
+  assert.deepEqual([map.bareOf(0), map.bareOf(1), map.bareOf(5), map.bareOf(9), map.bareOf(10)], [0, 1, 1, 22, 23]);
+  assert.deepEqual([map.shownOf(1), map.shownOf(10), map.shownOf(22), map.shownOf(23)], [1, 1, 9, 10]);
+});
+

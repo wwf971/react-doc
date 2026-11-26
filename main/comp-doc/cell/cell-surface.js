@@ -114,6 +114,23 @@ export function cellSurfaceRangeRectGet(element, start, end) {
   return { left: first.left, top: first.top, right: Math.max(...rectList.map((rect) => rect.right)), bottom: last.bottom };
 }
 
+// where a part of the text starts: the box of its first line (a label over the start of a value
+// stands on it); an empty part, the box of the caret there (a line's height, no width)
+export function cellSurfaceRangeStartRectGet(element, start, end) {
+  if (!element) return undefined;
+  const range = cellSurfaceRangeBuild(element, start, Math.max(start, end));
+  const first = [...range.getClientRects()].find((rect) => rect.height > 0);
+  if (first) return first;
+  const rect = range.getBoundingClientRect();
+  if (rect.height > 0) return rect;
+  // a caret where two nodes meet may have no box: the end of the character before it
+  if (start > 0) {
+    const before = [...cellSurfaceRangeBuild(element, start - 1, start).getClientRects()].find((one) => one.height > 0);
+    if (before) return { left: before.right, right: before.right, top: before.top, bottom: before.bottom, width: 0, height: before.height };
+  }
+  return element.getBoundingClientRect();
+}
+
 // the text of the surface as it reads it (innerText; one line break more is written after a text
 // ending with one, so the caret can stand on the last line)
 export function cellSurfaceTextRead(element) {

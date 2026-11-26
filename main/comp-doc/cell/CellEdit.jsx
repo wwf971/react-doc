@@ -1,4 +1,5 @@
-import { useContext, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { observer } from 'mobx-react-lite';
 import {
   cellRangeRead, cellTokenAtGet, cellTokenEdgeArrivalGet, cellTokenSoleGet, cellTokenTextBuild,
@@ -9,11 +10,13 @@ import { EditSourceSurface } from '../edit/EditSourceSurface.jsx';
 import { cellTokenCardIsOffered } from './cell-define.js';
 import { CellStyleBar } from './CellStyleBar.jsx';
 import { CellStyleSurface } from './cell-style-surface.js';
-import { CellTokenCard } from './CellTokenCard.jsx';
+import { CellTokenCard, cellTokenCardHostGet } from './CellTokenCard.jsx';
 import {
-  cellSurfacePointIsOn, cellSurfaceRangeRectGet, cellSurfaceRangeReplace, cellSurfaceSelectionGet, cellSurfaceSelectionSet,
+  cellSurfacePointIsOn, cellSurfaceRangeRectGet, cellSurfaceRangeReplace, cellSurfaceRangeStartRectGet, cellSurfaceSelectionGet, cellSurfaceSelectionSet,
   cellSurfaceTextRead, cellTokenMarkDraw, cellTokenMarkErase,
 } from './cell-surface.js';
+import { cellValueInlineIs, cellValueLabelGet } from './cell-value.js';
+import { EDIT_POPUP_CLASS } from '../edit/use-edit-outside-pointer.js';
 import './Cell.css';
 
 // A cell text typed (doc_page_impl_edit_cell.md#drawing-and-typing): its
@@ -39,6 +42,14 @@ import './Cell.css';
 // text. The card writes the token into the draft (tokenSet), or what the token
 // names through the kind's own write.
 //
+// A token whose kind types it as its value (#a-token-typed-as-its-value, cell-value.js) is not
+// written out: its value is, as words of the text, typed in place, with a label over its start
+// naming it (the body of the token, or what its kind says). Nothing moves when the cell opens: the
+// words are those the cell read, and the label floats. A click on the label marks the token, its
+// card under it, told that the value is typed in the text. What is typed in a value is a draft of
+// it, told apart (onValueChange): the text of the cell still says the token, and the owner keeps the
+// values when it saves (cellValueListWrite). A "/" or "{{" typed in a value is words of it.
+//
 // The component owns the draft and decides what the keys it receives mean
 // (Enter saves in a one-line cell): the keys of the slash menu come first, then
 // those of a marked token, and a key taken is defaultPrevented when it reaches
@@ -51,6 +62,10 @@ import './Cell.css';
 //                       { type: 'point', clientX, clientY } (the click that opened it)
 //   isTokenMarkedOnOpen the token the opening click is on is marked at once, else the token
 //                       that is the whole text: a cell of one value opens with its card
+//   onValueChange(valueList)
+//                       optional: the drafts of the values typed in place, whenever one
+//                       changed: [{ raw, token, textOld, text }] (cell-value.js); the owner
+//                       hands them to cellValueListWrite when it saves
 //   onSelectionChange({ start, end, text, isPlain })
 //                       optional: what is selected in the text, as offsets into its
 //                       bare text (what cellTextRangeReplace takes);
@@ -72,6 +87,7 @@ export const CellEdit = observer(function CellEdit({
   isTabInserted = false,
   ariaLabel = 'The text of the cell',
   onTextChange,
+  onValueChange,
   onSelectionChange,
   onSubmitRequest,
   onCancelRequest,
@@ -100,20 +116,46 @@ export const CellEdit = observer(function CellEdit({
   };
   const textReportRef = useRef(textReport);
   textReportRef.current = textReport;
-  // the surface of a cell accepting styles: its words drawn in their styles, or (isRaw, the
-  // switch of the page) the text as kept. one for the life of the surface
+  const onValueChangeRef = useRef(onValueChange);
+  onValueChangeRef.current = onValueChange;
+  // the surface of a cell accepting styles, or typing some tokens as their values: its words drawn
+  // in their styles, its values as words, or (isRaw, the switch of the page) the text as kept. one
+  // for the life of the surface
   const isStyled = cell?.isStyled === true;
+  const isValueOn = cellValueInlineIs(cell);
   const isRaw = cellStore?.isStyleRaw === true;
   const styleSurfaceRef = useRef(null);
-  if (isStyled && !styleSurfaceRef.current) styleSurfaceRef.current = new CellStyleSurface({ cell, isRaw, onTextChange: (textNext) => textReportRef.current(textNext) });
-  const styleSurface = isStyled ? styleSurfaceRef.current : null;
+  if ((isStyled || isValueOn) && !styleSurfaceRef.current) {
+    styleSurfaceRef.current = new CellStyleSurface({
+      cell,
+      isRaw,
+      onTextChange: (textNext) => textReportRef.current(textNext),
+      onValueChange: (valueList) => onValueChangeRef.current?.(valueList),
+    });
+  }
+  const styleSurface = isStyled || isValueOn ? styleSurfaceRef.current : null;
   if (styleSurface) styleSurface.cell = cell;
   // the tokens of what the surface shows (its offsets: a mark, a caret): a bare text, or the text
-  // as kept while it is typed raw, where a segment's markup is words like any other
+  // as kept while it is typed raw, where a segment's markup is words like any other. words of a
+  // value that read as a token are words of the value
   const partListGet = () => {
     const tokenParse = cell?.tokenParse ?? cell?.parse;
-    return tokenParse ? tokenParse(cellSurfaceTextRead(surfaceRef.current)) : [];
+    const partList = tokenParse ? tokenParse(cellSurfaceTextRead(surfaceRef.current)) : [];
+    if (!styleSurface?.isValueOn || styleSurface.isRaw) return partList;
+    const valueRangeList = styleSurface.valueRangeListGet();
+    return partList.filter((part) => part.type !== 'token' || !valueRangeList.some((range) => range.start <= part.start && part.start < range.end));
   };
+  // a value typed in place, marked from its label: its card under it, as a token's
+  const valueMark = (range) => {
+    const markNow = markRef.current;
+    if (markNow?.valueKey === range.key) {
+      markSet(null);
+      return;
+    }
+    markSet({ start: range.start, end: range.end, by: 'pointer', valueKey: range.key });
+  };
+  // the value a mark names, where it stands now
+  const valueRangeOfMarkGet = (markNow) => (markNow?.valueKey && styleSurface ? styleSurface.valueRangeListGet().find((range) => range.key === markNow.valueKey) : undefined);
 
   // a token marked: the caret at an edge of its words ('start' | 'end'); by: how it came to be
   const tokenMark = (token, edge, by) => {
@@ -235,6 +277,12 @@ export const CellEdit = observer(function CellEdit({
         // the whole token taken out, as a typed delete: Undo brings it back
         event.preventDefault();
         markSet(null);
+        const valueRange = valueRangeOfMarkGet(markNow);
+        if (valueRange) {
+          // a value: the token goes with its words (deleting its words only would empty it)
+          styleSurface.rangeReplace(valueRange.start, valueRange.end, '');
+          return true;
+        }
         cellSurfaceSelectionSet(element, markNow.start, markNow.end);
         document.execCommand('delete');
         return true;
@@ -272,7 +320,15 @@ export const CellEdit = observer(function CellEdit({
       cellSurfaceRangeReplace(element, token.start, token.end, rawNext);
       textReport(cellSurfaceTextRead(element));
     }
-    markSet(change === null ? null : { start: token.start, end: token.start + rawNext.length, by: markRef.current?.by });
+    if (change === null) {
+      markSet(null);
+      return;
+    }
+    // a token typed as its value is a value again where it was (another path, a version pinned):
+    // the mark follows it
+    const valueNext = markRef.current?.valueKey ? styleSurface?.valueRangeListGet().find((range) => range.start === token.start) : undefined;
+    if (valueNext) markSet({ start: valueNext.start, end: valueNext.end, by: markRef.current?.by, valueKey: valueNext.key });
+    else markSet({ start: token.start, end: token.start + rawNext.length, by: markRef.current?.by });
   };
 
   // a slash action wrote a text and asked to have it marked (slashEffect.replace with isMarked):
@@ -297,14 +353,32 @@ export const CellEdit = observer(function CellEdit({
       start = map.bareOf(range.start);
       end = map.bareOf(range.end);
       isWhole = textBare.slice(start, end) === textShown.slice(range.start, range.end);
+    } else if (styleSurface?.isValueOn) {
+      // values stand for their tokens in the bare text: a selection reaching into one is no words only
+      const map = styleSurface.offsetMapGet();
+      textBare = cell.bareGet(styleSurface.textKeptGet());
+      start = map.bareOf(range.start);
+      end = map.bareOf(range.end);
+      isWhole = !map.valueRangeList.some((value) => value.start < range.end && range.start < value.end);
     }
     const tokenParse = cell?.tokenParse ?? cell?.parse;
     const read = cellRangeRead(tokenParse ? tokenParse(textBare) : [], start, end, textBare);
     onSelectionChange({ start, end, text: read.text, isPlain: read.isPlain && isWhole });
   } : undefined;
 
-  const markToken = mark ? cellTokenAtGet(partListGet(), mark.start, mark.end) : undefined;
+  const markValueRange = valueRangeOfMarkGet(mark);
+  const markToken = markValueRange?.token
+    ? { ...markValueRange.token, start: markValueRange.start, end: markValueRange.end }
+    : mark && !mark.valueKey ? cellTokenAtGet(partListGet(), mark.start, mark.end) : undefined;
   const isCardShown = Boolean(markToken) && cellTokenCardIsOffered(markToken.kind, 'surface');
+  // in the words of a value a "/" or "{{" is a word of it, never the start of the slash mode
+  const slash = useMemo(() => (cell?.slash && isValueOn ? {
+    ...cell.slash,
+    isStartRefused: () => {
+      const selection = cellSurfaceSelectionGet(surfaceRef.current);
+      return Boolean(selection) && Boolean(styleSurfaceRef.current?.valueIsBefore(selection.start));
+    },
+  } : cell?.slash), [cell?.slash, isValueOn]);
   return (
     <>
       <EditSourceSurface
@@ -314,7 +388,7 @@ export const CellEdit = observer(function CellEdit({
         text={text}
         textVersion={textVersion}
         selectionInitial={selectionInitial}
-        slash={cell?.slash}
+        slash={slash}
         isLocked={isLocked}
         isFocusedInitial={isFocusedInitial}
         isTabInserted={isTabInserted}
@@ -338,6 +412,7 @@ export const CellEdit = observer(function CellEdit({
           placement="below"
           where="surface"
           markedBy={mark.by}
+          isValueInline={Boolean(markValueRange)}
           part={markToken}
           cell={cell}
           anchorRectGet={() => cellSurfaceRangeRectGet(surfaceRef.current, markToken.start, markToken.end)}
@@ -355,7 +430,83 @@ export const CellEdit = observer(function CellEdit({
           }}
         />
       ) : null}
-      {styleSurface ? <CellStyleBar surface={styleSurface} cell={cell} isRaw={isRaw} isLocked={isLocked} /> : null}
+      {styleSurface && isStyled ? <CellStyleBar surface={styleSurface} cell={cell} isRaw={isRaw} isLocked={isLocked} /> : null}
+      {styleSurface && isValueOn && !isRaw ? <CellValueLabelList surface={styleSurface} surfaceRef={surfaceRef} cell={cell} markKey={mark?.valueKey ?? ''} onChoose={valueMark} /> : null}
     </>
   );
 });
+
+// The labels over the values typed in place: each at the start of its value's words, standing on
+// the top of their first line, floating (in the box a card of the cell stands in), so that nothing
+// of the text moves. The value the caret is in has its label drawn stronger; a label is a button
+// marking its token (its card under it, where its kind has one), and keeps the focus in the text
+const CellValueLabelList = observer(function CellValueLabelList({ surface, surfaceRef, cell, markKey, onChoose }) {
+  // read so that the labels follow every change of the text, its caret and its values
+  const version = surface.state.version;
+  const [host, hostSet] = useState(null);
+  const [placeList, placeListSet] = useState([]);
+  useLayoutEffect(() => {
+    hostSet(cellTokenCardHostGet(surfaceRef.current));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const placeRead = () => {
+    const element = surfaceRef.current;
+    if (!element || !host) return;
+    const isBody = host === document.body;
+    const hostRect = isBody ? null : host.getBoundingClientRect();
+    const caret = surface.selection;
+    const isFocused = document.activeElement === element;
+    const listNext = surface.valueRangeListGet().map((range) => {
+      const rect = cellSurfaceRangeStartRectGet(element, range.start, range.end);
+      const left = isBody ? rect.left + window.scrollX : rect.left - hostRect.left - host.clientLeft + host.scrollLeft;
+      const top = isBody ? rect.top + window.scrollY : rect.top - hostRect.top - host.clientTop + host.scrollTop;
+      const isCurrent = isFocused && Boolean(caret) && caret.start >= range.start && caret.end <= range.end;
+      return { range, left: Math.round(left), top: Math.round(top), isCurrent };
+    });
+    placeListSet((listBefore) => (placeListIsSame(listBefore, listNext) ? listBefore : listNext));
+  };
+  useLayoutEffect(placeRead);
+  useEffect(() => {
+    if (!host) return undefined;
+    window.addEventListener('scroll', placeRead, { capture: true, passive: true });
+    window.addEventListener('resize', placeRead);
+    const observer = new ResizeObserver(() => placeRead());
+    if (surfaceRef.current) observer.observe(surfaceRef.current);
+    return () => {
+      window.removeEventListener('scroll', placeRead, { capture: true });
+      window.removeEventListener('resize', placeRead);
+      observer.disconnect();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [host, version]);
+  if (!host) return null;
+  return createPortal(placeList.map(({ range, left, top, isCurrent }) => {
+    const label = cellValueLabelGet(range.token, cell);
+    const isCardOffered = cellTokenCardIsOffered(range.token?.kind, 'surface');
+    return (
+      <button
+        key={range.key}
+        type="button"
+        className={`doc-cell-value-label ${EDIT_POPUP_CLASS}`}
+        style={{ left: `${left}px`, top: `${top}px` }}
+        data-current={isCurrent ? '' : undefined}
+        data-marked={markKey === range.key ? '' : undefined}
+        data-card={isCardOffered ? '' : undefined}
+        title={isCardOffered ? `${range.token?.kind?.label ?? ''}: ${label}. Its value is typed here; a click opens what else can be done` : `${range.token?.kind?.label ?? ''}: ${label}. Its value is typed here`}
+        tabIndex={-1}
+        // the focus stays in the text, its caret where it was
+        onMouseDown={(event) => event.preventDefault()}
+        onClick={isCardOffered ? () => onChoose(range) : undefined}
+      >
+        <span className="doc-cell-value-label-text">{label}</span>
+      </button>
+    );
+  }), host);
+});
+
+function placeListIsSame(listA, listB) {
+  return listA.length === listB.length && listA.every((one, index) => {
+    const other = listB[index];
+    return one.range.key === other.range.key && one.left === other.left && one.top === other.top && one.isCurrent === other.isCurrent;
+  });
+}

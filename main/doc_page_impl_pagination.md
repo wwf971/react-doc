@@ -42,7 +42,7 @@ compDefine(CvJpSheet, {
     meta: { ... },
     pagination: {
       pageSpec: { width: 210, height: 297, margin: { top: 9.5, right: 10.5, bottom: 10.5, left: 10.5 } },
-      pageClassName: 'doc-cv-jp-paper doc-cv-jp-page',      // the classes of a page's content box
+      pageClassName: 'doc-cv-jp-document doc-cv-jp-page',      // the classes of a page's content box
       pieceListGet: (data, context) => [{ type: 'history', data: { ... } }, ...],
       pieceTypeById: {
         basic:   { Render: BasicPiece },                                         // never cut

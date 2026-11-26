@@ -4,6 +4,7 @@ import { StoreContext } from '../../frontend/src/store/context.js';
 import { useEditOutsidePointer } from '../edit/use-edit-outside-pointer.js';
 import { CellEdit } from './CellEdit.jsx';
 import { CellValue } from './CellValue.jsx';
+import { cellValueListWrite } from './cell-value.js';
 import './Cell.css';
 
 // One cell, drawn and edited where it stands (doc_page_impl_edit_cell.md#the-field):
@@ -18,6 +19,9 @@ import './Cell.css';
 //                     the line, Ctrl/⌘ + Enter saves)
 //   Escape            closes it, the text as it was
 //   a click elsewhere, Tab     saves
+//
+// A token typed as its value (#a-token-typed-as-its-value) is typed in the field as its value;
+// saving writes the values typed (their kinds' own writes) before the text is handed over.
 //
 // Nothing moves when it opens: the surface stands in the box of the value, in
 // its type, and what exists only while it is open floats (the reason of a
@@ -56,7 +60,7 @@ export const CellField = observer(function CellField({
   const isOpen = cellStore?.fieldIsOpen(key) === true;
   const field = isOpen ? cellStore.field : undefined;
   const text = String(value ?? '');
-  const commit = () => void cellStore.fieldCommit(key, (draft) => onCommit?.(draft));
+  const commit = () => void cellStore.fieldCommit(key, (draft) => onCommit?.(draft), (valueList) => cellValueListWrite(cell, valueList));
   useEditOutsidePointer(rootRef, isOpen, commit);
   // inside a line the surface is an inline box, so the line does not break around it
   const isInline = Tag === 'span';
@@ -120,6 +124,7 @@ export const CellField = observer(function CellField({
         isLocked={field.status === 'submitting'}
         ariaLabel={ariaLabel}
         onTextChange={(draft) => cellStore.fieldDraftSet(key, draft)}
+        onValueChange={(valueList) => cellStore.fieldValueListSet(key, valueList)}
         onSubmitRequest={commit}
         onCancelRequest={() => cellStore.fieldClose(key)}
       />

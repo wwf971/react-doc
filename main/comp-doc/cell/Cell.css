@@ -347,3 +347,63 @@ span.doc-cell-field[data-editable][data-empty] {
   max-width: 15rem;
   font-size: 0.7rem;
 }
+
+/* ---------- a token typed as its value (doc_page_impl_edit_cell.md#a-token-typed-as-its-value) ----------
+   its words in the typed text: as the cell read them, a dotted line under them saying they are a
+   value (nothing that takes room: the text does not move when the cell opens). the value the caret
+   is in has the faint ground of the segment the caret is in (::highlight(doc-cell-seg-current)) */
+.doc-cell-value {
+  text-decoration-line: underline;
+  text-decoration-style: dotted;
+  text-decoration-color: rgb(37 99 235 / 55%);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.18em;
+}
+
+/* the label over a value: on the top of its first line, at its start, floating in the box a card of
+   the cell stands in. small, in the type of the page, whatever the type of the cell */
+.doc-cell-value-label {
+  position: absolute;
+  z-index: 69;
+  transform: translateY(calc(-100% - 1px));
+  display: inline-flex;
+  align-items: center;
+  max-width: 16rem;
+  height: 0.95rem;
+  padding: 0 0.3rem;
+  font-family: var(--doc-font-ui, ui-sans-serif, system-ui, sans-serif);
+  font-size: 0.625rem;
+  font-weight: 500;
+  font-style: normal;
+  line-height: 1;
+  letter-spacing: 0;
+  color: rgb(37 99 235 / 85%);
+  white-space: nowrap;
+  background: var(--color-fd-background);
+  border: 1px solid rgb(37 99 235 / 25%);
+  border-radius: 3px;
+  opacity: 0.8;
+  cursor: default;
+}
+
+.doc-cell-value-label-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* a label opening its token's card */
+.doc-cell-value-label[data-card] {
+  cursor: pointer;
+}
+
+.doc-cell-value-label[data-current],
+.doc-cell-value-label[data-marked],
+.doc-cell-value-label:hover {
+  opacity: 1;
+  border-color: rgb(37 99 235 / 55%);
+}
+
+.doc-cell-value-label[data-marked] {
+  color: var(--color-fd-background);
+  background: rgb(37 99 235 / 85%);
+}

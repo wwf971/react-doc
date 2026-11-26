@@ -15,7 +15,7 @@ import './Portal.css';
 //   │ ⌕ Find a portal                      │  from PortalSearchCountMin portals on
 //   │ cv                                   │  a group per doc page, its title when several
 //   │   ▤ Documents                        │
-//   │   ▣ Archive        the papers of …  ✓│  the portal current
+//   │   ▣ Archive        the documents of …  ✓│  the portal current
 //   │   ◈ Reading room   …      🖥 desktop │  what it is made for, where this window is another
 //   │ ──────────────────────────────────── │  a line between the portals of two doc pages
 //   │ example                              │

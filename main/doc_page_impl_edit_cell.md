@@ -12,8 +12,9 @@ the text kept in the data (one string)
   └ styled words ┘       └── the cell's own ──┘   └───────── a link ──────────┘   └──── an object ─────┘
 
 read      read first, then Dune · Guide ↗ · ▢ Short list     words in their styles, every token drawn by its kind
-edited    in the cell itself: words in their styles, tokens written out. "/" lists /book /link /object,
-          "{{" opens a token, words selected have the bar of their styles under them
+edited    in the cell itself: words in their styles, tokens written out (a token typed as its value: that
+          value, a label over it). "/" lists /book /link /object, "{{" opens a token, words selected
+          have the bar of their styles under them
 ```
 
 The kit stands between three parties that know nothing of each other:
@@ -40,6 +41,7 @@ style kinds (how words are drawn)       ──►   the styles of a cell: read, 
 - A **styled segment** is a stretch of words drawn in one style: `[[words|b,color=#c0392b]]`. A **style** is a set of keys (`b`, `color=…`), and a **style kind** says what one key draws and how the author chooses it ([Styles](#styles)).
 - The **bare text** of a cell text is the text without the markup of its segments: its words and its tokens as written. Every offset of the kit counts in it (the start of a token, a selection), so the markup is seen by nothing but the functions reading and writing it.
 - The **owner** of a cell is the component drawing it. It brings its own kinds, keeps the text in its data, and decides when the cell can be edited.
+- A **value typed in place** is a token whose kind reads a string kept as it is (a name, an address of a profile): while the cell is typed, that string stands in the text instead of the token, and is typed as words ([A token typed as its value](#a-token-typed-as-its-value)). The text of the cell keeps the token; the value typed is a **draft** of its own, kept by the kind when the owner saves.
 
 ## Cell text
 
@@ -121,11 +123,18 @@ cellTokenDefine({
     isTriggerDirect                       a brace kind: its opening text enters its first action at once
                                           (default true)
   how one token is shown and changed where it is:
-    Card({ token, cell, tokenSet, close, widthSet, where, markedBy })   optional: its card
+    Card({ token, cell, tokenSet, close, widthSet, where, markedBy, isValueInline })   optional: its card
                                           (#the-card-of-a-token), drawn beside a token selected where it is
                                           drawn (where 'value') and under a token marked in the typed text
                                           (where 'surface'; markedBy: how it came to be marked)
     cardPlaceList                         where the card is offered: ['value', 'surface'] (default both)
+  how its value is typed where it stands, for a token reading a string kept as it is (optional):
+    valueInline: {                        (#a-token-typed-as-its-value)
+      read(token, cell) -> string | undefined     the value as kept; undefined: written out as any token
+      write(token, text, cell) -> { code, message }   keeps a value typed (or a promise of it), when
+                                          the owner saves the cell
+      labelGet(token, cell) -> string     the label over it; absent: the token's body
+    }
 })
 token = { kind, name, raw, body, param, data, start, end }
 cell  = { tokenList, context, contextVersionGet(), contextTouch(), sourcePath, owner, source, object, slash,
@@ -187,8 +196,9 @@ The kinds are a registry beside the token kinds, built the same way: the package
 CellValue { cell, text }          the text drawn: words as they are, every token by its kind, the words
                                   of a styled segment in an element of their own (span.doc-cell-seg).
                                   no other element: the type and box of where it stands
-CellEdit  { cell, text, ... }     the text typed: tokens written out, words in their styles, in
-                                  EditSourceSurface kind "plain" (never an <input>), with the slash of the cell
+CellEdit  { cell, text, ... }     the text typed: tokens written out (or typed as their values), words in
+                                  their styles, in EditSourceSurface kind "plain" (never an <input>), with
+                                  the slash of the cell
 ```
 
 **The slash of a cell** is built by the kit from its kinds (`DocCellStore.slashBuild`):
@@ -200,7 +210,7 @@ CellEdit  { cell, text, ... }     the text typed: tokens written out, words in t
 
 **One page, one menu, one switch.** The slash mode of a cell is the page's (`DocSlashStore`): the same menu, keys and effects as in a paragraph, and `EditSlashToggle` turns it off for cells too.
 
-**Nothing moves** when a cell opens ([the no-jitter rule](doc_page_impl_edit.md#in-place-editing-and-the-no-jitter-rule), rule 9): the surface stands in the box of the value, in its type, at least as wide as the value was read (`CellField` measures it on the click: `field.widthRead`), and never at a width of its own, so a short value (two letters on a label) is not widened by opening it; only typing changes its size; a token drawn inside a line never makes the line taller (a chip of the registry is drawn in the scale of the line in a cell); what exists only while editing floats.
+**Nothing moves** when a cell opens ([the no-jitter rule](doc_page_impl_edit.md#in-place-editing-and-the-no-jitter-rule), rule 9), least of all a cell of one value typed in place, whose words are those it read: the surface stands in the box of the value, in its type, at least as wide as the value was read (`CellField` measures it on the click: `field.widthRead`), and never at a width of its own, so a short value (two letters on a label) is not widened by opening it; only typing changes its size; a token drawn inside a line never makes the line taller (a chip of the registry is drawn in the scale of the line in a cell); what exists only while editing floats.
 
 ### Typing styled text
 
@@ -267,7 +277,7 @@ A token is more than its words: the value it reads, the object it names, how lar
 | `value` | drawn, in a value that can be edited, **selected** by a click | to its right ([below](#a-token-selected-where-it-is-drawn)) |
 | `surface` | written out in the text being typed, **marked** | under it ([below](#a-token-marked-in-the-typed-text)) |
 
-**A card may close itself** (`close()`, which it is handed): the kind decides when its work is done, a value saved in place for instance. The token stays where it is, unmarked, and a click on it opens the card again; in the typed text the caret goes back after the token. A card the kind leaves open is closed by Escape, its close button or a click elsewhere.
+**A card may close itself** (`close()`, which it is handed): the kind decides when its work is done, a value saved in place for instance. The token stays where it is, unmarked, and a click on it opens the card again; in the typed text the caret goes back after the token. A card the kind leaves open is closed by Escape, its close button or a click elsewhere. **Escape goes to the innermost thing first**: typed in a field of the card (a value typed in place), it reaches that field, which puts its text back and keeps the key, and the card stays; a second Escape closes it. The card closes on the first only when nothing inside it kept the key. Closed first, it would hand the focus back to the typed text, and the field it left would keep what was typed.
 
 **A card may ask to be wide** (`widthSet('wide')`, `widthSet('normal')` to go back): it is then as wide as the place the token is typed in, its left edge at the place's (a token in a block of text: as wide as the block, so a text in the card breaks into the lines it will have there), within the window; twice the usual width where the frame knows no place (a token selected where it is drawn). What is wide is the kind's to say, from what it shows (a value that is a text), never from the name of a path. **Under a token, a card stands in the page**, not over the window: it is as tall as it is, may go past the bottom of the window, and the page scrolls to the rest of it, as to anything else below. It stands in the box scrolling the page, over the edges of anything inside that clips (a panel that scrolls of its own, a table that scrolls sideways), and follows its token when such a box scrolls (`cardHostGet` of `CellTokenCard.jsx`). Beside a token (`where: 'value'`) it stays inside the window, what does not fit scrolling inside it.
 
@@ -314,7 +324,7 @@ marked
   ← → onward, a character typed,       unmark it, and do what they do: the caret moves (into the words,
   Escape, a click elsewhere            or away), the character is typed at the edge; Escape only unmarks
   in its card                          the token written again (tokenSet), or what it names changed by
-                                       the kind's own write (a value of a profile, for every paper)
+                                       the kind's own write (a value of a profile, for every document of cv)
 ```
 
 - **A cell opened by a click on a token marks it at once**, and so does a cell whose whole text is one token: the most common cell (one value of a profile) opens with that value's card under it, and a second click on the token reaches its words.
@@ -322,6 +332,33 @@ marked
 - **The mark is drawn by the browser's highlight registry** (`::highlight(doc-cell-token-mark)`), so the surface stays plain text: no element is added to what is typed, the caret moves and the text reads back as before. One token is marked on the page.
 - **`tokenSet` from a card in the surface writes the typed text**, not the owner's data: the draft changes as if typed, and the owner saves it with the rest. A card that changes what the token names (a value kept elsewhere) writes that itself, at once, and says where it is kept.
 - **The card stands under the token**, its left edge at the token's (above it when the window has no room under it), floating: it is a popup of the edit layer, so a click in it does not leave the cell, and the cell keeps its place (rule 9).
+
+### A token typed as its value
+
+A token is written out while its cell is typed, so that what it names can be changed: another path, another object. Many tokens name one value, though, a string kept as it is, and what the author wants to change is that string: the name of a profile, the title of a book. Such a token's kind says so (`valueInline`), and the token is then **typed as its value**: its words stand in the text where the cell drew them, and the token itself is only named by a label over them.
+
+<!--renderComp=DiagramText-->
+```text
+the text as kept      〒{{address/jp/postal}} 東京都…
+read                  〒100-0001 東京都…
+typed                  ┌address/jp/postal┐               the label: floating over the start of
+                      〒100-0001 東京都…                 the value, on its first line, in the
+                        ┈┈┈┈┈┈┈┈                         box a card would stand in
+                        the value, typed as words: a dotted line under them
+saved                 the kind keeps 100-0002 (write), the text of the cell still says the token
+```
+
+- **The kind decides, token by token.** `read(token, cell)` answers the value as kept, or `undefined` when the token reads no such value now: a value made of others or worked out (an age, a whole name joined of two), one shown in a format, a text of several lines or in styles, a value that cannot be written at the moment. Such a token is written out as any other. So a cell mixes both: `{{birth/age}}` written out beside `{{name/jp/last}}` typed in place.
+- **Nothing moves when the cell opens**: the words are those the cell read, and the label floats over them, in the box a card of the cell stands in ([The card of a token](#the-card-of-a-token)); the dotted line under the words takes no room. The label of the value the caret is in is drawn stronger.
+- **Its words are a segment of the typed text** (`cell-style-surface.js`, the same surface that draws styles; a cell whose words take no style uses it too, reading its text as words). Typing at the edge of a value follows the side of the caret, as at the edge of a styled segment ([Typing styled text](#typing-styled-text)): at its end the caret goes on in it, an arrow first changes sides; the faint ground of the segment the caret is in shows whether what is typed goes into it. **A value emptied from inside stays**, empty, where it stood, its label over the place, and what is typed there next is it. A selection reaching past it and deleted takes the token out with it.
+- **Its words are words of the value**: a `/` or `{{` typed in a value is that character, never the start of the slash mode, and words in it that read as a token stay words. No style is set over a value: the bar passes it over, as it passes over a token, and a caret in a value offers none.
+- **A token of such a kind is a value as soon as it is one**: written by a slash action, completed by hand, or pasted, it becomes its value at once, the caret after it.
+- **The label marks the token**: a click on it opens the token's card under it ([A token marked in the typed text](#a-token-marked-in-the-typed-text)), told so (`isValueInline`): the card offers what is not the value (another path, a version) and no field of the value. Written again from the card (`tokenSet`), the token is a value again where it stood. Marked, Backspace takes the token out with its value.
+- **A value typed is a draft, apart from the text.** The text of the cell is not changed by typing a value (it still says the token), so `onTextChange` is not told; `onValueChange(valueList)` is, with every draft (`{ raw, token, textOld, text }`, one per token as written: a token written twice is one value). **The owner keeps the drafts when it saves**: `cellValueListWrite(cell, valueList)` hands each changed one to its kind's `write`, one after another, and answers the first refusal; `CellField` does this itself, values first, then the text ([The field](#the-field)). Escape, or a cell closed without saving, keeps nothing. Undo and redo of the surface hold the values with the rest.
+- **The raw mode** shows the token written out, as kept; back from it, the value is the draft it had.
+- `onSelectionChange` still counts in the bare text as kept, a value standing for its token: a selection reaching into a value is no words only (`isPlain` false).
+
+The package cv types a query of its profile so (`@cv-dev/cv/doc/cv-sheet.md#editing-in-place`); the demonstration's reading list types a book named in a remark as the book's name (`example_doc/object-frontend.md`).
 
 ### A selection made a token
 
@@ -337,12 +374,12 @@ CellField { cell, value, onCommit, isEditable, editUnavailableReason, isMultilin
 a click               opens it, the caret where the click was (only while isEditable)
 Enter                 saves; Shift+Enter breaks the line (isMultiline: Enter breaks, Ctrl/⌘ + Enter saves)
 Escape                first closes the menu of the slash mode, then the field, the text as it was
-a click elsewhere, Tab   saves
+a click elsewhere, Tab   saves: the values typed in place first (their kinds' writes), then the text
 onCommit(text)        answers nothing, or { code, message }: another code than 0 keeps the field
                       open and shows the message under it
 ```
 
-One field is open on the page at a time, and its state is the store's (`DocCellStore.field`: the key, the draft, the text it was opened on, the save in progress and why one was refused). An unchanged text is not handed to the component. A component with a behavior of its own around the text (a card under the cell, several fields open together, a floating surface) uses `CellValue` and `CellEdit` itself and keeps its own state, as the Japanese-style CV of the package cv does.
+One field is open on the page at a time, and its state is the store's (`DocCellStore.field`: the key, the draft, the drafts of its values typed in place, the text it was opened on, the save in progress and why one was refused). An unchanged text is not handed to the component. A component with a behavior of its own around the text (a card under the cell, several fields open together, a floating surface) uses `CellValue` and `CellEdit` itself and keeps its own state, as the Japanese-style CV of the package cv does.
 
 ## Using it in a component
 
@@ -390,7 +427,7 @@ The last step is **delegated**: the registry asks the provider of the reference 
 ## What the kit does not do
 
 - It does not store, validate or version the text: the owner's data does.
-- It is not a rich text editor: a cell text is one string, whose words have styles and nothing more (no paragraph, list or table of its own: what a line is, a block of a CV reads from how the line starts). A token is typed as text and drawn only when the cell is read; what a token offers beyond its text is in its card.
+- It is not a rich text editor: a cell text is one string, whose words have styles and nothing more (no paragraph, list or table of its own: what a line is, a block of a CV reads from how the line starts). A token is typed as text and drawn only when the cell is read (a token typed as its value is typed as that value, which is words too); what a token offers beyond its text is in its card.
 - It lays nothing out on pages. A component paginating its content ([Pagination](doc_page_impl_pagination.md)) draws its pieces with `CellValue` as it draws its block (the cell reaching them through its own context), so a page shows a token as the block does; a piece cut between the lines of its text is drawn from its plain text, the text those lines were measured in.
 - It does not replace the edit layer for documents: an object whose content is a document (a card of a zettelkasten) registers it with the source, and it is edited block by block with every component of the page ([Documents of an object](doc_page_impl_obj_frontend.md#documents-of-an-object)). There, `/link` and `/object` come from the page's slash registry, and `/object` writes the inline form of a document.
 
@@ -399,16 +436,17 @@ The last step is **delegated**: the registry asks the provider of the reference 
 | file | role |
 | --- | --- |
 | `frontend/src/lib/doc-cell.js` | the grammar: parsing a text against kinds, the plain text, the link pattern, the kinds of a cell, its direct triggers; a text as kept changed and cut by bare offsets |
-| `frontend/src/lib/doc-cell-style.js` | styled segments: a text read into segments and written from them, a style set over a range, the sides of a caret, offsets of the text as kept |
+| `frontend/src/lib/doc-cell-style.js` | styled segments: a text read into segments and written from them, a style set over a range, the sides of a caret, offsets of the text as kept; the words of a value as a segment, the text kept with its tokens, the offsets of a typed text with values |
 | `frontend/src/lib/doc-cell-text.js` | the two above without the page, as `@wwf971/react-doc/cell-text` |
 | `frontend/src/store/DocCellStore.ts` | the registries of token and style kinds, a cell (its kinds, its slash, its context, its styles), the open field, the raw switch |
 | `comp-doc/cell/cell-define.js` | `cellTokenDefine`, building the registry by layers |
 | `comp-doc/cell/cell-registry.js` | the package's kinds by id |
 | `comp-doc/cell/use-cell.js` | `useCell`: the cell of a component |
-| `comp-doc/cell/CellValue.jsx`, `CellEdit.jsx`, `CellField.jsx`, `Cell.css` | drawing (a token selected), typing (a token marked, the selection reported), the field |
+| `comp-doc/cell/CellValue.jsx`, `CellEdit.jsx`, `CellField.jsx`, `Cell.css` | drawing (a token selected), typing (a token marked, the selection reported, the labels of the values typed in place), the field |
 | `comp-doc/cell/CellTokenCard.jsx`, `cell-surface.js` | the card of a token, beside or under it; the offsets of the typed text as ranges of its surface, the mark |
 | `comp-doc/cell/cell-style-define.js`, `cell-style-registry.js` | `cellStyleDefine`, the registry built by layers, the css of a style; the package's style kinds |
-| `comp-doc/cell/cell-style-surface.js`, `CellStyleBar.jsx` | the surface typed with its styles drawn (the model kept in step, the sides of the caret, undo, the raw mode); the bar of the words selected |
+| `comp-doc/cell/cell-style-surface.js`, `CellStyleBar.jsx` | the surface typed with its styles drawn and its values typed in place (the model kept in step, the sides of the caret, a value emptied kept, undo, the raw mode); the bar of the words selected |
+| `comp-doc/cell/cell-value.js` | a token typed as its value: what is asked of its kind (its value, its label), the drafts written (`cellValueListWrite`) |
 | `comp-doc/link/link-cell.jsx` | `nav/link`: the link in a cell |
 | `comp-doc/object/object-cell.jsx`, `object-slash.js` | `object/view`: the object view in a cell, its card (the view of the context `panel`); `/object` |
 | `frontend/src/lib/doc-object-complete.js` | the walk of `/object`: a type, an object, inside it |

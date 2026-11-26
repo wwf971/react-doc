@@ -20,15 +20,15 @@ A mode or a component writes what is its own (what its data means, how its place
 
 | A piece of UI | Take | Used by |
 | --- | --- | --- |
-| **a table or a list of items** (a folder's papers, the entries of an item, the instances of a stack) | `FolderView` of react-comp-misc: `data` (`columns`, `colsOrder`, `rows`, `getRowData`), `config` (`bodyHeight` for a panel of one height with its head on top, `compBodyByColId` for the cells, `colWidthById` with `colResize`, `colsOrder` with `colReorder`, `selectionMode: 'none'`), its look restyled under the block's own class (its `comp_folder_useage.md` first) | the mode Papers of the package cv (`CvJpList.jsx`), the mode Contents of map-styles (`ShikuchosonContents.jsx`) |
-| the places of a tree of paths, one at a time (the folders of an object) | the path-based view of cloud-dev-vis: `PathNav.js` (`PathNavStore`, `pathNavBuild`) and `PathNavBar.jsx` (`package/cloud-dev-vis/doc/card-diagram-flexible-switch.md#a-path-based-view-anywhere`) | the switch layer, cv's Papers, map-styles's Contents |
+| **a table or a list of items** (cv's documents in a folder, the entries of an item, the instances of a stack) | `FolderView` of react-comp-misc: `data` (`columns`, `colsOrder`, `rows`, `getRowData`), `config` (`bodyHeight` for a panel of one height with its head on top, `compBodyByColId` for the cells, `colWidthById` with `colResize`, `colsOrder` with `colReorder`, `selectionMode: 'none'`), its look restyled under the block's own class (its `comp_folder_useage.md` first) | the mode Documents of the package cv (`CvJpList.jsx`), the mode Contents of map-styles (`ShikuchosonContents.jsx`) |
+| the places of a tree of paths, one at a time (the folders of an object) | the path-based view of cloud-dev-vis: `PathNav.js` (`PathNavStore`, `pathNavBuild`) and `PathNavBar.jsx` (`package/cloud-dev-vis/doc/card-diagram-flexible-switch.md#a-path-based-view-anywhere`) | the switch layer, cv's Documents, map-styles's Contents |
 | a dialog of a component | `PanelPopup` of `@wwf971/react-doc` (the page's panel contract: moved, resized, its size remembered) | |
-| a popover under a control (a menu of columns) | `AnchoredPopover` of react-doc | cv's Papers |
+| a popover under a control (a menu of columns) | `AnchoredPopover` of react-doc | cv's Documents |
 | a few actions beside a thing edited in place | `EditButtonGroup` of react-doc (below) | |
 | a small value typed in place | the cell editing kit of react-doc: `CellField`, `useCell` (below) | |
 | a tree | `TreeView`, `ItemTree` of react-comp-misc | |
 | tabs | `TabsOnTop` (and `TabPanelDeferred`) of react-comp-misc | |
-| a menu (a right click, a list of actions) | `DocMenu` of react-doc, its entries `docMenuEntryBuild` (an icon and words) and `docMenuSeparatorBuild`: the `Menu` of react-comp-misc the host injects, in the look of the page's menus (`comp-doc/edit/DocMenu.jsx`), never that `Menu` drawn in its own look; a drop-down under a control: `MenuDropDown` of react-comp-misc | the menu of a side-panel item, the menu of blocks, the menu of a row of cv's Papers |
+| a menu (a right click, a list of actions) | `DocMenu` of react-doc, its entries `docMenuEntryBuild` (an icon and words) and `docMenuSeparatorBuild`: the `Menu` of react-comp-misc the host injects, in the look of the page's menus (`comp-doc/edit/DocMenu.jsx`), never that `Menu` drawn in its own look; a drop-down under a control: `MenuDropDown` of react-comp-misc | the menu of a side-panel item, the menu of blocks, the menu of a row of cv's Documents |
 | a choice among a few | `SegmentedControl` of react-comp-misc | |
 | settings, properties | `ConfigPanel` (and its variants), `PropEditor` of react-comp-misc | |
 | key and value pairs | `KeyValues` of react-comp-misc | |

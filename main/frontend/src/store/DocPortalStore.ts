@@ -402,6 +402,9 @@ export class DocPortalStore {
         get isEditing() { return store.isEditing && store.portalIdOpen === id; },
         isEditAvailable: true,
         editReason: '',
+        // the portal's Edit is the edit of what it shows: a mode with an edit session of its own
+        // (a sheet's own Edit) enters it with the portal's, so one switch edits
+        isEditDirect: true,
       });
       service = Object.freeze({
         id,

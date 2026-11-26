@@ -1,12 +1,13 @@
 import { action, observable } from 'mobx';
 import {
-  cellStyleCaretInsertStyleGet, cellStyleCaretIsBetween, cellStyleCaretSideDefaultGet, cellStyleCaretStyleGet, cellStyleClean, cellStyleInsertRangeGet,
-  cellStyleIsEmpty, cellStyleMerge, cellStyleOffsetMapGet, cellStyleRangeChange, cellStyleRangeSet, cellStyleRangeStateGet, cellStyleSegAtGet,
-  cellStyleSegListLengthGet, cellStyleSegListNormalize, cellStyleSegListRead, cellStyleSegListSplice, cellStyleSegListTextGet, cellStyleSpecRead,
-  cellStyleSpecWrite, cellStyleTextWrite,
+  CELL_VALUE_KEY, cellStyleCaretInsertStyleGet, cellStyleCaretIsBetween, cellStyleCaretSideDefaultGet, cellStyleCaretStyleGet, cellStyleClean,
+  cellStyleInsertRangeGet, cellStyleIsEmpty, cellStyleMerge, cellStyleOffsetMapGet, cellStyleRangeChange, cellStyleRangeSet, cellStyleRangeStateGet,
+  cellStyleSegAtGet, cellStyleSegListLengthGet, cellStyleSegListNormalize, cellStyleSegListRead, cellStyleSegListSplice, cellStyleSegListTextGet,
+  cellStyleSpecRead, cellStyleSpecWrite, cellStyleValueKeyGet, cellStyleValueOffsetMapGet, cellStyleValueTextKeptGet,
 } from '../../frontend/src/lib/doc-cell-style.js';
 import { cellStyleShortcutKindGet } from './cell-style-define.js';
 import { cellSurfaceCaretSet, cellSurfaceRangeBuild, cellSurfaceSelectionGet, cellSurfaceSelectionSet } from './cell-surface.js';
+import { cellValueInlineIs, cellValueRead } from './cell-value.js';
 
 // The typed text of a cell with its styles drawn (doc_page_impl_edit_cell.md#typing-styled-text):
 // the surface of a cell accepting styles shows its bare text, the words of a styled segment
@@ -29,11 +30,32 @@ import { cellSurfaceCaretSet, cellSurfaceRangeBuild, cellSurfaceSelectionGet, ce
 // One surface, both ways of typing: with isRaw the text is written out as it is kept, markup
 // and all, and this only follows its selection (the bar of the cell has the switch).
 //
+// Values typed in place (doc_page_impl_edit_cell.md#a-token-typed-as-its-value, cell-value.js):
+// a token whose kind types it as its value (valueInline) is not written out. Its value is, as a
+// segment of its own (a style of the key CELL_VALUE_KEY alone, naming it: 'v1'), drawn in an element
+// of its own, the words of it typed as any words. The text as kept still says the token: a value is
+// written as its token when the text is (textKeptGet), and what is typed in it is a draft of the
+// value (valueByRaw), told to the owner apart (onValueChange). So:
+//
+//   the text as kept     〒{{address/jp/postal}} 東京都
+//   the surface          〒<span data-cell-value="v1">100-0001</span> 東京都
+//
+//   typed at its edge            the side of the caret says, as at the edge of a styled segment
+//   emptied from inside          it stays, empty, where it stood: what is typed there next is it
+//   a token of such a kind       becomes its value: one written by a slash action, or completed
+//     completed in the text      by hand
+//   a style set over it          passes it over: a value has no style of the cell's
+//
+// It also types the cells whose words take no style (cell.isStyled false) but have such kinds: the
+// text is then read and written as words, '[[a|b]]' being those characters.
+//
 // It is the codec of an EditSourceSurface ({ write, read, insert }), and tells its owner the
 // text when a change was not typed (a style set, an undo): onTextChange(text as kept).
 
 export const CELL_SEG_CLASS = 'doc-cell-seg';
 export const CELL_SEG_ATTRIBUTE = 'data-cell-style';
+export const CELL_VALUE_CLASS = 'doc-cell-value';
+export const CELL_VALUE_ATTRIBUTE = 'data-cell-value';
 export const CELL_SEG_CURRENT_HIGHLIGHT = 'doc-cell-seg-current';
 
 const HISTORY_SIZE_MAX = 200;
@@ -73,11 +95,29 @@ export class CellStyleSurface {
   state = observable({ selection: null, style: {}, isStylable: false, pickName: '', version: 0 }, {}, { deep: false });
   // an element of the bar: the focus being in it keeps the bar, and the selection it acts on
   barElement = null;
+  // the values typed in place: the token each key of the surface stands for ({ raw, token }), and
+  // the draft of each value, by its token as written ({ raw, token, textOld, text }: cell-value.js)
+  valueByKey = new Map();
+  valueByRaw = new Map();
+  valueKeyCount = 0;
+  // the tokens whose drafts the owner was last told of: told again when they are others
+  valueRawListTold = '';
+  onValueChange = undefined;
 
-  constructor({ cell, isRaw = false, onTextChange } = {}) {
+  constructor({ cell, isRaw = false, onTextChange, onValueChange } = {}) {
     this.cell = cell;
     this.isRaw = isRaw;
     this.onTextChange = onTextChange;
+    this.onValueChange = onValueChange;
+  }
+
+  // its words take styles (else only values are drawn apart)
+  get isStyleOn() {
+    return this.cell?.isStyled === true;
+  }
+
+  get isValueOn() {
+    return cellValueInlineIs(this.cell);
   }
 
   // ---------- the codec of the surface ----------
@@ -90,12 +130,13 @@ export class CellStyleSurface {
       element.textContent = text.endsWith('\n') ? `${text}\n` : text;
       this.segList = [];
     } else {
-      this.segList = this.normalize(cellStyleSegListRead(text));
+      this.segList = this.normalize(this.valueExpand(this.segListRead(text)).segList);
       cellStyleSurfaceWrite(element, this.segList, this.cell.styleCssGet);
     }
     this.selection = null;
     this.pending = null;
     this.stateUpdate();
+    this.valueDraftSync();
   };
 
   // the text of the surface as it is kept. after a change that is not a composition going on,
@@ -103,7 +144,7 @@ export class CellStyleSurface {
   // the surface is written again when it does not show the model
   read = (element, { isComposing = false } = {}) => {
     if (this.isRaw) return surfaceTextRead(element);
-    if (isComposing) return cellStyleTextWrite(this.normalize(cellStyleSurfaceRead(element)));
+    if (isComposing) return this.textKeptGet(this.normalize(cellStyleSurfaceRead(element)));
     const segListRead = cellStyleSurfaceRead(element);
     const textOld = cellStyleSegListTextGet(this.segList);
     const textNew = cellStyleSegListTextGet(segListRead);
@@ -118,25 +159,34 @@ export class CellStyleSurface {
       }
     }
     segList = this.normalize(segList);
-    const textKeptOld = cellStyleTextWrite(this.segList);
-    const textKept = cellStyleTextWrite(segList);
+    // a value emptied by what was typed in it stays, empty, where it stood
+    const restored = this.valueRestore(segList, this.segList, textOld, textNew);
+    // a token of a kind typing its value, just completed or written by an action: its value
+    const expanded = this.valueExpand(restored.segList);
+    segList = this.normalize(expanded.segList);
+    const length = cellStyleSegListLengthGet(segList);
+    const caretNow = caret ? { start: Math.min(expanded.shift(caret.start), length), end: Math.min(expanded.shift(caret.end), length) } : null;
+    const isChanged = segListSignatureGet(segList) !== segListSignatureGet(this.segList);
     if (!cellStyleSurfaceShapeIs(element, segList)) {
       cellStyleSurfaceWrite(element, segList, this.cell.styleCssGet);
-      if (caret) cellSurfaceSelectionSet(element, Math.min(caret.start, textNew.length), Math.min(caret.end, textNew.length));
+      if (caretNow) cellSurfaceSelectionSet(element, caretNow.start, caretNow.end);
     }
-    if (textKept !== textKeptOld) this.historyPush(isInserted ? 'type' : 'delete');
+    if (isChanged) this.historyPush(isInserted ? 'type' : 'delete');
     this.segList = segList;
-    if (caret) {
-      this.selection = { start: Math.min(caret.start, textNew.length), end: Math.min(caret.end, textNew.length) };
+    if (caretNow) {
+      this.selection = caretNow;
       // what was typed is behind the caret: it goes on in it
       if (isInserted) this.side = 'before';
     }
-    if (textKept !== textKeptOld) {
+    if (isChanged) {
       this.pending = null;
       this.historyCaret = this.selection ? this.selection.start : -1;
     }
+    // the caret where a value was emptied: what is typed next is the value
+    if (restored.key && caretNow && caretNow.start === caretNow.end && caretNow.start === restored.offset) this.pending = { [CELL_VALUE_KEY]: restored.key };
     this.stateUpdate();
-    return textKept;
+    this.valueDraftSync();
+    return this.textKeptGet(segList);
   };
 
   // a text put in the place of the selection as if typed (a paste, a line break): the model is
@@ -222,16 +272,20 @@ export class CellStyleSurface {
       this.isRaw = isRaw;
       return;
     }
-    const text = this.isRaw ? surfaceTextRead(element) : cellStyleTextWrite(this.segList);
+    const text = this.isRaw ? surfaceTextRead(element) : this.textKeptGet(this.segList);
     const selection = cellSurfaceSelectionGet(element) ?? this.selection;
-    const map = cellStyleOffsetMapGet(text);
+    // offsets of the text as kept and of its bare text (words taking no style: the same), and of
+    // the typed text, whose values stand for tokens
+    const map = this.isStyleOn ? cellStyleOffsetMapGet(text) : { rawOf: (offset) => offset, bareOf: (offset) => offset };
+    const valueMapBefore = this.isRaw ? null : this.offsetMapGet();
     this.isRaw = isRaw;
     // the steps kept are those of the other way of typing
     this.undoList = [];
     this.redoList = [];
     this.write(element, text);
     if (selection) {
-      const offsetOf = isRaw ? (offset) => map.rawOf(offset) : (offset) => map.bareOf(offset);
+      const valueMapAfter = this.isRaw ? null : this.offsetMapGet();
+      const offsetOf = isRaw ? (offset) => map.rawOf(valueMapBefore.bareOf(offset)) : (offset) => valueMapAfter.shownOf(map.bareOf(offset));
       cellSurfaceSelectionSet(element, offsetOf(selection.start), offsetOf(selection.end));
       this.selectionSync();
     }
@@ -239,16 +293,145 @@ export class CellStyleSurface {
 
   // ---------- the model ----------
 
-  tokenRangeListGet(textBare) {
-    return (this.cell?.tokenParse ? this.cell.tokenParse(textBare) : []).filter((part) => part.type === 'token');
+  // the tokens of what the surface shows (segList: the segments it is the text of): words of a
+  // value that read as a token are words of the value
+  tokenRangeListGet(textBare, segList = this.segList) {
+    const tokenList = (this.cell?.tokenParse ? this.cell.tokenParse(textBare) : []).filter((part) => part.type === 'token');
+    return tokenList.filter((token) => !cellStyleValueKeyGet(cellStyleSegAtGet(segList, token.start)?.style));
   }
 
   normalize(segList) {
-    return cellStyleSegListNormalize(segList, { rangePlainList: this.tokenRangeListGet(cellStyleSegListTextGet(segList)) });
+    return cellStyleSegListNormalize(segList, { rangePlainList: this.tokenRangeListGet(cellStyleSegListTextGet(segList), segList) });
   }
 
   caretStyleGet(offset) {
     return cellStyleCaretStyleGet(this.segList, offset, { rangeSkipList: this.tokenRangeListGet(cellStyleSegListTextGet(this.segList)) });
+  }
+
+  // a text as kept read into segments: with its styles, or as words when its words take none
+  segListRead(text) {
+    if (this.isStyleOn) return cellStyleSegListRead(text);
+    const textAll = String(text ?? '');
+    return textAll === '' ? [] : [{ text: textAll, style: {} }];
+  }
+
+  // the text as kept of segments: every value written as its token
+  textKeptGet(segList = this.segList) {
+    return cellStyleValueTextKeptGet(segList, (key) => this.valueByKey.get(key)?.raw, { isStyled: this.isStyleOn });
+  }
+
+  // ---------- values typed in place ----------
+
+  // the tokens of segments whose kind types them as their values, made those values: segments,
+  // and shift(offset), where an offset of the segments given stands after (one inside a token:
+  // the end of its value). a value is its draft once typed, else what its kind reads
+  valueExpand(segList) {
+    const none = { segList, shift: (offset) => offset };
+    if (!this.isValueOn) return none;
+    const tokenList = this.tokenRangeListGet(cellStyleSegListTextGet(segList), segList).filter((token) => token.kind?.valueInline);
+    if (tokenList.length === 0) return none;
+    const replaceList = [];
+    let result = segList;
+    // from the last: the offsets of those before stay what they were
+    for (const token of [...tokenList].reverse()) {
+      const draft = this.valueByRaw.get(token.raw);
+      const text = draft ? draft.text : cellValueRead(token, this.cell);
+      if (typeof text !== 'string') continue;
+      if (!draft) this.valueByRaw.set(token.raw, { raw: token.raw, token, textOld: text, text });
+      this.valueKeyCount += 1;
+      const key = `v${this.valueKeyCount}`;
+      this.valueByKey.set(key, { raw: token.raw, token });
+      result = cellStyleSegListSplice(result, token.start, token.end, [{ text, style: { [CELL_VALUE_KEY]: key } }]);
+      replaceList.unshift({ start: token.start, end: token.end, length: text.length });
+    }
+    if (replaceList.length === 0) return none;
+    const shift = (offset) => {
+      let delta = 0;
+      for (const one of replaceList) {
+        if (offset >= one.end) delta += one.length - (one.end - one.start);
+        else if (offset > one.start) return one.start + delta + one.length;
+        else break;
+      }
+      return offset + delta;
+    };
+    return { segList: result, shift };
+  }
+
+  // a value of the segments before that the segments read have lost: kept, empty, where its words
+  // stood, when what changed lay inside them (its words deleted from inside); gone with a change
+  // reaching past them (a selection over it and more). answers the segments, the key of the value
+  // kept so (or ''), and its offset
+  valueRestore(segList, segListBefore, textBefore, textNow) {
+    const result = { segList, key: '', offset: 0 };
+    if (!this.isValueOn) return result;
+    const keyNowSet = new Set(segList.map((seg) => cellStyleValueKeyGet(seg.style)).filter(Boolean));
+    let prefix = 0;
+    while (prefix < textBefore.length && prefix < textNow.length && textBefore[prefix] === textNow[prefix]) prefix += 1;
+    let suffix = 0;
+    while (suffix < textBefore.length - prefix && suffix < textNow.length - prefix
+      && textBefore[textBefore.length - 1 - suffix] === textNow[textNow.length - 1 - suffix]) suffix += 1;
+    const changedEnd = textBefore.length - suffix;
+    for (const range of this.offsetMapGet(segListBefore).valueRangeList) {
+      if (keyNowSet.has(range.key) || range.start > prefix || changedEnd > range.end) continue;
+      result.segList = cellStyleSegListSplice(result.segList, prefix, prefix, [{ text: '', style: { [CELL_VALUE_KEY]: range.key } }]);
+      result.key = range.key;
+      result.offset = prefix;
+      keyNowSet.add(range.key);
+    }
+    return result;
+  }
+
+  // the offsets of the typed text and of the bare text as kept, and where the values stand
+  offsetMapGet(segList = this.segList) {
+    return cellStyleValueOffsetMapGet(segList, (key) => this.valueByKey.get(key)?.raw);
+  }
+
+  // the values the surface shows: [{ key, raw, token, start, end, text }] (offsets of what it shows)
+  valueRangeListGet() {
+    return this.offsetMapGet().valueRangeList.map((range) => {
+      const value = this.valueByKey.get(range.key);
+      return { key: range.key, raw: value?.raw ?? '', token: value?.token, start: range.start, end: range.end, text: cellStyleSegListTextGet(this.segList).slice(range.start, range.end) };
+    });
+  }
+
+  // whether what stands just before an offset is the words of a value (a "/" typed there is a word
+  // of it, not the start of the slash mode)
+  valueIsBefore(offset) {
+    if (this.isRaw) return false;
+    const before = cellStyleSegAtGet(this.segList, offset - 1);
+    return Boolean(before && cellStyleValueKeyGet(before.style));
+  }
+
+  // the drafts of the values the text holds now, one by token: [{ raw, token, textOld, text }]
+  valueListGet() {
+    const rawSet = new Set();
+    for (const seg of this.segList) {
+      const raw = this.valueByKey.get(cellStyleValueKeyGet(seg.style))?.raw;
+      if (raw !== undefined) rawSet.add(raw);
+    }
+    return [...rawSet].map((raw) => ({ ...this.valueByRaw.get(raw) }));
+  }
+
+  // the drafts follow what the values say now; the owner is told when one changed
+  valueDraftSync() {
+    if (!this.isValueOn || this.isRaw) return;
+    const textByRaw = new Map();
+    for (const seg of this.segList) {
+      const raw = this.valueByKey.get(cellStyleValueKeyGet(seg.style))?.raw;
+      if (raw === undefined) continue;
+      textByRaw.set(raw, (textByRaw.get(raw) ?? '') + seg.text);
+    }
+    let isChanged = false;
+    for (const [raw, text] of textByRaw) {
+      const draft = this.valueByRaw.get(raw);
+      if (!draft || draft.text === text) continue;
+      this.valueByRaw.set(raw, { ...draft, text });
+      isChanged = true;
+    }
+    const rawListNow = [...textByRaw.keys()].sort().join('\n');
+    if (rawListNow !== this.valueRawListTold) isChanged = true;
+    this.valueRawListTold = rawListNow;
+    if (isChanged) this.onValueChange?.(this.valueListGet());
   }
 
   // the style of what is typed over the part of the text from start to end (a caret: both the
@@ -286,6 +469,9 @@ export class CellStyleSurface {
         const caretStyle = this.caretStyleGet(start);
         // come from the right, the caret stays with what it was in
         this.side = this.arrow === 'left' && caretStyle.after !== undefined ? 'after' : cellStyleCaretSideDefaultGet(caretStyle);
+        // at an empty value: what is typed there is it
+        const valueEmpty = this.valueRangeListGet().find((range) => range.start === start && range.end === start);
+        if (valueEmpty) this.pending = { [CELL_VALUE_KEY]: valueEmpty.key };
       }
       if (this.state.pickName !== '') this.pickSet('');
     }
@@ -367,10 +553,28 @@ export class CellStyleSurface {
 
   // what the words acted on have of style now: at a caret, what is typed next
   styleNowGet(range = this.rangeGet()) {
-    if (!range || this.isRaw) return { style: {}, isStylable: false };
-    if (range.start === range.end) return { style: this.pending ?? this.insertStyleGet(range.start, range.end), isStylable: true };
+    if (!range || this.isRaw || !this.isStyleOn) return { style: {}, isStylable: false };
+    if (range.start === range.end) {
+      const style = this.pending ?? this.insertStyleGet(range.start, range.end);
+      // typing in a value: its words take no style
+      if (cellStyleValueKeyGet(style)) return { style: {}, isStylable: false };
+      return { style, isStylable: true };
+    }
     const state = cellStyleRangeStateGet(this.segList, range.start, range.end, { rangeSkipList: this.tokenRangeListGet(cellStyleSegListTextGet(this.segList)) });
     return { style: state.styleCommon, isStylable: state.isStylable };
+  }
+
+  // the parts of a range outside the values: what a style set over it reaches
+  rangeOutsideValuesGet(range) {
+    const list = [];
+    let from = range.start;
+    for (const value of this.valueRangeListGet()) {
+      if (value.end <= from || value.start >= range.end) continue;
+      if (value.start > from) list.push({ start: from, end: value.start });
+      from = Math.max(from, value.end);
+    }
+    if (range.end > from) list.push({ start: from, end: range.end });
+    return list;
   }
 
   // a change of style, a key at a time ({ b: true }, { color: null }): over the selected words,
@@ -393,16 +597,22 @@ export class CellStyleSurface {
   styleApply(segListOf, styleOf) {
     const element = this.element;
     const range = this.rangeGet();
-    if (!element || !range || this.isRaw) return;
+    if (!element || !range || this.isRaw || !this.isStyleOn) return;
     if (range.start === range.end) {
+      if (!this.styleNowGet(range).isStylable) {
+        this.surfaceFocus(range);
+        return;
+      }
       this.selection = range;
       this.pending = cellStyleClean(styleOf(this.pending ?? this.insertStyleGet(range.start, range.end)));
       this.surfaceFocus(range);
       this.stateUpdate();
       return;
     }
-    const segList = this.normalize(segListOf(this.segList, range));
-    if (cellStyleTextWrite(segList) === cellStyleTextWrite(this.segList)) {
+    let segListNext = this.segList;
+    for (const part of this.rangeOutsideValuesGet(range)) segListNext = segListOf(segListNext, part);
+    const segList = this.normalize(segListNext);
+    if (segListSignatureGet(segList) === segListSignatureGet(this.segList)) {
       this.surfaceFocus(range);
       return;
     }
@@ -411,10 +621,11 @@ export class CellStyleSurface {
   }
 
   // a part of the typed text replaced by a text as kept (a token written again from its card)
+  // (a token typed as its value is its value there too)
   rangeReplace(start, end, text) {
     if (!this.element || this.isRaw) return;
     this.historyPush('replace');
-    const segList = this.normalize(cellStyleSegListSplice(this.segList, start, end, cellStyleSegListRead(text)));
+    const segList = this.normalize(cellStyleSegListSplice(this.segList, start, end, this.valueExpand(this.segListRead(text)).segList));
     this.modelSet(segList, this.selection);
   }
 
@@ -429,7 +640,8 @@ export class CellStyleSurface {
     this.pending = null;
     this.surfaceFocus(this.selection);
     this.stateUpdate();
-    this.onTextChange?.(cellStyleTextWrite(segList));
+    this.onTextChange?.(this.textKeptGet(segList));
+    this.valueDraftSync();
   }
 
   // the focus back in the typed text, its selection as it was (a control of the bar had it)
@@ -443,8 +655,8 @@ export class CellStyleSurface {
   // ---------- undo ----------
   //
   // the surface writes its own content (a style set, a segment cut at a token), which the
-  // browser's undo knows nothing of: the steps are kept here, each the text as kept and the
-  // selection before a change
+  // browser's undo knows nothing of: the steps are kept here, each the segments (values and all)
+  // and the selection before a change
 
   // kind: 'type' | 'delete' (typed by the browser: characters one after another, at the place
   // the last one left the caret, are one step) | anything else (a step of its own)
@@ -456,7 +668,8 @@ export class CellStyleSurface {
     this.historyKind = kind;
     this.historyTime = now;
     if (isSameBurst) return;
-    this.undoList.push({ text: cellStyleTextWrite(this.segList), selection: this.selection });
+    // the segments, values and all: the text as kept does not hold what a value says
+    this.undoList.push({ segList: segListCopy(this.segList), selection: this.selection });
     if (this.undoList.length > HISTORY_SIZE_MAX) this.undoList.shift();
     this.redoList = [];
   }
@@ -472,9 +685,9 @@ export class CellStyleSurface {
   historyStep(listFrom, listTo) {
     const step = listFrom.pop();
     if (!step || !this.element) return;
-    listTo.push({ text: cellStyleTextWrite(this.segList), selection: this.selection });
+    listTo.push({ segList: segListCopy(this.segList), selection: this.selection });
     this.historyKind = '';
-    this.modelSet(this.normalize(cellStyleSegListRead(step.text)), step.selection);
+    this.modelSet(this.normalize(step.segList), step.selection);
   }
 
   // ---------- what the bar shows ----------
@@ -528,6 +741,16 @@ function surfaceTextRead(element) {
   return element ? element.innerText.replace(/\n$/, '') : '';
 }
 
+// what a model of segments is, for telling whether a change changed it (the words of a value
+// changed the text as kept not at all)
+function segListSignatureGet(segList) {
+  return (segList ?? []).map((seg) => `${cellStyleSpecWrite(seg.style)}\u0001${seg.text}`).join('\u0002');
+}
+
+function segListCopy(segList) {
+  return (segList ?? []).map((seg) => ({ text: seg.text, style: { ...seg.style } }));
+}
+
 // the nodes a surface holds for segments: [{ text, spec }], spec '' a text node, else the
 // element of a styled segment. a text ending with a line break gets one more (surfaceTextRead)
 function nodeSpecListGet(segList) {
@@ -548,7 +771,12 @@ export function cellStyleSurfaceWrite(element, segList, cssGet) {
     const span = document.createElement('span');
     span.className = CELL_SEG_CLASS;
     span.setAttribute(CELL_SEG_ATTRIBUTE, one.spec);
-    Object.assign(span.style, cssGet ? cssGet(segList[index].style) : {});
+    // the words of a value typed in place: no style, a look of their own (Cell.css)
+    const valueKey = cellStyleValueKeyGet(segList[index]?.style);
+    if (valueKey) {
+      span.classList.add(CELL_VALUE_CLASS);
+      span.setAttribute(CELL_VALUE_ATTRIBUTE, valueKey);
+    } else Object.assign(span.style, cssGet ? cssGet(segList[index].style) : {});
     span.textContent = one.text;
     return span;
   }));
@@ -564,8 +792,10 @@ export function cellStyleSurfaceShapeIs(element, segList) {
   return nodeList.every((one, index) => {
     const child = childList[index];
     if (one.spec === '') return child.nodeType === Node.TEXT_NODE && child.nodeValue === one.text;
-    return child.nodeType === Node.ELEMENT_NODE && child.getAttribute(CELL_SEG_ATTRIBUTE) === one.spec
-      && child.childNodes.length === 1 && child.firstChild.nodeType === Node.TEXT_NODE && child.firstChild.nodeValue === one.text;
+    if (child.nodeType !== Node.ELEMENT_NODE || child.getAttribute(CELL_SEG_ATTRIBUTE) !== one.spec) return false;
+    // an empty value: an element with nothing in it
+    if (one.text === '') return child.childNodes.length === 0;
+    return child.childNodes.length === 1 && child.firstChild.nodeType === Node.TEXT_NODE && child.firstChild.nodeValue === one.text;
   });
 }
 

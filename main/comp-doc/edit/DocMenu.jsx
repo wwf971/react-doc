@@ -7,7 +7,7 @@ import './DocEdit.css';
 // the host injects (config.components.Menu, doc_page_impl.md#the-panel-contract), drawn as the
 // menus of the edit layer are (DocEdit.css .doc-edit-mode-menu: the scale of the floating
 // controls, the page's colors), its entries an icon and words. The menu of a side-panel item, the
-// menu of blocks, and a component's own menu (the rows of cv's Papers) are the same thing.
+// menu of blocks, and a component's own menu (the rows of cv's Documents) are the same thing.
 //
 //   <DocMenu
 //     itemList={[docMenuEntryBuild('open', ArrowRight, 'Open'), docMenuSeparatorBuild('rule'),

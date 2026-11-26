@@ -278,7 +278,7 @@ A reader's camera is remembered per path, and so per view, while the block lives
 
 ## A path-based view anywhere
 
-The path bar and the history behind it are a **side feature of this layer**: anything else that shows one place of a tree of paths at a time uses the same two parts, so a reader walks a folder of papers as they walk scenes, and there is one bar to maintain. The switch layer is built on them itself (`SwitchPathBar`, `SwitchStore.history`); the other users are the mode Papers of the package cv (`@cv-dev/cv/doc/cv-sheet.md#the-papers`) and the mode Contents of the package map-styles (`@map-styles/doc/shikuchoson.md#the-mode-contents`).
+The path bar and the history behind it are a **side feature of this layer**: anything else that shows one place of a tree of paths at a time uses the same two parts, so a reader walks a folder of documents as they walk scenes, and there is one bar to maintain. The switch layer is built on them itself (`SwitchPathBar`, `SwitchStore.history`); the other users are the mode Documents of the package cv (`@cv-dev/cv/doc/cv-sheet.md#the-documents`) and the mode Contents of the package map-styles (`@map-styles/doc/shikuchoson.md#the-mode-contents`).
 
 ```text
 PathNav.js       the tree is a provider: { root, labelGet(path), childListGet(path), isFound?(path) }
@@ -293,15 +293,15 @@ PathNavBar.jsx   the bar: back, forward, up, the segments, the menus beside and 
                  its words kept as its title)
 ```
 
-- **The store knows no provider.** What a place is comes from the provider when the view is drawn (`pathNavBuild`), so the store may be kept across mounts ([stores kept across mounts](../../../main/doc_page_impl_mdx_comp_state.md#stores-kept-across-mounts)) while the data changes under it. A place that is gone (a paper removed) shows the nearest place above it that is one, else the root.
+- **The store knows no provider.** What a place is comes from the provider when the view is drawn (`pathNavBuild`), so the store may be kept across mounts ([stores kept across mounts](../../../main/doc_page_impl_mdx_comp_state.md#stores-kept-across-mounts)) while the data changes under it. A place that is gone (a document removed) shows the nearest place above it that is one, else the root.
 - **A root `/`** is a place of its own, the first segment of every path (the top of an object's folders); a root such as `/overview` stays the first segment as the switch layer reads it (`pathNavChain`).
 - **Up** goes to the nearest folder above that is a place, and is a step back can undo, as in a block of scenes.
-- **What it draws under the bar is the host's**: a table of a folder, a sheet of a paper. The bar has no height of its own to change: its path is a strip that never wraps. A table of what lies at a place is `FolderView` of react-comp-misc (with a `bodyHeight`, its head on top), as the mode Papers of the package cv and the mode Contents of map-styles draw theirs, never a table of the host's own (react-doc `AGENTS.md`, Reuse before building).
+- **What it draws under the bar is the host's**: a table of a folder, a sheet of a document. The bar has no height of its own to change: its path is a strip that never wraps. A table of what lies at a place is `FolderView` of react-comp-misc (with a `bodyHeight`, its head on top), as the mode Documents of the package cv and the mode Contents of map-styles draw theirs, never a table of the host's own (react-doc `AGENTS.md`, Reuse before building).
 
 ```jsx
 const store = useCompStateStore(config, 'nav', () => new PathNavStore({ path: '/' }));
 const nav = pathNavBuild(store, provider);            // provider: the host's tree, built from its data
-<PathNavBar nav={nav} label="Path of the papers" trailing={...} />
+<PathNavBar nav={nav} label="Path of the documents" trailing={...} />
 {whatIsAt(nav.pathCurrent)}
 ```
 
@@ -415,7 +415,7 @@ The page is told the document, never the diagram of one scene, so its dirty mark
 | a mounted scene | `scene:{path}` | its views, what is below it | focuses it; never opened for editing (held elsewhere) |
 | a tab member | `tab:{path}` | | focuses it |
 
-A row shows its label, the last segment of its path when the label says something else, a summary (its number of children when folded, "3 views", where a mount reads from, which view is the default or the hover one) and marks (**first**: the root). The scene or view on the canvas is marked by a bar at the left of its row, apart from the focus. The keys focus without opening, so browsing hundreds of scenes loads no diagram; Enter opens.
+A row shows its label, the last segment of its path when the label says something else, a summary (its number of children when folded, "3 views", where a mount reads from, which view is the default or the hover one) and marks (**first**: the root). The scene or view on the canvas is marked by a bar at the left of its row, apart from the focus. The keys focus without opening, so browsing hundreds of scenes loads no diagram; Enter opens; Delete (or Backspace) takes away the scene, view, mount or tab of the row, the scene alone (what is below it stays), saying first what names it, what is below it, or that it is the first scene ([Removing what is selected](card-diagram-impl.md#removing-what-is-selected): the question of the editor, asked of the switch session alone; Ctrl/⌘ + Z in the tree takes it back).
 
 **The relations of what is focused** (the middle part, `SwitchSceneEditGraph.js`): a tree read downward, what leads to it above (the scene its path is under, the scenes embedding, stacking or linking to it, the scene of tabs it is a member of), each line running down one lane at the left into it, and what it leads to below (the scenes below it, those it embeds, stacks, links to in any of its views, the scene it arranges). One node per other scene and side, its relations joined in its words, the line in the look of the strongest (path slate, embed and stack blue, tabs violet, link teal and dashed, a legend in a corner); at most six a side, the rest one node whose click lists them all. A reference naming nothing is a red node. A click goes there, as a click in the tree. Incoming references are those of the block's own scenes; a mounted scene's outgoing ones are read from its source.
 

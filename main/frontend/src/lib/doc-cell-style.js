@@ -44,6 +44,22 @@ const KEY_REGEX = /^[A-Za-z][A-Za-z0-9_-]*$/;
 const WORDS_ESCAPE_REGEX = /[\\[\]|]/g;
 const VALUE_STRIP_REGEX = /[,|[\]{}\n]/g;
 
+// ---------- a value typed in place ----------
+//
+// A token typed as its value (doc_page_impl_edit_cell.md#a-token-typed-as-its-value) is, in the
+// typed text of a cell, a segment whose words are that value: its style holds the key
+// CELL_VALUE_KEY alone, naming the value among those of the surface ('v1'). It is no style: no kind
+// draws it and it is never written as markup (the surface writes the token in its place); it holds
+// what the value holds, a line break or words that read as a token included, so it is never cut;
+// no style is set over it; and it stays while it is empty, where it stood
+export const CELL_VALUE_KEY = 'cell-value';
+
+// the value a segment is the words of, by its style: its key, '' for words of the cell
+export function cellStyleValueKeyGet(style) {
+  const key = style?.[CELL_VALUE_KEY];
+  return typeof key === 'string' ? key : '';
+}
+
 // ---------- a style ----------
 
 // a style as an object of its keys, what cannot be written left out: a key that is no word, a
@@ -147,7 +163,8 @@ export function cellStyleTextIsStyled(textInput) {
 export function cellStyleTextWrite(segList) {
   return cellStyleSegListNormalize(segList).map((seg) => {
     const spec = cellStyleSpecWrite(seg.style);
-    return spec === '' ? plainWrite(seg.text) : `${CELL_STYLE_OPEN}${wordsEscape(seg.text)}${CELL_STYLE_MARK}${spec}${CELL_STYLE_CLOSE}`;
+    // the words of a value, were they ever written here, are words: the surface writes its token
+    return spec === '' || cellStyleValueKeyGet(seg.style) ? plainWrite(seg.text) : `${CELL_STYLE_OPEN}${wordsEscape(seg.text)}${CELL_STYLE_MARK}${spec}${CELL_STYLE_CLOSE}`;
   }).join('');
 }
 
@@ -186,10 +203,10 @@ function plainWrite(text) {
   return written + text.slice(indexLast);
 }
 
-// a segment added to a list being built: an empty one is left out, one of the style of the
-// last is joined to it
+// a segment added to a list being built: an empty one is left out (but the words of a value,
+// which stay where they stood while empty), one of the style of the last is joined to it
 function segPush(segList, text, style) {
-  if (text === '') return;
+  if (text === '' && !cellStyleValueKeyGet(style)) return;
   const last = segList[segList.length - 1];
   if (last && cellStyleIsSame(last.style, style)) last.text += text;
   else segList.push({ text, style: cellStyleClean(style) });
@@ -216,6 +233,11 @@ export function cellStyleSegListNormalize(segListInput, { rangePlainList = [] } 
     const text = String(seg?.text ?? '');
     const start = offset;
     offset += text.length;
+    // the words of a value: as they are, never cut, kept while empty
+    if (cellStyleValueKeyGet(seg?.style)) {
+      segPush(segList, text, seg.style);
+      continue;
+    }
     if (text === '') continue;
     if (cellStyleIsEmpty(seg.style)) {
       segPush(segList, text, {});
@@ -253,11 +275,16 @@ function cutListGet(text, start, rangePlainList) {
   return mergedList;
 }
 
-// the segments of a part of the text (bare offsets), cut at its ends
+// the segments of a part of the text (bare offsets), cut at its ends. an empty value standing at
+// an offset belongs to the part from that offset on: a text put at a caret there comes before it
 export function cellStyleSegListSlice(segList, start, end = Infinity) {
   const sliceList = [];
   let offset = 0;
   for (const seg of segList ?? []) {
+    if (seg.text === '' && cellStyleValueKeyGet(seg.style)) {
+      if (offset >= start && offset < end) segPush(sliceList, '', seg.style);
+      continue;
+    }
     const from = Math.max(start, offset);
     const to = Math.min(end, offset + seg.text.length);
     if (to > from) segPush(sliceList, seg.text.slice(from - offset, to - offset), seg.style);
@@ -310,7 +337,8 @@ function rangeListHolds(rangeList, index) {
   return rangeList.some((range) => range.start <= index && index < range.end);
 }
 
-// what the words of a part of the text have of style (bare offsets):
+// what the words of a part of the text have of style (bare offsets; the words of a value count
+// as no words):
 //   styleCommon   the keys every word of it has, with the value they share ({ b: true })
 //   keyAnyList    the keys some word of it has
 //   isStylable    it holds a word a style can be given to
@@ -325,7 +353,8 @@ export function cellStyleRangeStateGet(segList, start, end, { rangeSkipList = []
     const to = Math.min(end, offset + seg.text.length);
     const segStart = offset;
     offset += seg.text.length;
-    if (to <= from) continue;
+    // the words of a value take no style: they are no words of the cell here
+    if (to <= from || cellStyleValueKeyGet(seg.style)) continue;
     let isWord = false;
     for (let index = from; index < to && !isWord; index += 1) isWord = seg.text[index - segStart] !== '\n' && !rangeListHolds(rangeSkipList, index);
     if (!isWord) continue;
@@ -408,6 +437,81 @@ export function cellStyleInsertRangeGet(textOld, textNew, caretNew) {
   const limit = Math.min(headOld.length, headNew.length);
   while (start < limit && headOld[start] === headNew[start]) start += 1;
   return { start, end: caretNew, lengthOld: headOld.length - start };
+}
+
+// ---------- the typed text and the text as kept, with values in it ----------
+//
+// rawOf(key): the token a value stands for, as written ('{{name/jp/last}}')
+
+// the text as kept of a typed text: every value written as its token, once, where its words first
+// stand; the rest as the cell keeps words: segments written with their styles (isStyled), or the
+// words as they are (a cell whose words take no style: '[[a|b]]' in it is those characters)
+export function cellStyleValueTextKeptGet(segList, rawOf, { isStyled = true } = {}) {
+  const keySeen = new Set();
+  const segListKept = [];
+  for (const seg of segList ?? []) {
+    const key = cellStyleValueKeyGet(seg.style);
+    if (!key) {
+      segListKept.push(seg);
+      continue;
+    }
+    if (keySeen.has(key)) continue;
+    keySeen.add(key);
+    segListKept.push({ text: String(rawOf(key) ?? ''), style: {} });
+  }
+  return isStyled ? cellStyleTextWrite(segListKept) : segListKept.map((seg) => seg.text).join('');
+}
+
+// the offsets of a typed text (its values as their words) and of its bare text as kept (its values
+// as their tokens), and the places of its values:
+//   bareOf(offset)      the bare offset of an offset of the typed text: in the words of a value,
+//                       the start of its token (at their end: the end of the token)
+//   shownOf(offset)     the offset of the typed text for a bare one: in a token typed as its value,
+//                       the start of its words (at the end of the token: the end of its words)
+//   valueRangeList      [{ key, start, end, bareStart, bareEnd }]: a value's words, one range for
+//                       pieces of it standing together
+export function cellStyleValueOffsetMapGet(segList, rawOf) {
+  const pieceList = [];
+  const keySeen = new Set();
+  let shown = 0;
+  let bare = 0;
+  for (const seg of segList ?? []) {
+    const key = cellStyleValueKeyGet(seg.style);
+    const length = seg.text.length;
+    const lengthBare = !key ? length : keySeen.has(key) ? 0 : String(rawOf(key) ?? '').length;
+    if (key) keySeen.add(key);
+    pieceList.push({ key, start: shown, end: shown + length, bareStart: bare, bareEnd: bare + lengthBare });
+    shown += length;
+    bare += lengthBare;
+  }
+  const valueRangeList = [];
+  for (const piece of pieceList) {
+    if (!piece.key) continue;
+    const last = valueRangeList[valueRangeList.length - 1];
+    if (last && last.key === piece.key && last.end === piece.start) {
+      last.end = piece.end;
+      last.bareEnd = piece.bareEnd;
+    } else valueRangeList.push({ ...piece });
+  }
+  return {
+    lengthShown: shown,
+    lengthBare: bare,
+    valueRangeList,
+    bareOf: (offsetInput) => {
+      const offset = Math.max(0, Math.min(shown, offsetInput));
+      const piece = pieceList.find((one) => one.start <= offset && offset <= one.end);
+      if (!piece) return Math.min(bare, offset);
+      if (!piece.key) return piece.bareStart + (offset - piece.start);
+      return offset === piece.end && piece.end > piece.start ? piece.bareEnd : piece.bareStart;
+    },
+    shownOf: (offsetInput) => {
+      const offset = Math.max(0, Math.min(bare, offsetInput));
+      const piece = pieceList.find((one) => one.bareStart <= offset && offset <= one.bareEnd);
+      if (!piece) return Math.min(shown, offset);
+      if (!piece.key) return piece.start + (offset - piece.bareStart);
+      return offset === piece.bareEnd && piece.bareEnd > piece.bareStart ? piece.end : piece.start;
+    },
+  };
 }
 
 // ---------- offsets of the text as kept ----------

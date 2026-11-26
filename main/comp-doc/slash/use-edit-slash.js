@@ -24,7 +24,11 @@ import { EditSlashMenu } from './EditSlashMenu.jsx';
 //                          isPageActionIncluded?  the page's too (default true)
 //                          triggerList?           direct triggers: [{ text, action, endList? }],
 //                                                 a text entering the param mode of an
-//                                                 action at once ("{{" in a cell) }
+//                                                 action at once ("{{" in a cell)
+//                          isStartRefused?()      true where what was just typed is no start
+//                                                 of the slash mode however it reads: a "/"
+//                                                 typed in the words of a value of a cell
+//                                                 (doc_page_impl_edit_cell.md#a-token-typed-as-its-value) }
 //   textBeforeCaretGet   (element) => the text from the start of the
 //                        surface to the caret, as the surface reads it
 //   charAfterCaretGet    (element) => the character after the caret, '' at
@@ -129,6 +133,7 @@ export function useEditSlash(elementRef, slash, { textBeforeCaretGet, charAfterC
     const trigger = inputEvent.data === '/' ? undefined : slashTriggerMatch(lineState.lineBefore, slash.triggerList);
     const isSlash = inputEvent.data === '/' && slashTriggerIs(lineState.lineBefore, charAfterCaretGet && elementRef.current ? charAfterCaretGet(elementRef.current) : '');
     if (!isSlash && !(trigger && trigger.text.endsWith(inputEvent.data))) return;
+    if (slash.isStartRefused?.()) return;
     const textStart = isSlash ? '/' : trigger.text;
     slashStore.slashStart(surfaceId, {
       anchor: { lineIndex: lineState.lineIndex, column: lineState.lineBefore.length - textStart.length },

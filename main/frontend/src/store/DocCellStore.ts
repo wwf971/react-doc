@@ -37,9 +37,11 @@ import { cellStyleCssGet, cellStyleListResolve } from '../../../comp-doc/cell/ce
 //                   a token whose kind has a card is selected by a click in a cell
 //                   that can be edited, and its card stands beside it
 //   field           the one field open on the page (CellField), or undefined:
-//                   { key, draft, textBase, status, message, point, widthRead }
+//                   { key, draft, textBase, valueList, status, message, point, widthRead }
 //                     key        the field, unique on the page while it is drawn
 //                     textBase   the text it was opened on
+//                     valueList  the drafts of the values typed in place (comp-doc/cell/cell-value.js),
+//                                written by their kinds when it is saved, before the text
 //                     point      where it was clicked: the caret goes there
 //                     widthRead  the width of the value as it was read (layout pixels): the
 //                                field opens at least that wide, so opening it moves nothing
@@ -98,6 +100,8 @@ export function cellStyleCssCachedBuild(styleList: any[]) {
 
 export type CellField = {
   key: string; draft: string; textBase: string; status: 'idle' | 'submitting'; message: string;
+  // the values typed in place: { raw, token, textOld, text } (cell-value.js)
+  valueList?: { raw: string; token: any; textOld: string; text: string }[];
   // where the field was clicked (viewport coordinates): the caret goes to the text nearest to it
   point?: { clientX: number; clientY: number };
   // the width of the value as read, which the open field keeps as its least (no jitter on opening)
@@ -291,6 +295,11 @@ export class DocCellStore {
     this.field = { ...this.field!, draft };
   }
 
+  fieldValueListSet(key: string, valueList: CellField['valueList']) {
+    if (!this.fieldIsOpen(key)) return;
+    this.field = { ...this.field!, valueList: valueList ?? [] };
+  }
+
   fieldClose(key?: string) {
     if (key !== undefined && !this.fieldIsOpen(key)) return;
     this.field = undefined;
@@ -299,18 +308,24 @@ export class DocCellStore {
   // the draft handed to the component (commit: what its onCommit answers, a
   // result { code, message } or nothing): the field closes when it took it,
   // and stays open with the reason when it refused. an unchanged text is
-  // not handed over
-  async fieldCommit(key: string, commit: (text: string) => any): Promise<void> {
+  // not handed over. the values typed in place are written first, by their
+  // kinds (valueListWrite: cellValueListWrite of the cell); one refused
+  // keeps the field open, the text not handed over
+  async fieldCommit(key: string, commit: (text: string) => any, valueListWrite?: (valueList: any[]) => any): Promise<void> {
     const field = this.field;
     if (!field || field.key !== key || field.status === 'submitting') return;
-    if (field.draft === field.textBase) {
+    const valueChangedList = (field.valueList ?? []).filter((value) => value.text !== value.textOld);
+    const isTextChanged = field.draft !== field.textBase;
+    if (!isTextChanged && (valueChangedList.length === 0 || !valueListWrite)) {
       this.fieldClose(key);
       return;
     }
     this.field = { ...field, status: 'submitting', message: '' };
     let result: any;
     try {
-      result = await commit(field.draft);
+      if (valueChangedList.length > 0 && valueListWrite) result = await valueListWrite(valueChangedList);
+      const isValueRefused = result && typeof result === 'object' && typeof result.code === 'number' && result.code !== 0;
+      if (!isValueRefused && isTextChanged) result = await commit(field.draft);
     } catch (error: any) {
       result = { code: -1, message: String(error?.message ?? error) };
     }

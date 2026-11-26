@@ -108,6 +108,9 @@ export { CellValue } from '../../comp-doc/cell/CellValue.jsx';
 export { CellEdit } from '../../comp-doc/cell/CellEdit.jsx';
 export { CellField } from '../../comp-doc/cell/CellField.jsx';
 export { cellTokenDefine } from '../../comp-doc/cell/cell-define.js';
+// a token typed as its value (doc_page_impl_edit_cell.md#a-token-typed-as-its-value): the drafts
+// CellEdit reports (onValueChange) written by their kinds when the owner saves
+export { cellValueIsChanged, cellValueListWrite } from '../../comp-doc/cell/cell-value.js';
 // the styles of the words of a cell (doc_page_impl_edit_cell.md#styles): a component defines a
 // look of its own with cellStyleDefine and hands it to useCell({ styleList }); the package's
 // kinds (bold, a color, a size) are there for every cell

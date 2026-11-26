@@ -398,6 +398,10 @@ export type DocStateService = {
   readonly isEditing: boolean;
   readonly isEditAvailable: boolean;
   readonly editReason: string;
+  // the host's edit mode is the edit of what it draws (a portal), not of a page of many blocks: a
+  // component with an edit session of its own is in it while isEditing, with no switch of its own.
+  // absent (a document): false
+  readonly isEditDirect?: boolean;
 };
 
 export class DocEditStore {
