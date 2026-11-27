@@ -28,7 +28,10 @@ import './CardComp.css';
 //                         Zoom cards' Fields) is drawn in it all the while, config.edit.isInPlace: a
 //                         value typed where it stands at a click, each one written into the draft at
 //                         once as a step of its own; no bar, no session. Its values are typed in the
-//                         edit card too, when it offers them (expose.dataFields: CardCompData.js)
+//                         edit card too, when it offers them (expose.dataFields: CardCompData.js).
+//                         config.edit.isSelected says whether the card is the one selected: what the
+//                         component floats for itself as a whole (its +) stands on that one, so a
+//                         canvas does not show the controls of every card at once
 //   the card selected     a floating group over it (EditButtonGroup): a button per edit mode of its
 //                         component, and the component chosen (a searchable menu: the components
 //                         of the page a card may hold, CardCompEntry.js); an empty card offers the
@@ -268,7 +271,9 @@ export const CardComp = observer(function CardComp({ node, editor, nodeId }) {
 			isEdit: true,
 			edit: {
 				modeId: session ? session.modeId : modeInPlace.id, label: meta?.label ?? data.comp, format: 'md', block: undefined, isSurfaceFloating: false,
-				...(session ? {} : { isInPlace: true }),
+				// in place: whether this card is the one selected (what floats for the component as a
+				// whole, its +, is shown on the card selected, not on every card of the canvas at once)
+				...(session ? {} : { isInPlace: true, isSelected }),
 				session: { status: editor.isLocked ? 'submitting' : 'editing', message: '', textDraft: data.raw ?? '' },
 				submitPrepareSet: () => () => {},
 				receiverSet: () => () => {},
@@ -286,16 +291,22 @@ export const CardComp = observer(function CardComp({ node, editor, nodeId }) {
 
 	return (
 		<div className={`doc-card-comp${session ? ' is-editing nodrag nopan nowheel' : ''}${data.comp ? '' : ' is-empty'}`} data-comp={data.comp || undefined} data-size-mode={sizeMode}>
-			{/* where the bar of the component's editor goes, and the group of the card: over its top edge, at the size of the screen */}
-			{editor ? <div ref={floatElementSet} className="doc-card-comp-float nodrag nopan" /> : null}
-			{/* its group steps aside while something is dragged (a card over a holder: the mark of the
-			    holder stands where the group was, DiagramNodeTake.js) */}
-			{editor && isSelected && !session && !isFixed && definition && !isDragging ? (
-				<div className="doc-card-comp-bar nodrag nopan">
-					{actionList.length ? <EditButtonGroup actionList={actionList} isLocked={editor.isLocked} ariaLabel="The component of the card" /> : null}
-					{viewMenu}
-					{chooser(true)}
-					{chooseMessage ? <span className="doc-card-comp-message" role="alert">{chooseMessage}</span> : null}
+			{/* over its top edge, at the size of the screen, one row: the group of the card, then where the
+			    component floats what is its own (the bar of its editor in a session; in place, what it has
+			    for itself as a whole, its +), so the two never stand over each other */}
+			{editor ? (
+				<div className="doc-card-comp-over nodrag nopan">
+					{/* its group steps aside while something is dragged (a card over a holder: the mark of the
+					    holder stands where the group was, DiagramNodeTake.js) */}
+					{isSelected && !session && !isFixed && definition && !isDragging ? (
+						<div className="doc-card-comp-bar">
+							{actionList.length ? <EditButtonGroup actionList={actionList} isLocked={editor.isLocked} ariaLabel="The component of the card" /> : null}
+							{viewMenu}
+							{chooser(true)}
+							{chooseMessage ? <span className="doc-card-comp-message" role="alert">{chooseMessage}</span> : null}
+						</div>
+					) : null}
+					<div ref={floatElementSet} className="doc-card-comp-float" />
 				</div>
 			) : null}
 			{data.comp && !definition ? (

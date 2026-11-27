@@ -1,0 +1,7 @@
+# An online course: a class of a course at a time, kept as a card in a document, or held by a card of
+# a card diagram (card-comp of cloud-dev-vis), or by a weekly timetable. doc/course-online.md is what an
+# author reads.
+compList:
+  - tagName: CourseOnlineReservation
+    entry: ./course-online-comp.js
+    export: courseOnlineReservationDefine

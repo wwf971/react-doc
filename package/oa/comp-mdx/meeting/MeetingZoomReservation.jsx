@@ -1,51 +1,38 @@
 import { CalendarClock } from '../../../../main/frontend/UICommon.js';
 import { CellValue } from '../../../../main/comp-doc/cell/CellValue.jsx';
 import { useCell } from '../../../../main/comp-doc/cell/use-cell.js';
-import { MeetingZoomCard } from './MeetingZoomCard.jsx';
-import { MeetingZoomEdit } from './MeetingZoomEdit.jsx';
-import { MEETING_ZOOM_RESERVATION, meetingJoinUrl, meetingRead, meetingTimeParse, meetingWhenPartList } from './MeetingZoomData.js';
+import { OaCard, OaCardEventLines, OaCardTime, oaCardIsShownOf, oaCardStatusDrawn } from '../oa-card/OaCard.jsx';
+import { OaCardEdit } from '../oa-card/OaCardEdit.jsx';
+import { oaCardRead, oaCardTimeShownOf } from '../oa-card/oa-card-data.js';
+import { oaPreferenceGet } from '../time/oa-config.js';
+import { MEETING_ZOOM_RESERVATION, meetingJoinUrl } from './MeetingZoomData.js';
 
-// A Zoom meeting reservation (doc/meeting-zoom.md#a-reservation): a meeting at a time, how long it
-// lasts when written, the link joining it, a description. Its edit mode Fields (MeetingZoomEdit.jsx)
-// draws the same card with every value typed where it stands.
+// A Zoom meeting reservation (doc/meeting-zoom.md#a-reservation): a meeting at a time, an event of a
+// special type (doc/event.md): who joins it, the link joining it, a description, its status beside its title. Its time is a span of the package (doc/time.md), written in the card's format or
+// the package's preferences, its length beside it. Its edit mode Fields (OaCardEdit.jsx) draws the same
+// card with every value typed where it stands.
 export function MeetingZoomReservation({ data = {}, config = {}, onEvent }) {
-	if (config.isEdit) return <MeetingZoomEdit kind={MEETING_ZOOM_RESERVATION} Render={MeetingZoomReservationRender} data={data} config={config} onEvent={onEvent} />;
-	return <MeetingZoomReservationRead meeting={meetingRead(MEETING_ZOOM_RESERVATION, data)} config={config} />;
+	if (config.isEdit) return <OaCardEdit kind={MEETING_ZOOM_RESERVATION} Render={MeetingZoomReservationRender} data={data} config={config} onEvent={onEvent} />;
+	return <MeetingZoomReservationRead card={oaCardRead(MEETING_ZOOM_RESERVATION, data)} config={config} />;
 }
 
-function MeetingZoomReservationRead({ meeting, config }) {
+function MeetingZoomReservationRead({ card, config }) {
 	const cellText = useCell({ config });
-	return <MeetingZoomReservationRender meeting={meeting} cellText={cellText} />;
+	return <MeetingZoomReservationRender card={card} cellText={cellText} preference={oaPreferenceGet(config)} />;
 }
 
 // the card, from a reservation. valueRender(id): what stands in the place of a value (the editor's
-// field); without it the value as read. edit: what editing adds (MeetingZoomCard), and which values
-// stand (edit.isShown: written, or just added). The day of the week is read from the time, beside it,
-// so the time typed is the time shown
-export function MeetingZoomReservationRender({ meeting, valueRender, cellText, isEditing = false, edit = null }) {
-	const { timeText, durationText } = meetingWhenPartList(meeting);
-	const weekday = meetingTimeParse(meeting.time)?.weekday;
-	const timeShown = weekday ? timeText.slice(weekday.length + 1) : timeText;
-	const isShown = edit?.isShown ?? ((id) => Boolean(meeting[id]));
+// field); without it the value as read. edit: what editing adds (OaCard), and which values stand
+// (edit.isShown: written, or just added)
+export function MeetingZoomReservationRender({ card, valueRender, cellText, preference, isEditing = false, edit = null }) {
+	const isShown = oaCardIsShownOf(card, edit);
 	return (
-		<MeetingZoomCard kind="reservation" Icon={CalendarClock} isEditing={isEditing} joinUrl={meetingJoinUrl(meeting)} edit={edit}
-			title={valueRender ? valueRender('title') : meeting.title || 'Zoom meeting'}
-			description={isShown('description') ? (valueRender ? valueRender('description') : <CellValue cell={cellText} text={meeting.description} />) : null}>
-			{isShown('time') || isShown('duration') ? (
-				<div className="oa-meeting-zoom-line">
-					{isShown('time') ? (
-						<span className="oa-meeting-zoom-when">
-							{weekday ? <span className="oa-meeting-zoom-weekday">{weekday}</span> : null}
-							{valueRender ? valueRender('time') : timeShown}
-						</span>
-					) : null}
-					{isShown('duration') ? (
-						<span className="oa-meeting-zoom-length">
-							{valueRender && /^\d+$/.test(meeting.duration) ? <>{valueRender('duration')} min</> : valueRender ? valueRender('duration') : durationText}
-						</span>
-					) : null}
-				</div>
-			) : null}
-		</MeetingZoomCard>
+		<OaCard kind="reservation" tone="zoom" Icon={CalendarClock} isEditing={isEditing} joinUrl={meetingJoinUrl(card)} edit={edit}
+			title={valueRender ? valueRender('title') : card.title || 'Zoom meeting'}
+			status={oaCardStatusDrawn({ kind: MEETING_ZOOM_RESERVATION, card, valueRender, isShown })}
+			description={isShown('description') ? (valueRender ? valueRender('description') : <CellValue cell={cellText} text={card.description} />) : null}>
+			<OaCardTime shown={oaCardTimeShownOf(card, preference)} isShown={isShown('time')} field={valueRender ? valueRender('time') : null} />
+			<OaCardEventLines kind={MEETING_ZOOM_RESERVATION} card={card} valueRender={valueRender} isShown={isShown} />
+		</OaCard>
 	);
 }

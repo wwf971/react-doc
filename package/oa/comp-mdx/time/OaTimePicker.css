@@ -1,0 +1,170 @@
+/* The picker of a time (OaTimePicker.jsx): a popover of the top layer, at the size of the screen whatever
+   holds the card (a canvas zoomed out); the face of the page, its figures in tabular digits */
+.oa-time-picker {
+	box-sizing: border-box;
+	width: min(34rem, calc(100vw - 2rem));
+	padding: 0;
+	border: 1px solid var(--color-fd-border);
+	border-radius: 0.6rem;
+	background: var(--color-fd-popover, var(--color-fd-card));
+	box-shadow: 0 8px 28px rgb(15 23 42 / 18%);
+	color: var(--color-fd-popover-foreground, var(--color-fd-foreground));
+	font-size: 0.8rem;
+	line-height: 1.4;
+	font-variant-numeric: tabular-nums;
+}
+
+.oa-time-picker-body {
+	display: flex;
+	flex-direction: column;
+	gap: 0.7rem;
+	padding: 0.75rem 0.85rem;
+}
+
+.oa-time-picker-main {
+	display: grid;
+	grid-template-columns: minmax(15rem, auto) minmax(0, 1fr);
+	gap: 1rem;
+	align-items: start;
+}
+
+.oa-time-picker-side,
+.oa-time-picker-coarse {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 0.35rem;
+	min-width: 0;
+}
+
+.oa-time-label {
+	color: var(--color-fd-muted-foreground);
+	font-size: 0.72rem;
+	font-weight: 600;
+	letter-spacing: 0.02em;
+}
+
+.oa-time-note {
+	color: var(--color-fd-muted-foreground);
+}
+
+.oa-time-chip-list {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.3rem;
+}
+
+.oa-time-chip-list.is-column {
+	flex-direction: column;
+	align-items: stretch;
+	width: 100%;
+}
+
+/* a choice among a few: a pill; the one chosen in the accent of the page */
+.oa-time-chip {
+	display: inline-flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 0.6rem;
+	padding: 0.2rem 0.55rem;
+	border: 1px solid var(--color-fd-border);
+	border-radius: 999px;
+	background: var(--color-fd-background);
+	color: var(--color-fd-foreground);
+	font-family: inherit;
+	font-size: 0.78rem;
+	cursor: pointer;
+}
+
+.oa-time-chip small {
+	color: var(--color-fd-muted-foreground);
+	font-size: 0.72rem;
+}
+
+.oa-time-chip:hover {
+	background: var(--color-fd-accent);
+}
+
+.oa-time-chip[aria-pressed="true"] {
+	border-color: color-mix(in srgb, var(--color-fd-primary) 55%, transparent);
+	background: color-mix(in srgb, var(--color-fd-primary) 12%, var(--color-fd-background));
+}
+
+.oa-time-chip-list.is-column > .oa-time-chip {
+	border-radius: 0.4rem;
+}
+
+.oa-time-weekly {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.35rem;
+	margin-top: 0.25rem;
+	color: var(--color-fd-muted-foreground);
+	cursor: pointer;
+}
+
+.oa-time-weekly svg {
+	width: 0.9rem;
+	height: 0.9rem;
+}
+
+.oa-time-year {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.4rem;
+	font-size: 0.9rem;
+}
+
+.oa-time-month-grid {
+	display: grid;
+	grid-template-columns: repeat(6, minmax(0, 1fr));
+	gap: 0.3rem;
+	width: 100%;
+}
+
+.oa-time-month-grid > .oa-time-chip {
+	justify-content: center;
+	border-radius: 0.4rem;
+}
+
+.oa-time-picker-line {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+}
+
+.oa-time-typed {
+	flex: 1;
+	min-width: 0;
+	height: 1.9rem;
+	box-sizing: border-box;
+	padding: 0 0.5rem;
+	border: 1px solid var(--color-fd-border);
+	border-radius: 0.4rem;
+	background: var(--color-fd-background);
+	color: var(--color-fd-foreground);
+	font-family: inherit;
+	font-size: 0.78rem;
+}
+
+.oa-time-message {
+	color: var(--color-fd-error, #b42318);
+}
+
+.oa-time-picker-foot {
+	display: flex;
+	align-items: center;
+	gap: 0.4rem;
+	padding-top: 0.6rem;
+	border-top: 1px solid var(--color-fd-border);
+}
+
+.oa-time-summary {
+	flex: 1;
+	min-width: 0;
+	font-weight: 600;
+}
+
+.oa-time-picker-foot .doc-button[data-danger] {
+	color: var(--color-fd-error, #b42318);
+}

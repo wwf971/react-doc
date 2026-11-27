@@ -1,0 +1,99 @@
+/* The status of a card (OaStatus.jsx): a small pill in the tone of its status, beside the title; its
+   history floating under it. The face of the page, its moments in tabular digits; sized in em with
+   the card, the history at the size of the screen (a popover of the top layer) */
+.oa-status-root {
+	display: inline-flex;
+	flex: none;
+}
+
+.oa-status {
+	--oa-status-tone: #667085;
+	display: inline-flex;
+	align-items: center;
+	padding: 0.05em 0.55em;
+	border: 1px solid color-mix(in srgb, var(--oa-status-tone) 30%, transparent);
+	border-radius: 999px;
+	background: color-mix(in srgb, var(--oa-status-tone) 10%, transparent);
+	color: var(--oa-status-tone);
+	font-family: inherit;
+	font-size: 0.8em;
+	font-weight: 600;
+	line-height: 1.5;
+	white-space: nowrap;
+	cursor: pointer;
+}
+
+.oa-status:hover {
+	background: color-mix(in srgb, var(--oa-status-tone) 17%, transparent);
+}
+
+.oa-status[data-tone="amber"] { --oa-status-tone: #b54708; }
+.oa-status[data-tone="blue"] { --oa-status-tone: #175cd3; }
+.oa-status[data-tone="red"] { --oa-status-tone: #b42318; }
+.oa-status[data-tone="green"] { --oa-status-tone: #067647; }
+
+.dark .oa-status { --oa-status-tone: #98a2b3; }
+.dark .oa-status[data-tone="amber"] { --oa-status-tone: #fdb022; }
+.dark .oa-status[data-tone="blue"] { --oa-status-tone: #84adff; }
+.dark .oa-status[data-tone="red"] { --oa-status-tone: #f97066; }
+.dark .oa-status[data-tone="green"] { --oa-status-tone: #47cd89; }
+
+.oa-status.is-small {
+	font-size: 0.92em;
+	padding: 0 0.5em;
+}
+
+span.oa-status.is-small {
+	cursor: default;
+}
+
+.oa-status-history {
+	display: flex;
+	flex-direction: column;
+	gap: 0.35rem;
+	box-sizing: border-box;
+	min-width: 15rem;
+	max-width: 26rem;
+	padding: 0.45rem 0.6rem;
+	border: 1px solid var(--color-fd-border);
+	border-radius: 0.5rem;
+	background: var(--color-fd-popover);
+	box-shadow: 0 4px 14px rgb(15 23 42 / 12%);
+	color: var(--color-fd-popover-foreground, var(--color-fd-foreground));
+	font-size: 0.8rem;
+	line-height: 1.4;
+}
+
+.oa-status-history-head {
+	color: var(--color-fd-muted-foreground);
+	font-weight: 600;
+}
+
+.oa-status-history-list {
+	display: grid;
+	grid-template-columns: max-content max-content minmax(0, 1fr);
+	align-items: center;
+	gap: 0.25rem 0.6rem;
+}
+
+.oa-status-history-row {
+	display: contents;
+}
+
+/* a pill as wide as its words, at the start of its column */
+.oa-status-history-list .oa-status {
+	justify-self: start;
+}
+
+.oa-status-history-time {
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}
+
+.oa-status-history-by {
+	color: var(--color-fd-muted-foreground);
+}
+
+.oa-status-history-empty {
+	color: var(--color-fd-muted-foreground);
+}

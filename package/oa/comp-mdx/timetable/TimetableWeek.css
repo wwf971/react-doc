@@ -1,0 +1,436 @@
+/* A weekly timetable (TimetableWeek.jsx): the head of the cards of oa (a tile, a bold title, a muted
+   line), then a grid of seven days of hours. One face, the sans-serif of the page; times in tabular
+   digits. Every size in em, from the size it is drawn at (--doc-card-font-size in a card of a diagram);
+   an hour is var(--oa-timetable-hour) high, so five minutes are a twelfth of it */
+.oa-timetable {
+	--oa-timetable-accent: #4f5bd5;
+	--oa-timetable-line: color-mix(in srgb, var(--color-fd-border) 75%, transparent);
+	display: flex;
+	flex-direction: column;
+	gap: 0.55em;
+	box-sizing: border-box;
+	width: 100%;
+	min-width: 34em;
+	padding: 0.6em 0.7em 0.7em;
+	border: 1px solid var(--color-fd-border);
+	border-radius: 0.7em;
+	background: var(--color-fd-card);
+	box-shadow: 0 1px 2px rgb(15 23 42 / 5%);
+	color: var(--color-fd-card-foreground);
+	font-size: var(--doc-card-font-size, 0.875em);
+	line-height: 1.35;
+	position: relative;
+}
+
+.dark .oa-timetable {
+	--oa-timetable-accent: #8d96f0;
+}
+
+.oa-timetable svg {
+	flex: none;
+	width: 1em;
+	height: 1em;
+}
+
+.oa-timetable-head {
+	display: flex;
+	align-items: flex-start;
+	gap: 0.6em;
+	min-width: 0;
+}
+
+.oa-timetable-tile {
+	flex: none;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 2.3em;
+	height: 2.3em;
+	box-sizing: border-box;
+	border: 1px solid var(--color-fd-border);
+	border-radius: 0.55em;
+	background: var(--color-fd-background);
+	color: var(--oa-timetable-accent);
+}
+
+.oa-timetable-tile svg {
+	width: 1.25em;
+	height: 1.25em;
+}
+
+.oa-timetable-head-main {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	gap: 0.15em;
+	min-width: 0;
+}
+
+.oa-timetable-title {
+	font-size: 1.06em;
+	font-weight: 600;
+	overflow-wrap: anywhere;
+}
+
+.oa-timetable-week {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.35em;
+	color: var(--color-fd-muted-foreground);
+	font-size: 0.9em;
+	font-variant-numeric: tabular-nums;
+}
+
+.oa-timetable-field.is-title {
+	display: inline-block;
+	width: 100%;
+}
+
+.oa-timetable-message {
+	display: flex;
+	align-items: center;
+	gap: 0.4em;
+	padding: 0.3em 0.5em;
+	border-radius: 0.4em;
+	background: color-mix(in srgb, var(--color-fd-warning, #b54708) 9%, transparent);
+	color: var(--color-fd-warning, #b54708);
+	font-size: 0.88em;
+}
+
+/* the grid: the heads of the days in a row, then the hours down the left and the seven days */
+.oa-timetable-grid {
+	display: grid;
+	grid-template-columns: 3.4em repeat(7, minmax(0, 1fr));
+}
+
+.oa-timetable-day-head {
+	display: flex;
+	align-items: baseline;
+	justify-content: center;
+	gap: 0.3em;
+	padding-bottom: 0.25em;
+	font-size: 0.86em;
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}
+
+.oa-timetable-day-name {
+	font-weight: 600;
+}
+
+.oa-timetable-day-head[data-weekend] .oa-timetable-day-name {
+	color: var(--color-fd-muted-foreground);
+}
+
+.oa-timetable-day-date {
+	color: var(--color-fd-muted-foreground);
+}
+
+.oa-timetable-days {
+	grid-column: 2 / span 7;
+}
+
+.oa-timetable-axis {
+	position: relative;
+}
+
+.oa-timetable-hour {
+	position: absolute;
+	right: 0.45em;
+	transform: translateY(-50%);
+	color: var(--color-fd-muted-foreground);
+	font-size: 0.78em;
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}
+
+.oa-timetable-hour:first-child {
+	transform: none;
+}
+
+.oa-timetable-hour:last-child {
+	transform: translateY(-100%);
+}
+
+.oa-timetable-days {
+	display: grid;
+	grid-template-columns: repeat(7, minmax(0, 1fr));
+	position: relative;
+	border-top: 1px solid var(--oa-timetable-line);
+	border-left: 1px solid var(--oa-timetable-line);
+}
+
+.oa-timetable-day {
+	position: relative;
+	border-right: 1px solid var(--oa-timetable-line);
+	/* an hour a line, its half a fainter one */
+	background-image:
+		linear-gradient(to bottom, var(--oa-timetable-line) 1px, transparent 1px),
+		linear-gradient(to bottom, color-mix(in srgb, var(--oa-timetable-line) 45%, transparent) 1px, transparent 1px);
+	background-size: 100% var(--oa-timetable-hour), 100% calc(var(--oa-timetable-hour) / 2);
+	background-position: 0 calc(var(--oa-timetable-hour) - 1px), 0 calc(var(--oa-timetable-hour) / 2 - 1px);
+}
+
+.oa-timetable-day[data-weekend] {
+	background-color: color-mix(in srgb, var(--color-fd-muted) 45%, transparent);
+}
+
+.oa-timetable-day.is-writable {
+	cursor: copy;
+}
+
+/* an entry: a box of its day, at its time, beside those at the same time */
+.oa-timetable-entry {
+	position: absolute;
+	box-sizing: border-box;
+	display: flex;
+	flex-direction: column;
+	gap: 0.05em;
+	overflow: hidden;
+	padding: 0.2em 0.35em;
+	border: 1px solid color-mix(in srgb, var(--oa-timetable-accent) 35%, transparent);
+	border-left: 0.22em solid var(--oa-timetable-accent);
+	border-radius: 0.35em;
+	background: color-mix(in srgb, var(--oa-timetable-accent) 10%, var(--color-fd-card));
+	color: var(--color-fd-foreground);
+	font-size: 0.86em;
+	line-height: 1.2;
+	cursor: pointer;
+	user-select: none;
+}
+
+.oa-timetable[data-editing] .oa-timetable-entry {
+	cursor: grab;
+}
+
+.oa-timetable-entry:hover,
+.oa-timetable-entry.is-open {
+	background: color-mix(in srgb, var(--oa-timetable-accent) 18%, var(--color-fd-card));
+}
+
+.oa-timetable-entry.is-open {
+	outline: 1.5px solid var(--oa-timetable-accent);
+	outline-offset: 0;
+}
+
+/* the entry being dragged stays faint where it was; its new place is the preview */
+.oa-timetable-entry.is-dragged {
+	opacity: 0.35;
+}
+
+.oa-timetable-entry.is-preview {
+	z-index: 3;
+	border-style: dashed;
+	background: color-mix(in srgb, var(--oa-timetable-accent) 22%, var(--color-fd-card));
+	pointer-events: none;
+}
+
+.oa-timetable-entry-head {
+	display: flex;
+	align-items: center;
+	gap: 0.3em;
+	min-width: 0;
+}
+
+.oa-timetable-entry-head svg {
+	width: 0.95em;
+	height: 0.95em;
+	color: var(--oa-timetable-accent);
+}
+
+.oa-timetable-entry-title {
+	min-width: 0;
+	overflow: hidden;
+	font-weight: 600;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.oa-timetable-entry-time {
+	color: var(--color-fd-muted-foreground);
+	font-size: 0.92em;
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}
+
+/* a part of a day (evening): a box over the range it refers to, its edge dashed and its fill lighter, so
+   a reader sees at once it is not a time of day said exactly */
+.oa-timetable-entry.is-approximate {
+	border-style: dashed;
+	border-left-style: solid;
+	background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--oa-timetable-accent) 7%, var(--color-fd-card)) 0 0.45em, color-mix(in srgb, var(--oa-timetable-accent) 12%, var(--color-fd-card)) 0.45em 0.9em);
+}
+
+/* the row of whole days, under the heads of the days: an entry across its days, rows one under another */
+.oa-timetable-all-day-name {
+	align-self: center;
+	padding-right: 0.45em;
+	color: var(--color-fd-muted-foreground);
+	font-size: 0.72em;
+	text-align: right;
+	white-space: nowrap;
+}
+
+.oa-timetable-all-day {
+	grid-column: 2 / span 7;
+	display: grid;
+	grid-template-columns: repeat(7, minmax(0, 1fr));
+	grid-auto-rows: 1.55em;
+	gap: 0.15em 0;
+	padding: 0.2em 0;
+	border-top: 1px solid var(--oa-timetable-line);
+}
+
+.oa-timetable-entry.is-all-day {
+	position: relative;
+	flex-direction: row;
+	align-items: center;
+	gap: 0.4em;
+	margin: 0 0.12em;
+	padding-block: 0;
+}
+
+.oa-timetable-entry.is-all-day .oa-timetable-entry-head {
+	flex: 1 1 auto;
+}
+
+.oa-timetable-entry.is-all-day.is-preview {
+	position: relative;
+}
+
+/* its status: a dot in the tone of the status before its mark; a cancelled one struck through, faint */
+.oa-timetable-entry-status {
+	--oa-timetable-status: #667085;
+	flex: none;
+	width: 0.5em;
+	height: 0.5em;
+	border-radius: 50%;
+	background: var(--oa-timetable-status);
+}
+
+.oa-timetable-entry[data-tone="amber"] .oa-timetable-entry-status { --oa-timetable-status: #dc6803; }
+.oa-timetable-entry[data-tone="blue"] .oa-timetable-entry-status { --oa-timetable-status: #2e90fa; }
+.oa-timetable-entry[data-tone="red"] .oa-timetable-entry-status { --oa-timetable-status: #d92d20; }
+.oa-timetable-entry[data-tone="green"] .oa-timetable-entry-status { --oa-timetable-status: #12b76a; }
+
+.oa-timetable-entry[data-status="cancelled"] {
+	opacity: 0.6;
+}
+
+.oa-timetable-entry[data-status="cancelled"] .oa-timetable-entry-title {
+	text-decoration: line-through;
+}
+
+/* a short entry: its time beside its title, the title kept first */
+.oa-timetable-entry.is-short {
+	flex-direction: row;
+	align-items: center;
+	gap: 0.35em;
+	padding-block: 0;
+}
+
+.oa-timetable-entry.is-short .oa-timetable-entry-head {
+	flex: 1 1 auto;
+}
+
+.oa-timetable-entry.is-short .oa-timetable-entry-time {
+	flex: 0 1000 auto;
+	min-width: 0;
+	overflow: hidden;
+}
+
+/* beside another at the same time: the title alone (its time on hover), its mark left out for room */
+.oa-timetable-entry.is-narrow .oa-timetable-entry-head svg {
+	display: none;
+}
+
+.oa-timetable-entry.is-narrow.is-short .oa-timetable-entry-time {
+	display: none;
+}
+
+/* its bottom edge: its end */
+.oa-timetable-entry-resize {
+	position: absolute;
+	right: 0;
+	bottom: 0;
+	left: 0;
+	height: 0.45em;
+	cursor: ns-resize;
+}
+
+/* what it holds and cannot place: listed, never hidden */
+.oa-timetable-unplaced {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 0.3em 0.5em;
+	font-size: 0.88em;
+}
+
+.oa-timetable-unplaced-name {
+	color: var(--color-fd-muted-foreground);
+}
+
+.oa-timetable-unplaced-item {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.35em;
+	padding: 0.15em 0.5em;
+	border: 1px dashed color-mix(in srgb, var(--oa-timetable-accent) 45%, transparent);
+	border-radius: 999px;
+	cursor: pointer;
+	user-select: none;
+}
+
+.oa-timetable-unplaced-reason {
+	color: var(--color-fd-muted-foreground);
+	font-size: 0.9em;
+}
+
+/* the card of an entry, floating over its box at the size of the screen (a popover of the top layer
+   inherits the size of what it is in: a card of a diagram, small) */
+.oa-timetable-entry-popover {
+	--doc-card-font-size: 0.875rem;
+	box-sizing: border-box;
+	width: 22rem;
+	max-width: calc(100vw - 2rem);
+	padding: 0;
+	border: 0;
+	background: transparent;
+	overflow: visible;
+	font-size: 0.875rem;
+}
+
+.oa-timetable-entry-card > .oa-card {
+	max-width: none;
+	box-shadow: 0 6px 22px rgb(15 23 42 / 16%);
+}
+
+/* an entry dragged out of the table: what happens if it is let go there, at the pointer */
+.oa-timetable-drag-chip {
+	position: fixed;
+	z-index: 10000;
+	display: flex;
+	flex-direction: column;
+	gap: 0.1rem;
+	max-width: 16rem;
+	padding: 0.3rem 0.55rem;
+	border: 1px solid var(--color-fd-border, #d0d5dd);
+	border-left: 3px solid #4f5bd5;
+	border-radius: 0.45rem;
+	background: var(--color-fd-popover, #fff);
+	box-shadow: 0 6px 18px rgb(15 23 42 / 18%);
+	color: var(--color-fd-foreground, #101828);
+	font-size: 0.78rem;
+	font-weight: 600;
+	pointer-events: none;
+}
+
+.oa-timetable-drag-chip-text {
+	color: var(--color-fd-muted-foreground, #667085);
+	font-weight: 400;
+}
+
+.oa-timetable-drag-chip[data-refused] {
+	border-left-color: var(--color-fd-warning, #b54708);
+}

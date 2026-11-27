@@ -13,7 +13,18 @@
 //              anchor, a point (a panel opened where the pointer was or a
 //              line was let go): right of and below it when it fits, else
 //              the other way on that axis, moved inside only when neither
-//              fits (popup-place.js); the side taken is kept while it fits
+//              fits (popup-place.js); the side taken is kept while it fits.
+//              'beside': level with the anchor (centred on a line lower than
+//              itself, its top on the top of a taller one),
+//              outside the left edge of the box besideRef (what holds the
+//              anchor: a card, its row being edited), as the toolbar of a row
+//              of a card stands; outside its right edge when there is no room
+//              on the left, over the anchor when there is none on either side
+//              'over-end': over the top edge of the anchor, at its right end
+//              (a group of the anchor as a whole, a card: the left end is the
+//              card's own group in a card diagram); under its bottom edge
+//              when there is no room above
+//   besideRef  the box 'beside' stands at (the anchor when not given)
 //   isTracked  the anchor also moves with no scroll and no resize (a node
 //              of a canvas panned or zoomed): followed every frame
 //   isShownFirst  what it holds is mounted only once it is shown: for a
@@ -32,7 +43,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { POPUP_MARGIN, popupCornerPlaceOf } from './popup-place.js';
 import './AnchoredPopover.css';
 
-export function AnchoredPopover({ anchorRef, children, className = '', placement = 'below', isTracked = false, isShownFirst = false, ...props }) {
+export function AnchoredPopover({ anchorRef, besideRef = null, children, className = '', placement = 'below', isTracked = false, isShownFirst = false, ...props }) {
   const ref = useRef(null);
   const sideRef = useRef({});
   const [isShown, isShownSet] = useState(false);
@@ -61,6 +72,25 @@ export function AnchoredPopover({ anchorRef, children, className = '', placement
         sideRef.current = at.side;
         popup.style.left = `${Math.round(at.x)}px`;
         popup.style.top = `${Math.round(at.y)}px`;
+        return;
+      }
+      if (placement === 'over-end') {
+        const gap = 4;
+        const top = rect.top - gap - height >= 8 ? rect.top - gap - height : rect.bottom + gap;
+        popup.style.left = `${Math.max(8, Math.min(rect.right - width, widthViewport - width - 8))}px`;
+        popup.style.top = `${Math.max(8, Math.min(top, heightViewport - height - 8))}px`;
+        return;
+      }
+      if (placement === 'beside') {
+        const side = (besideRef?.current ?? anchor).getBoundingClientRect();
+        const gap = 6;
+        const isLeft = side.left - gap - width >= 8;
+        const isRight = !isLeft && side.right + gap + width <= widthViewport - 8;
+        const left = isLeft ? side.left - gap - width : isRight ? side.right + gap : rect.right - width;
+        const level = rect.height < height ? rect.top + (rect.height - height) / 2 : rect.top;
+        const top = isLeft || isRight ? level : rect.top - height - 2;
+        popup.style.left = `${Math.max(8, Math.min(left, widthViewport - width - 8))}px`;
+        popup.style.top = `${Math.max(8, Math.min(top, heightViewport - height - 8))}px`;
         return;
       }
       const top = rect.bottom + 2 + height <= heightViewport - 8
@@ -95,7 +125,7 @@ export function AnchoredPopover({ anchorRef, children, className = '', placement
       view.removeEventListener('resize', positionUpdate);
       view.removeEventListener('scroll', positionUpdate, true);
     };
-  }, [anchorRef, placement, isTracked, isShown]);
+  }, [anchorRef, besideRef, placement, isTracked, isShown]);
 
   return <span {...props} ref={ref} popover="manual" className={`doc-anchored-popover ${className}`}>{isShown || !isShownFirst ? children : null}</span>;
 }

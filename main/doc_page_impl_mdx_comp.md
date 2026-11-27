@@ -52,8 +52,11 @@ a component definition (compDefine)
         ├── visualizationNode        e.g. the node contract of a card diagram: anchorListGet, sizeDefault
         ├── dataFields               its data value by value, for whoever edits it without drawing it, as a
         │                            second way only (doc_page_impl_edit.md#editability-everything-a-reader-sees-is-edited-where-it-stands):
-        │                            { fieldList: [{ id, label, placeholder?, isMultiline? }], valueListGet(data),
-        │                            rawWithValue(data, id, text) } (the edit card of a card holding it)
+        │                            { fieldList: [{ id, label, placeholder?, isMultiline?, kind?: enum, valueList?,
+        │                            valueLabels? }], valueListGet(data), rawWithValue(data, id, text) } (the edit card
+        │                            of a card holding it; a field of kind enum is a property chosen, a time format)
+        ├── timeItem                 of the oa package: it is at a time, { spanGet, spanSet, titleGet }, for whoever
+        │                            collects times (package/oa/doc/time.md#a-card-at-a-time: a weekly timetable)
         ├── blockViewList            the views a block of it is drawn in, written as view= on its marker (not view
         │                            modes: those are the reader's): [{ id, label, description, isTile? }], the
         │                            first the default; isTile: the view draws a tile (Code, Mdx: icon). Read by

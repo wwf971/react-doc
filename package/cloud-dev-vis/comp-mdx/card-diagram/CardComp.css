@@ -17,7 +17,7 @@
 }
 
 /* the component draws its own card: as wide as the node */
-.doc-card-comp > :not(.doc-card-comp-float, .doc-card-comp-bar),
+.doc-card-comp > :not(.doc-card-comp-over),
 .doc-card-comp-body > * {
 	max-width: none;
 }
@@ -81,16 +81,22 @@
 
 /* over the top edge of the card, at the size of the screen whatever the zoom (as the toolbars of the
    cards: DiagramVisualEdit.css .doc-card-toolbar); the scale is taken from the bottom left, so the
-   bottom stays on the card */
-.doc-card-comp-float,
-.doc-card-comp-bar {
+   bottom stays on the card. One row: the group of the card, then what the component floats */
+.doc-card-comp-over {
 	position: absolute;
 	bottom: calc(100% + 4px);
 	left: 0;
 	z-index: 6;
+	display: flex;
+	align-items: center;
+	gap: 0.35rem;
 	transform: scale(calc(1 / var(--doc-vis-zoom, 1)));
 	transform-origin: left bottom;
-	font-family: ui-sans-serif, system-ui, sans-serif;
+	white-space: nowrap;
+}
+
+.doc-card-comp-over:not(:has(> .doc-card-comp-bar, > .doc-card-comp-float:not(:empty))) {
+	display: none;
 }
 
 .doc-card-comp-float:empty {

@@ -1,0 +1,7 @@
+# An event: what it is, when, who, where, and its status kept as a history. Kept as a card in a
+# document, held by a card of a card diagram (card-comp of cloud-dev-vis), or by a weekly timetable.
+# doc/event.md is what an author reads.
+compList:
+  - tagName: EventGeneral
+    entry: ./event-comp.js
+    export: eventGeneralDefine

@@ -1,0 +1,393 @@
+/* The cards of oa (OaCard.jsx): a light surface with a thin edge, a tile with the mark of the kind,
+   the title in bold, the lines of the kind under it. One face for every word and value: the sans-serif
+   of the page (inherited); a time, a meeting number, a passcode are figures in tabular digits
+   (font-variant-numeric), never a monospace face (AGENTS.md of react-doc: Typography). The colors of
+   the page; the accent of the kind (the blue of Zoom, the teal of a course) only for the mark and Join.
+   Every size in em, from the size the card is drawn at: the text of a document, or the cards of a
+   diagram around it (--doc-card-font-size, given by the card holding a component) */
+.oa-card {
+	--oa-card-accent: #0b5cff;
+	display: flex;
+	flex-direction: column;
+	gap: 0.4em;
+	box-sizing: border-box;
+	width: 100%;
+	max-width: 26em;
+	padding: 0.6em 0.7em;
+	border: 1px solid var(--color-fd-border);
+	border-radius: 0.7em;
+	background: var(--color-fd-card);
+	box-shadow: 0 1px 2px rgb(15 23 42 / 5%);
+	color: var(--color-fd-card-foreground);
+	font-size: var(--doc-card-font-size, 0.875em);
+	line-height: 1.35;
+	/* what only editing draws (the + in its corner) stands over the card */
+	position: relative;
+}
+
+.oa-card[data-tone="course"] {
+	--oa-card-accent: #0f8a7e;
+}
+
+.oa-card[data-tone="event"] {
+	--oa-card-accent: #6941c6;
+}
+
+/* on a dark page the accents are lighter, so the mark and Join keep their contrast */
+.dark .oa-card {
+	--oa-card-accent: #5b9bff;
+}
+
+.dark .oa-card[data-tone="course"] {
+	--oa-card-accent: #3cc4b4;
+}
+
+.dark .oa-card[data-tone="event"] {
+	--oa-card-accent: #b692f6;
+}
+
+.oa-card svg {
+	flex: none;
+	width: 1em;
+	height: 1em;
+}
+
+.oa-card-head {
+	display: flex;
+	align-items: flex-start;
+	gap: 0.6em;
+	min-width: 0;
+}
+
+/* the tile of the mark: white with an edge, as an icon of a service is drawn */
+.oa-card-tile {
+	flex: none;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 2.3em;
+	height: 2.3em;
+	box-sizing: border-box;
+	border: 1px solid var(--color-fd-border);
+	border-radius: 0.55em;
+	background: var(--color-fd-background);
+	color: var(--oa-card-accent);
+}
+
+.oa-card-tile svg {
+	width: 1.25em;
+	height: 1.25em;
+}
+
+.oa-card-main {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	gap: 0.15em;
+	min-width: 0;
+}
+
+.oa-card-title-row {
+	display: flex;
+	align-items: center;
+	gap: 0.5em;
+	min-height: 1.4em;
+}
+
+.oa-card-title {
+	flex: 1;
+	min-width: 0;
+	font-size: 1.06em;
+	font-weight: 600;
+	letter-spacing: -0.005em;
+	overflow-wrap: anywhere;
+}
+
+/* Join: a light pill, not a filled button; inert while the card is edited */
+.oa-card-join {
+	flex: none;
+	display: inline-flex;
+	align-items: center;
+	gap: 0.3em;
+	padding: 0.1em 0.6em;
+	border: 1px solid color-mix(in srgb, var(--oa-card-accent) 28%, transparent);
+	border-radius: 999px;
+	background: color-mix(in srgb, var(--oa-card-accent) 8%, transparent);
+	color: var(--oa-card-accent);
+	font-family: inherit;
+	font-size: 0.88em;
+	font-weight: 600;
+	line-height: 1.5;
+	text-decoration: none;
+}
+
+.oa-card-join svg {
+	width: 0.9em;
+	height: 0.9em;
+}
+
+.oa-card-join:hover {
+	background: color-mix(in srgb, var(--oa-card-accent) 15%, transparent);
+}
+
+/* while edited, Join is a button typing the link (OaCardEdit.jsx); a link drawn as such does nothing */
+.oa-card[data-editing] a.oa-card-join {
+	pointer-events: none;
+}
+
+button.oa-card-join {
+	cursor: text;
+}
+
+/* the + of a card edited in place: in the row over the top edge of a card of a diagram (CardComp), or
+   in the top layer over the top edge of the card at its right end (AnchoredPopover placement
+   over-end); no surface of its own */
+.oa-card-add {
+	display: inline-flex;
+	padding: 0;
+	border: 0;
+	background: none;
+	overflow: visible;
+	--doc-button-group-height: 1.4rem;
+}
+
+/* what floats under a value being typed (the field of the link under Join): never cut by what holds
+   the card (AnchoredPopover), at the size of the screen */
+.oa-card-link-popover {
+	display: flex;
+	align-items: baseline;
+	gap: 0.5em;
+	box-sizing: border-box;
+	max-width: 28rem;
+	padding: 0.35rem 0.55rem;
+	border: 1px solid var(--color-fd-border);
+	border-radius: 0.5rem;
+	background: var(--color-fd-popover);
+	box-shadow: 0 4px 14px rgb(15 23 42 / 12%);
+	color: var(--color-fd-popover-foreground, var(--color-fd-foreground));
+	font-size: 0.8rem;
+}
+
+.oa-card-link-popover {
+	min-width: 18rem;
+}
+
+.oa-card-link-name {
+	flex: none;
+	color: var(--color-fd-muted-foreground);
+}
+
+.oa-card-link-popover > .oa-card-field {
+	flex: 1;
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+
+/* the lines under the title: a time, a person; muted, figures in tabular digits */
+.oa-card-line {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: 0 0.5em;
+	color: var(--color-fd-muted-foreground);
+	font-size: 0.9em;
+	font-variant-numeric: tabular-nums;
+}
+
+.oa-card-when {
+	display: inline-flex;
+	align-items: baseline;
+	gap: 0.35em;
+	color: var(--color-fd-foreground);
+}
+
+/* a time that cannot be read: shown as written, a mark saying why */
+.oa-card-warning {
+	display: inline-flex;
+	align-self: center;
+	color: var(--color-fd-warning, #b54708);
+}
+
+/* the dot between a time and its length; a length alone has none */
+.oa-card-when + .oa-card-length::before {
+	content: '·';
+	margin-right: 0.5em;
+	color: var(--color-fd-muted-foreground);
+}
+
+.oa-card-person {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.3em;
+}
+
+.oa-card-person svg {
+	width: 0.95em;
+	height: 0.95em;
+	opacity: 0.8;
+}
+
+.oa-card-code-list {
+	display: grid;
+	grid-template-columns: max-content minmax(0, 1fr);
+	align-items: center;
+	gap: 0.05em 0.6em;
+	margin: 0;
+}
+
+.oa-card-code-list dt {
+	color: var(--color-fd-muted-foreground);
+	font-size: 0.78em;
+	font-weight: 500;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+}
+
+.oa-card-code-list dd {
+	display: flex;
+	align-items: center;
+	gap: 0.3em;
+	min-width: 0;
+	margin: 0;
+}
+
+.oa-card-code {
+	min-width: 0;
+	font-size: 0.95em;
+	font-variant-numeric: tabular-nums;
+	letter-spacing: 0.01em;
+	overflow-wrap: anywhere;
+}
+
+.oa-card-copy {
+	flex: none;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 1.5em;
+	height: 1.5em;
+	padding: 0;
+	border: 0;
+	border-radius: 0.35em;
+	background: none;
+	color: var(--color-fd-muted-foreground);
+	cursor: pointer;
+	opacity: 0.7;
+}
+
+.oa-card-copy:hover {
+	background: var(--color-fd-accent);
+	opacity: 1;
+}
+
+.oa-card-copy svg {
+	width: 0.95em;
+	height: 0.95em;
+}
+
+/* the description: across the card, under the lines; its links and views drawn by the cell kit */
+.oa-card-description {
+	color: var(--color-fd-foreground);
+	font-size: 0.95em;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+
+/* a value typed in place fills what it stands in: a click anywhere on it opens it */
+.oa-card-field.is-title,
+.oa-card-field.is-description {
+	display: inline-block;
+	width: 100%;
+}
+
+/* ---------- editing (OaCardEdit.jsx) ---------- */
+
+/* a value edited in place is framed inside its own box: a tint and an inset line, which take no room
+   and never reach the value above or below (an outline outside the box, as the cell kit draws it,
+   crossed the frame of the next line in a card this tight: main/diagram-design-design.md) */
+.oa-card .doc-cell-field[data-editable]:hover,
+.oa-timetable .doc-cell-field[data-editable]:hover {
+	outline: none;
+	background: color-mix(in srgb, var(--color-fd-primary) 6%, transparent);
+	box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--color-fd-primary) 45%, transparent);
+}
+
+.oa-card .doc-cell-field[data-open],
+.oa-timetable .doc-cell-field[data-open] {
+	outline: none;
+	background: color-mix(in srgb, var(--color-fd-primary) 7%, var(--color-fd-background));
+	box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-fd-primary) 50%, transparent);
+}
+
+/* a value as a block (the title, the description): the whole line is the value */
+.oa-card-value.is-title,
+.oa-card-value.is-description {
+	display: block;
+}
+
+/* where the group stands in the value: no box (a popover under display: none is never shown) */
+.oa-card-value-tools-mark {
+	display: contents;
+}
+
+/* the group of a value open: in the top layer, outside the card at its left edge, level with the
+   value (AnchoredPopover placement beside: OaCardEdit.jsx), as the toolbar of a row of a card of a
+   diagram stands; no surface of its own, the group is one */
+.oa-card-value-tools {
+	padding: 0;
+	border: 0;
+	background: none;
+	overflow: visible;
+	--doc-button-group-height: 1.4rem;
+}
+
+/* the entries of a list: a chip each, read and edited alike */
+.oa-card-chip-list {
+	display: inline-flex;
+	flex-wrap: wrap;
+	gap: 0.25em;
+	min-width: 0;
+}
+
+.oa-card-chip {
+	display: inline-flex;
+	align-items: center;
+	padding: 0 0.45em;
+	border-radius: 999px;
+	background: color-mix(in srgb, var(--color-fd-muted) 75%, transparent);
+	color: var(--color-fd-foreground);
+	line-height: 1.45;
+}
+
+.oa-card-chip .doc-cell-field {
+	border-radius: 999px;
+}
+
+/* the time while edited: a button with the box of the time as read */
+.oa-card-time-value {
+	position: relative;
+	display: inline;
+}
+
+.oa-card-time-button {
+	display: inline;
+	padding: 0;
+	border: 0;
+	border-radius: 2px;
+	background: none;
+	color: inherit;
+	font: inherit;
+	letter-spacing: inherit;
+	text-align: left;
+	cursor: pointer;
+}
+
+.oa-card-time-button:hover,
+.oa-card-time-button[aria-expanded="true"] {
+	background: color-mix(in srgb, var(--color-fd-primary) 6%, transparent);
+	box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--color-fd-primary) 45%, transparent);
+}
+
+.oa-card-placeholder {
+	color: var(--color-fd-muted-foreground);
+}

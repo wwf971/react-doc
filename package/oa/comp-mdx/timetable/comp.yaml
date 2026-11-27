@@ -1,0 +1,8 @@
+# A weekly timetable: seven days of hours holding cards at a time (a Zoom reservation, an online
+# course), each placed by its own time. A component holding others (expose.hold): in a card diagram a
+# card dropped on it is taken, an entry dragged out of it is let go. doc/timetable-week.md is what an
+# author reads.
+compList:
+  - tagName: TimetableWeek
+    entry: ./timetable-comp.js
+    export: timetableWeekDefine

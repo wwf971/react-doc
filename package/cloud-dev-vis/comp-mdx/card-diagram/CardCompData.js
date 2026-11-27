@@ -120,7 +120,8 @@ export function cardCompDataOf(entry) {
 //                 view= of its props), and one field per value, when the component offers its data
 //                 value by value (expose.dataFields: { fieldList, valueListGet(data), rawWithValue(data,
 //                 id, text) }); each typed is written into the draft as the component writes it, one
-//                 step per field
+//                 step per field. A field of kind enum (valueList, valueLabels: a property of how it is
+//                 drawn, a time format) is a choice
 //   its data      the text of its data, as a block of it holds it in a document; for data held in an
 //                 asset item, the reference to it
 // definition: the component's, as the page resolves it (null: a component the page lacks). Pure
@@ -146,8 +147,12 @@ export function cardCompSectionListBuild({ nodeId, node, store, change, definiti
 		sectionList.push({
 			id: 'comp-values', label,
 			note: 'Typed here, or where they stand on the card (a click on a value).',
+			// a value typed, or a property chosen (kind enum: valueList, valueLabels; a time format)
 			propertyList: [...viewPropertyList, ...dataFields.fieldList.map(field => ({
-				id: `comp-field-${field.id}`, label: field.label, kind: 'text', value: valueById[field.id] ?? '', placeholder: field.placeholder ?? '', isMultiline: field.isMultiline === true,
+				id: `comp-field-${field.id}`, label: field.label, value: valueById[field.id] ?? '',
+				...(field.kind === 'enum' && Array.isArray(field.valueList)
+					? { kind: 'enum', values: field.valueList, valueLabels: field.valueLabels ?? {} }
+					: { kind: 'text', placeholder: field.placeholder ?? '', isMultiline: field.isMultiline === true }),
 				set: (value) => change(() => {
 					// the data as it is now (a value typed is a step of its own, after the ones before it)
 					const dataNow = store.nodeGet(nodeId)?.data ?? data;

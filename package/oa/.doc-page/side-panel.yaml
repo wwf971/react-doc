@@ -5,5 +5,15 @@ sidePanelById:
       - doc: ~oa/doc/README.md
         text: oa
         children:
+          - doc: ~oa/doc/event.md
+            text: Events
           - doc: ~oa/doc/meeting-zoom.md
             text: Zoom meetings
+          - doc: ~oa/doc/course-online.md
+            text: Online courses
+          - doc: ~oa/doc/timetable-week.md
+            text: Weekly timetables
+          - doc: ~oa/doc/time.md
+            text: Times
+          - doc: ~oa/doc/standards.md
+            text: Standards

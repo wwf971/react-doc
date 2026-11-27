@@ -6,7 +6,9 @@
 name: oa
 description: >-
   Office automation: components for what an office keeps track of (a Zoom
-  meeting), each a block of a document and a card a card diagram can hold.
+  meeting, an online course, a weekly timetable holding them), each a block of
+  a document and a card a card diagram can hold; times kept one way, with the
+  preferences of the package (12 or 24 hours, the first day of a week).
 # the packages this one needs: { dir }, relative to this file
 packageDependList:
   # the card diagrams of its documents (a meeting held by a card)
