@@ -78,6 +78,53 @@
 	pointer-events: none;
 }
 
+/* a holder something is dragged over (DiagramRender: data-take, DiagramNodeTake.js): a wider frame
+   and a tint, green when it takes it, the warning color with its reason when it does not; the words
+   over its top edge, at the size of the screen as every floating group */
+.doc-vis-node[data-take]::before {
+	content: '';
+	position: absolute;
+	inset: calc(-2px / var(--doc-vis-zoom, 1));
+	z-index: 2;
+	border: calc(2.5px / var(--doc-vis-zoom, 1)) solid var(--doc-vis-take, #16a34a);
+	border-radius: calc(4px / var(--doc-vis-zoom, 1));
+	background: color-mix(in srgb, var(--doc-vis-take, #16a34a) 7%, transparent);
+	pointer-events: none;
+}
+
+.doc-vis-node[data-take="refused"] {
+	--doc-vis-take: var(--color-fd-warning, #b54708);
+}
+
+.doc-vis-take-mark {
+	position: absolute;
+	bottom: 100%;
+	left: 0;
+	/* over everything the card floats over its top edge (the group of a card holding a component
+	   steps aside while something is dragged: CardComp.jsx), and its words whole, on lines of their own
+	   when the reason is long */
+	z-index: 8;
+	width: max-content;
+	max-width: 26rem;
+	margin-bottom: 4px;
+	padding: 0.2rem 0.5rem;
+	border-radius: 0.35rem;
+	background: var(--doc-vis-take, #16a34a);
+	color: #fff;
+	font-size: 0.75rem;
+	font-weight: 500;
+	line-height: 1.35;
+	white-space: normal;
+	overflow-wrap: anywhere;
+	transform: scale(calc(1 / var(--doc-vis-zoom, 1)));
+	transform-origin: left bottom;
+	pointer-events: none;
+}
+
+.doc-vis-node[data-take="refused"] .doc-vis-take-mark {
+	--doc-vis-take: var(--color-fd-warning, #b54708);
+}
+
 .doc-card-row.is-selected {
 	background: color-mix(in srgb, var(--color-fd-primary) 9%, var(--color-fd-background));
 	box-shadow: inset 3px 0 var(--color-fd-primary);

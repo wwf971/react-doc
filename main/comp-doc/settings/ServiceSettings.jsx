@@ -537,7 +537,7 @@ const TemplateDetail = observer(function TemplateDetail({ template }) {
       <div className="doc-service-detail-grid">
         <span className="doc-service-detail-key">template</span>
         <span className="doc-service-inline">
-          {template.name} <span className="doc-service-detail-code">{template.templateId}</span>
+          {template.name} <span className="doc-service-detail-value">{template.templateId}</span>
           <KindBadge kind={template.kind} />
         </span>
         <span className="doc-service-detail-key">origin</span>
@@ -554,7 +554,7 @@ const TemplateDetail = observer(function TemplateDetail({ template }) {
         <span className="doc-service-detail-key">version</span>
         <TemplateVersionRow template={template} />
         <span className="doc-service-detail-key">versions</span>
-        <span className="doc-service-detail-code">
+        <span className="doc-service-detail-value">
           {template.versionList.length === 0 ? 'only the current one' : template.versionList.map((version) => (
             <span key={version.versionId} className="doc-service-detail-line">
               {version.versionId} {version.time}{version.note ? ` · ${version.note}` : ''}{version.versionId === template.versionId ? ' (current)' : ''}
@@ -574,7 +574,7 @@ const TemplateDetail = observer(function TemplateDetail({ template }) {
           <>
             <span className="doc-service-detail-key">provides</span>
             <span className="doc-service-inline">
-              <span className="doc-service-detail-code">{template.infraName || template.expose?.infra?.name || template.name}</span>
+              <span className="doc-service-detail-value">{template.infraName || template.expose?.infra?.name || template.name}</span>
               <span className="doc-service-settings-muted">· provision {template.provision}{template.provision === 'auto' ? ' (the kernel creates an instance when the name is required and nobody provides it)' : ' (an instance is created here)'}</span>
             </span>
             <StorageRow storage={template.expose?.infra?.storage} />
@@ -583,7 +583,7 @@ const TemplateDetail = observer(function TemplateDetail({ template }) {
         <ExposeRows expose={template.expose} />
         <ObjectExposeRows expose={template.expose} />
         <span className="doc-service-detail-key">initial config</span>
-        <span className="doc-service-detail-code">{configText(template.config)}</span>
+        <span className="doc-service-detail-value">{configText(template.config)}</span>
         <ApiListRow expose={template.expose} />
         <span className="doc-service-detail-key">instances</span>
         <span>
@@ -640,7 +640,7 @@ const TemplateVersionRow = observer(function TemplateVersionRow({ template }) {
 
   return (
     <span className="doc-service-settings-line">
-      <span className="doc-service-detail-code">{template.versionId}</span>
+      <span className="doc-service-detail-value">{template.versionId}</span>
       {!isOpen ? (
         <button
           type="button"
@@ -725,7 +725,7 @@ const InfraRow = observer(function InfraRow({ infra }) {
   const provider = infra.providerList?.find((item) => item.serviceId === infra.serviceId);
   return (
     <div className="doc-service-table-row" role="row">
-      <span role="cell" className="doc-service-table-cell-code" title={infra.storage ? `storage ${infra.storage.type}, versioning ${infra.storage.versioning}: ${infra.storage.description}` : undefined}>
+      <span role="cell" className="doc-service-table-cell-value" title={infra.storage ? `storage ${infra.storage.type}, versioning ${infra.storage.versioning}: ${infra.storage.description}` : undefined}>
         {infra.name}
         {infra.storage ? <span className="doc-badge-outline">{infra.storage.type}</span> : null}
       </span>
@@ -836,7 +836,7 @@ const InstanceDetail = observer(function InstanceDetail({ instance }) {
       <div className="doc-service-detail-grid">
         <span className="doc-service-detail-key">instance</span>
         <span className="doc-service-inline">
-          {instance.name} <span className="doc-service-detail-code">{instance.serviceId}</span>
+          {instance.name} <span className="doc-service-detail-value">{instance.serviceId}</span>
           <KindBadge kind={instance.kind} />
           {instance.provision ? <span className="doc-badge-outline" data-primary="" title={`provisioned ${timeShortText(instance.provision.time)}`}>auto · required by {instance.provision.requiredBy}</span> : null}
         </span>
@@ -847,7 +847,7 @@ const InstanceDetail = observer(function InstanceDetail({ instance }) {
               {templateRecord.name}
             </button>
           ) : templateRecord?.name}
-          <span className="doc-service-detail-code"> template {templateRecord?.templateId}, version {templateRecord?.versionId}</span>
+          <span className="doc-service-detail-value"> template {templateRecord?.templateId}, version {templateRecord?.versionId}</span>
           <span className="doc-service-settings-muted"> · {templateOriginText(serviceStore, instance)}</span>
         </span>
         <span className="doc-service-detail-key">origin</span>
@@ -932,7 +932,7 @@ const InfraInstanceRows = observer(function InfraInstanceRows({ instance }) {
     <>
       <span className="doc-service-detail-key">provides</span>
       <span className="doc-service-inline">
-        <span className="doc-service-detail-code">{name || '?'}</span>
+        <span className="doc-service-detail-value">{name || '?'}</span>
         {infra ? (
           <>
             <ServiceStatusDot status={infraDotStatusByStatus[infra.status] ?? infra.status} />
@@ -1006,7 +1006,7 @@ function StorageRow({ storage }) {
       <span className="doc-service-detail-key">storage</span>
       <span>
         {storage.type} · versioning {storage.versioning}
-        {storage.operationList?.length ? <span className="doc-service-detail-code"> · {storage.operationList.join(', ')}</span> : null}
+        {storage.operationList?.length ? <span className="doc-service-detail-value"> · {storage.operationList.join(', ')}</span> : null}
         {storage.description ? <span className="doc-service-settings-muted"> · {storage.description}</span> : null}
       </span>
     </>
@@ -1021,7 +1021,7 @@ function ExposeRows({ expose }) {
   return (
     <>
       <span className="doc-service-detail-key">dependencies</span>
-      <span className="doc-service-detail-code">
+      <span className="doc-service-detail-value">
         {dependencyList.length === 0 ? <span className="doc-service-settings-muted">none</span> : dependencyList.map((dependency) => (
           <span key={dependency.name} className="doc-service-detail-line">
             {dependency.name}{dependency.isRequired === false ? ' (optional)' : ''}{dependency.onUnavailable === 'reject' ? ' · reject when unavailable' : ''}
@@ -1034,7 +1034,7 @@ function ExposeRows({ expose }) {
         {expose.lifecycle?.hookTimeoutSecond ? <span className="doc-service-settings-muted"> · a hook may take {expose.lifecycle.hookTimeoutSecond} s</span> : null}
       </span>
       <span className="doc-service-detail-key">hooks</span>
-      <span className="doc-service-detail-code">{expose.hookList?.length ? expose.hookList.join(', ') : <span className="doc-service-settings-muted">none implemented</span>}</span>
+      <span className="doc-service-detail-value">{expose.hookList?.length ? expose.hookList.join(', ') : <span className="doc-service-settings-muted">none implemented</span>}</span>
     </>
   );
 }
@@ -1070,7 +1070,7 @@ const ObjectExposeRows = observer(function ObjectExposeRows({ expose }) {
       {typeList.length > 0 ? (
         <>
           <span className="doc-service-detail-key">types</span>
-          <span className="doc-service-detail-code">
+          <span className="doc-service-detail-value">
             {typeList.map((type) => (
               <span key={type.id} className="doc-service-detail-line" title={type.description}>
                 {type.id}{type.kind === 'relation' ? ' (relation)' : ''} <span className="doc-service-settings-muted">extends {type.extendList.join(', ')}</span>
@@ -1082,7 +1082,7 @@ const ObjectExposeRows = observer(function ObjectExposeRows({ expose }) {
       {provide ? (
         <>
           <span className="doc-service-detail-key">provides</span>
-          <span className="doc-service-detail-code">
+          <span className="doc-service-detail-value">
             <span className="doc-service-detail-line">{[...provide.typeList, ...provide.relationTypeList].join(', ')}</span>
             <span className="doc-service-detail-line doc-service-settings-muted">
               {provide.capabilityList.join(', ')}{provide.queryFilterList?.length ? ` · filters ${provide.queryFilterList.join(', ')}` : ''} · answers reused {provide.cacheSecond} s
@@ -1093,7 +1093,7 @@ const ObjectExposeRows = observer(function ObjectExposeRows({ expose }) {
       {compList.length > 0 ? (
         <>
           <span className="doc-service-detail-key">components</span>
-          <span className="doc-service-detail-code">
+          <span className="doc-service-detail-value">
             {compList.map((comp) => (
               <span key={comp.id} className="doc-service-detail-line" title={comp.description}>
                 {comp.id} <span className="doc-service-settings-muted">({comp.export}){comp.objectView ? ` · draws ${comp.objectView.typeList.join(', ')} as ${comp.objectView.contextList.join(', ')}` : ''}</span>
@@ -1105,7 +1105,7 @@ const ObjectExposeRows = observer(function ObjectExposeRows({ expose }) {
       {requireList.length > 0 ? (
         <>
           <span className="doc-service-detail-key">requires</span>
-          <span className="doc-service-detail-code">
+          <span className="doc-service-detail-value">
             {requireList.map((require, index) => {
               const { status, providerList } = objectStore.requireStatusGet(require);
               return (
@@ -1186,7 +1186,7 @@ const DependencyEditor = observer(function DependencyEditor({ instance }) {
             const routed = status?.serviceId ? serviceStore.instanceGet(status.serviceId) : undefined;
             return (
               <div key={dependency.name} className="doc-service-table-row" role="row">
-                <span role="cell" className="doc-service-table-cell-code">{dependency.name}</span>
+                <span role="cell" className="doc-service-table-cell-value">{dependency.name}</span>
                 <span role="cell" className="doc-service-table-cell-nowrap" title={status?.message || undefined}>
                   {status ? (
                     <>
@@ -1295,7 +1295,7 @@ function HookTable({ instance }) {
           </div>
           {recordList.map((record, index) => (
             <div key={`${record.hook}:${record.timeStarted}:${index}`} className="doc-service-table-row" role="row">
-              <span role="cell" className="doc-service-table-cell-code">{record.hook}</span>
+              <span role="cell" className="doc-service-table-cell-value">{record.hook}</span>
               <span role="cell" className="doc-service-table-cell-nowrap">
                 <ServiceStatusDot status={hookStatusDotByStatus[record.status] ?? record.status} />
                 {record.status}
@@ -1622,7 +1622,7 @@ const LogArea = observer(function LogArea() {
             const isOpen = logIdOpen === key;
             return (
               <div key={key} className="doc-service-table-row" role="row">
-                <span role="cell" className="doc-service-table-cell-nowrap doc-service-table-cell-code" title={record.time}>{timeShortText(record.time)}</span>
+                <span role="cell" className="doc-service-table-cell-nowrap doc-service-table-cell-value" title={record.time}>{timeShortText(record.time)}</span>
                 <span role="cell" className="doc-service-table-cell-nowrap doc-service-log-level" data-level={record.level}>{record.level}</span>
                 <span role="cell" className="doc-service-table-cell-nowrap" title={`${record.principal?.kind ?? ''} ${record.principal?.id ?? ''}`.trim()}>{principalShort(record.principal)}</span>
                 <span role="cell" className="doc-service-table-cell-nowrap">{record.feature}</span>
@@ -1673,7 +1673,7 @@ function ApiListRow({ expose }) {
   return (
     <>
       <span className="doc-service-detail-key">apis</span>
-      <span className="doc-service-detail-code">
+      <span className="doc-service-detail-value">
         {expose.apiList.map((api) => (
           <span key={api.name} title={api.description}>
             {api.name}({api.paramList.map((param) => `${param.name}${param.isRequired ? '' : '?'}: ${param.schema.type}`).join(', ')})

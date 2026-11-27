@@ -12,7 +12,8 @@ import { Waypoints } from '../../../../main/frontend/UICommon.js';
 //   kind
 //     type        the renderer type authored in `renderer: { type }`
 //     label       its name in the create panel and in messages
-//     contract    { dataNormalize?, anchorListGet, sizeDefault, sizeMin?, resizeAxisList?, sizeModeList?, styleList?, outlineOf? }:
+//     contract    { dataNormalize?, anchorListGet, sizeDefault, sizeMin?, resizeAxisList?, sizeModeList?, styleList?, outlineOf?,
+//                   nodeTakeReasonGet?, nodeTake? }:
 //                 what the diagram may assume about the node (DiagramERData.js). resizeAxisList: what
 //                 its resize handles change, where the rule of DiagramNodeResize.js (read from the
 //                 node) is wrong for the kind; sizeModeList: the ways its box is taken (fit, wrap,
@@ -21,7 +22,9 @@ import { Waypoints } from '../../../../main/frontend/UICommon.js';
 //                 styleList: the keys of node.style its card draws (DiagramNodeStyle.js);
 //                 outlineOf(node): the shape of its boundary, { kind: rect | ellipse | polygon,
 //                 pointList? } (a box when absent), for whoever reads points on it (the reference
-//                 points of the parametric canvas: ParametricReferencePoint.js)
+//                 points of the parametric canvas: ParametricReferencePoint.js);
+//                 nodeTakeReasonGet({ holder, dropped, editor }) and nodeTake({ holder, dropped, editor }):
+//                 the node holds others, a node dropped on it taken into its data (DiagramNodeTake.js)
 //     schema      the card schema (TableCardSchema.js) when the node is a
 //                 card the editor knows rows and fields of; null otherwise
 //     Card        the component drawing the node: { node, schema, anchorRef,

@@ -253,6 +253,7 @@ const RegisteredCompInner = observer(function RegisteredComp(props) {
   // the state of the document the component is in (doc_page_impl_mdx_comp.md#the-state-of-the-document):
   // its mode (read, edit, select), read through getters; a page without the edit layer reads
   const docState = editStore?.docStateServiceGet(sourcePath) ?? DOC_STATE_READ;
+  const packageName = definition.expose?.meta?.configPackage?.name;
   const config = {
     assetUrlGet,
     docState,
@@ -267,6 +268,10 @@ const RegisteredCompInner = observer(function RegisteredComp(props) {
     ...configBuilt,
     ...configRuntime,
     compConfig: configStore.compConfigGet(compIdResolved, sourcePath),
+    // the preferences of the package whose group it carries (expose.meta.configPackage), resolved for
+    // this document (doc_page_impl_config.md#package-level-config); a host without them answers none,
+    // and the component takes the defaults of the group
+    ...(packageName ? { packageConfig: configStore.packageConfigGet?.(packageName, sourcePath) ?? {} } : {}),
     ...(definition.isAssetAware ? { assetInfo: configRuntime.assetInfo ?? { isFromAsset: false } } : {}),
     ...(viewMode !== undefined ? { viewMode } : {}),
     blockIndex,

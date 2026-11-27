@@ -99,8 +99,9 @@
   user-select: text;
 }
 
-.aws-auth-fact-value[data-mono] {
-  font-family: var(--font-mono, ui-monospace, monospace);
+/* an id or a code: figures in tabular digits, the face of the page (never monospace) */
+.aws-auth-fact-value[data-figure] {
+  font-variant-numeric: tabular-nums;
   font-size: 0.74rem;
 }
 

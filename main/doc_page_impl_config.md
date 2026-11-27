@@ -9,18 +9,19 @@ The config system decides how the doc page behaves, for example whether tags app
 
 **This system is about the page and the workspace of doc pages.** What an app built on react-doc does (whether it shows its example data, the defaults of what it makes) is the app's own config: config layers kept as a frontend object of the package `app-config`, stacked by partition and order, which an app reads with its own backend ([Desktop apps on react-doc](doc_page_impl_desktop.md#the-config), `package/app-config/doc/README.md`). The two never share a key.
 
-The keys of the page are declared in code. A registered component may declare keys of its own, which go through the same levels under a `compConfig` mapping, kept visibly apart from the page keys ([Component-level config](#component-level-config)); and a value at any level may use a variable ([Variables](#variables)). All parts use the same lists of known keys, and renderers read them through one config service. For the overall architecture, refer to [Document Page: Design](doc_page_impl.md).
+The keys of the page are declared in code. A registered component may declare keys of its own, which go through the same levels under a `compConfig` mapping, kept visibly apart from the page keys ([Component-level config](#component-level-config)); a package may declare its preferences once for all its components, under a `packageConfig` mapping ([Package-level config](#package-level-config)); and a value at any level may use a variable ([Variables](#variables)). All parts use the same lists of known keys, and renderers read them through one config service. For the overall architecture, refer to [Document Page: Design](doc_page_impl.md).
 
 ```text
 key definitions (code)          which keys exist, their values, default, scope
-component definitions (code)    the keys a component declares for itself (compDefine expose.meta.configDefineList)
+component definitions (code)    the keys a component declares for itself (compDefine expose.meta.configDefineList),
+                                and the preferences of its package it carries (expose.meta.configPackage)
 layer definitions (code)        which config layers exist, how each is stored, where it sits in the stack
         │
 default layer:    config.yaml configDefault (+ built-in defaults)   the package's values, read only
 doc page layers:  "config" of each doc page's entry and the files it reaches   one layer per doc page of the
         │           workspace; the main doc page's (the first root doc page) applied, the others shown only
 workspace layer:  "config" of the workspace file                  the deployment's values, over the main doc page's
-        │                                     (each value: { Key, compConfig: { Comp: { Key } } }, ${name} variables)
+        │        (each value: { Key, compConfig: { Comp: { Key } }, packageConfig: { pkg: { Key } } }, ${name} variables)
         │  document-level keys only, later wins:
         ├── source.yaml       rules that collected the document
         ├── side-panel.yaml   items that bind the document, or a folder above it
@@ -29,7 +30,8 @@ workspace layer:  "config" of the workspace file                  the deployment
 client layer:     this browser's storage   overrides any key, page or document
         ▼
 DocConfigStore  ──►  config service  ──►  renderers (side-panel items, path bar, links, ...)
-                                     ──►  RegisteredComp: config.compConfig of every component
+                                     ──►  RegisteredComp: config.compConfig of every component,
+                                          config.packageConfig of one carrying its package's group
         ▲
 settings panel  ──►  one tab per layer, showing what the layer declares (tabs Config / Component)
                      doc page, workspace: a value written into its declaration in place (development server)
@@ -218,7 +220,7 @@ The client layer is this browser's storage (`localStorage`, one entry per layer 
 
 The settings button (a gear, left of the sidebar collapse trigger in the sidebar header) opens the settings panel, a popup centered in the browser window, with a fixed height and six tabs. A tab taller than the panel scrolls inside that tab; the title and the tab bars stay put. The panel closes only with the close button at its top right. Dragging the header, aside from its buttons, moves the panel. The tab labels are grey, the active one black, like the text of the config items.
 
-The **Config** tab lists the page keys, the **Component** tab the keys components declare ([Component-level config](#component-level-config)), one group per component that documents can name. Under each sits a second tab line, one tab per config layer in stack order, then **Result**; the tab shown is shared by the two (`DocConfigStore.settingsLayerId`).
+The **Config** tab lists the page keys, the **Component** tab the keys components declare ([Component-level config](#component-level-config)), one group per component that documents can name, and the preferences of packages, a group each (`oa (package)`, [Package-level config](#package-level-config)). Under each sits a second tab line, one tab per config layer in stack order, then **Result**; the tab shown is shared by the two (`DocConfigStore.settingsLayerId`).
 
 ```text
 Default    every user-settable key, greyed out, beside each "built-in" or "config.yaml configDefault"
@@ -402,6 +404,8 @@ levelDocGet(docPath, key)       level that decided it: a layer id (default, docP
 configDefineListGet()           every key definition
 compConfigGet(compId, docPath)  { key: value } of a component's own keys, resolved for one document
 compConfigDefineListGet(compId) the keys a component declares
+packageConfigGet(name, docPath) { key: value } of the preferences of a package, resolved for one document
+packageConfigDefineListGet(name)   the keys of a package's group
 ```
 
 Calls from observer components are tracked by mobx. Side-panel item renderers receive the page-level values and the service directly in their `config` (`config.configGlobal`, `config.configService`). See [Side panel design](doc_page_impl_side_panel.md#renderer-interface).
@@ -439,13 +443,13 @@ A registered component tells the page about itself through the `expose` option o
 
 | name | read by | what it declares |
 | --- | --- | --- |
-| `meta` | the config system, the edit layer | facts about the component as one object: `label` and `description`, `isReadOnly` (no edit mode at all), `isEditSourceAccepted` (whether the built-in source edit mode is offered), `isInsertCommon` (listed directly in the insert menu), and **`configDefineList`, the shape of its component-level config** |
+| `meta` | the config system, the edit layer | facts about the component as one object: `label` and `description`, `isReadOnly` (no edit mode at all), `isEditSourceAccepted` (whether the built-in source edit mode is offered), `isInsertCommon` (listed directly in the insert menu), **`configDefineList`, the shape of its component-level config**, and **`configPackage`, the group of the package-level config it carries** ([Package-level config](#package-level-config)) |
 | `icon` | the insert menu, the mode menu | a component drawing the icon at any size |
 | `viewModeList` | the mode menu, `RegisteredComp` | the ways its data is displayed, handed to it as `config.viewMode` |
 | `editModeList` | the mode menu, the edit layer | the ways its data is edited in place, beside the built-in `source` mode |
 | `sourceDefaultCreate` | the insert menu | the factory of the source of a new block, given the document it goes to |
 
-Only `meta.configDefineList` concerns this document: the config system reads it to know which keys a component has (`compConfigDefineByCompIdBuild`, `lib/doc-config-define.js`) and nothing else of the exposure; the modes and the icon are the subject of [MDX components](doc_page_impl_mdx_comp.md#what-a-component-exposes) and [MDX document in-place editing](doc_page_impl_edit.md#component-edit-mode). The shape of config is what a component exposes, never its values: the values come from the levels and layers below and reach the component resolved.
+Only `meta.configDefineList` and `meta.configPackage` concern this document: the config system reads them to know which keys a component and a package have (`compConfigDefineByCompIdBuild`, `lib/doc-config-define.js`) and nothing else of the exposure; the modes and the icon are the subject of [MDX components](doc_page_impl_mdx_comp.md#what-a-component-exposes) and [MDX document in-place editing](doc_page_impl_edit.md#component-edit-mode). The shape of config is what a component exposes, never its values: the values come from the levels and layers below and reach the component resolved.
 
 ### Declaring component keys
 
@@ -484,9 +488,30 @@ config:
       FileStoreDir: ~guide/images
 ```
 
-The resolution is the one of [document config](#resolution-steps), run per component: default, the `compConfig` mapping of the layers below (`configDefault`, the doc page declarations), of the source rules, of the side-panel nodes, of the frontmatter, and the layers above (the client layer keeps its component values by component id). The page keys and the component keys never mix: a `compConfig` mapping inside a `config` is not a page key, and a component key written beside the page keys is unknown and warned about. A name that is not in `compRegistry`, or a key the component does not declare, is warned about and ignored like an unknown page key.
+The resolution is the one of [document config](#resolution-steps), run per owner of keys (a component, or a [package](#package-level-config)): default, the `compConfig` mapping of the layers below (`configDefault`, the doc page declarations), of the source rules, of the side-panel nodes, of the frontmatter, and the layers above (the client layer keeps its component values by component id). The page keys and the component keys never mix: a `compConfig` mapping inside a `config` is not a page key, and a component key written beside the page keys is unknown and warned about. A name that is not in `compRegistry`, or a key the component does not declare, is warned about and ignored like an unknown page key.
 
 A component receives its resolved values as `config.compConfig` (the `config` prop of every registered component, [component registry](doc_page_impl.md#component-registry)), resolved for the document it is rendered in, so a component reads `config.compConfig.FileStoreDir` and knows nothing of the levels. The settings panel lists the component keys on a tab of their own, **Component**, grouped by component name (only components that declare keys and that a tag name maps to appear; a page without such components says so), and a change there is written into the layer shown, as for a page key: in a doc page declaration under the tag name it already uses for the component. The config service answers `compConfigGet(compId, docPath)` and `compConfigDefineListGet(compId)`; the store keeps `layerCompGroupListGet`, `layerCompValueSet`, and `compIdListWithConfig` for the panel.
+
+## Package-level config
+
+A package may have **preferences**: facts about how its components behave that are the same for all of them and that a reader or a doc page chooses once (the oa package: 12 or 24 hours, the first day of a week, the format of a time). Declared per component they would have to be set once per component, and another package could not find them; declared as page keys they would mix with the page's. So a package declares a **group** of keys once, named by the package, and the values are written under their own mapping, beside `compConfig`:
+
+```yaml
+config:
+  TagsDisplayAtLinkIsOn: true
+  packageConfig:
+    oa:
+      TimeClock: 12h
+      TimeWeekStart: sunday
+```
+
+**Where the keys are declared.** A package's code reaches the page only through its components, so the group travels with them: one frozen object in the package (`{ name, label, description, configDefineList }`, the definitions in the form of a component's keys), which every component of the package that reads the preferences names in its exposure, `expose.meta.configPackage`. The registry checks its shape at registration (`comp-expose.js`); the store keeps one group per package name (`compConfigDefineByCompIdBuild`: the first object of a name is kept, another object of the same name is warned about), so a component of another package may carry the group too, to be handed its values. The group of oa is `oaConfigPackage` (`package/oa/comp-mdx/time/oa-config.js`).
+
+**How they are resolved.** Exactly as a component's keys, at every level and in every layer: the model takes a package as one more owner of keys, under the owner id `package:{name}` (a tag name has no `:`, so the two never meet). A declaration's `packageConfig` is folded into the owner map of its level (`configOwnerMapOf`), a layer keeps it beside the components (the client layer by the owner id), and a value is written back where it was read (`configOwnerPathOf`: `[packageConfig, name, Key]`, a path the edit api accepts as it accepts `[compConfig, TagName, Key]`). An unknown package name, an unknown key, an invalid value are warned about and ignored, as for a component.
+
+**How they are read.** A component carrying a group is handed the values of its package, resolved for the document it is drawn in, as `config.packageConfig` (`RegisteredComp`); anything else asks the config service, `packageConfigGet(name, docPath)` (and `packageConfigDefineListGet(name)`). A host drawing components without a page (an app holding them in card diagrams) answers none (`packageConfigGet: () => ({})`), and the component takes the defaults of its group: a package reads its preferences through one function of its own that fills what is missing (`oaPreferenceGet`), never `config.packageConfig.Key` bare.
+
+**In the settings panel.** The **Component** tab lists a group per package beside the groups of the components, named by the package and the word *package* (`oa (package)`, `DocConfigStore.ownerLabelGet`), in every layer, edited as a component's.
 
 ## Variables
 
@@ -514,7 +539,9 @@ All config logic uses the `doc-config` prefix:
 frontend/src/lib/doc-config-define.js      key definitions, layer definitions (configLayerDefineList, one per doc
                                            page for isPerDocPage: configLayerIdOfDocPage), value validation (shared
                                            with the plugin), configValueMerge (a stringMap entry by entry), the
-                                           component key index (compConfigDefineByCompIdBuild), variableExpand
+                                           index of the keys of components and packages (compConfigDefineByCompIdBuild;
+                                           configOwnerMapOf, configOwnerPathOf: packageConfig as owner package:{name}),
+                                           variableExpand
 frontend/src/lib/doc-rank.js               ranks (LexoRank-like): validation, order, a rank between two
 frontend/plugin/doc-entry.ts               the doc page layers and the workspace layer: "config" sections and config
                                            files read while the entries and the workspace are loaded, every

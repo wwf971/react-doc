@@ -152,7 +152,8 @@ export function docEditApiCreate(endpoint, { onUnreachable } = {}) {
     // answers { file, keyPath, value }
     //   file        the file of the declaration, relative to the config directory
     //   keyPath     the yaml address of the declaration, then [Key] or
-    //               ['compConfig', CompName, Key]; the key must be declared
+    //               ['compConfig', CompName, Key] or ['packageConfig', packageName, Key];
+    //               the key must be declared
     //   value       null, boolean, number, string, or a list of strings
     //   valueBase   the value the file declared when the page displayed it;
     //               refused with -2 when it changed

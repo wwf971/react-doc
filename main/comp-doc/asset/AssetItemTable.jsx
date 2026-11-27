@@ -37,14 +37,14 @@ export const AssetItemTable = observer(function AssetItemTable({ itemList, itemI
                 onClick={() => onSelect(item.itemId)}
               >
                 <td>{item.name || <span className="doc-asset-muted">(no name)</span>}</td>
-                <td className="doc-asset-mono doc-asset-muted">{item.itemId}</td>
-                <td className="doc-asset-mono">{item.component?.name ?? ''}</td>
-                <td className="doc-asset-mono doc-asset-muted doc-asset-version-size">{item.versionList.length}</td>
+                <td className="doc-asset-value doc-asset-muted">{item.itemId}</td>
+                <td className="doc-asset-value">{item.component?.name ?? ''}</td>
+                <td className="doc-asset-value doc-asset-muted doc-asset-version-size">{item.versionList.length}</td>
                 <td className="doc-asset-version-lock" title={item.isLocked ? 'locked' : undefined}>
                   {item.isLocked ? <Lock size={11} aria-label="locked" /> : null}
                 </td>
-                <td className="doc-asset-mono doc-asset-muted">{item.timeCreated}</td>
-                <td className="doc-asset-mono doc-asset-muted">{eventLast ? `${eventLast.eventType} ${eventLast.time}` : ''}</td>
+                <td className="doc-asset-value doc-asset-muted">{item.timeCreated}</td>
+                <td className="doc-asset-value doc-asset-muted">{eventLast ? `${eventLast.eventType} ${eventLast.time}` : ''}</td>
               </tr>
             );
           })}

@@ -2,7 +2,7 @@ import { makeAutoObservable, observable, runInAction } from 'mobx';
 import type { DocSourceStore } from './DocSourceStore.js';
 import type { DocEnvStore } from './DocEnvStore.js';
 import { docEditApiCreate } from '../lib/doc-edit-api.js';
-import { configLayerIdOfDocPage } from '../lib/doc-config-define.js';
+import { configLayerIdOfDocPage, configOwnerMapOf, configOwnerPathOf } from '../lib/doc-config-define.js';
 
 // The config layers as the page reads and writes them. Design:
 // doc_page_impl_config.md#config-layers
@@ -395,8 +395,10 @@ export class ConfigLayerDeclared implements ConfigLayer {
       return RESULT_REFUSED(`${compKey}.${key} is not declared in ${declaration.label}`);
     }
     if (valueIsSame(declaration.compConfig[compKey][key], value)) return Promise.resolve(RESULT_OK);
-    const valueBase = this.declaredValueGet(declarationId, [COMP_CONFIG_KEY, compKey, key]);
-    return this.write(declaration, [COMP_CONFIG_KEY, compKey, key], value, valueBase, (pendingOne) => ({
+    // a component's values under compConfig by its name, a package's under packageConfig by its name
+    const keyPath = [...configOwnerPathOf(compKey), key];
+    const valueBase = this.declaredValueGet(declarationId, keyPath);
+    return this.write(declaration, keyPath, value, valueBase, (pendingOne) => ({
       ...pendingOne,
       compConfig: { ...pendingOne.compConfig, [compKey]: { ...(pendingOne.compConfig[compKey] ?? {}), [key]: value } },
     }));
@@ -616,8 +618,6 @@ function storedRead(storageKey: string): ConfigLayerBrowserStored {
   }
 }
 
-const COMP_CONFIG_KEY = 'compConfig';
-
 // the folder of the doc page, from its entry file (relative to the config
 // directory): the parent of .doc-page/ (doc_page_impl_dir.md), or the
 // entry's own folder
@@ -634,11 +634,13 @@ function fileLabelGet(file: string, dirPage: string): string {
   return dirPage !== '' && file.startsWith(dirPage) ? file.slice(dirPage.length) : file;
 }
 
-// a declared config mapping split into its page keys and its component keys
+// a declared config mapping split into its page keys and the keys of its owners below the page:
+// compConfig by the component names written, packageConfig by the owner ids of the packages
+// (package:oa, doc_page_impl_config.md#package-level-config), one mapping
 function configSplit(configDeclared: Record<string, any>): ConfigLayerBrowserStored {
-  const { [COMP_CONFIG_KEY]: compConfigDeclared, ...config } = configDeclared;
+  const { compConfig: _compConfigDeclared, packageConfig: _packageConfigDeclared, ...config } = configDeclared;
   const compConfig: Record<string, Record<string, any>> = {};
-  for (const [compKey, configComp] of Object.entries(mappingGet(compConfigDeclared))) {
+  for (const [compKey, configComp] of Object.entries(mappingGet(configOwnerMapOf(configDeclared)))) {
     compConfig[compKey] = mappingGet(configComp);
   }
   return { config, compConfig };

@@ -125,7 +125,7 @@
 .doc-source-ambiguity-warning ul {
   margin: 0;
   padding-left: 1.25rem;
-  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
   font-size: 0.8rem;
 }
 

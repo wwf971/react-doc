@@ -165,7 +165,7 @@ const ASSET_SAVE_MODE_LIST = ['inPlace', 'newVersion'];
 // isAssetOnly renders there only with data from the asset service layer
 export const COMP_PLACEMENT_DOC_LIST = ['mdx', 'commentBlock'];
 
-export const compExposeNameStandardList = ['meta', 'icon', 'viewModeList', 'editModeList', 'sourceDefaultCreate', 'apiList', 'objectView', 'objectInner', 'pagination', 'portal', 'blockLabelGet'];
+export const compExposeNameStandardList = ['meta', 'icon', 'viewModeList', 'editModeList', 'sourceDefaultCreate', 'apiList', 'objectView', 'objectInner', 'pagination', 'portal', 'blockLabelGet', 'hold'];
 
 const REGEX_TYPE_ID = /^[a-z][a-z0-9-]*(\.[a-zA-Z][a-zA-Z0-9-]*)+$/;
 
@@ -180,7 +180,7 @@ export function compExposeNormalize(expose = {}) {
   if (expose.editTemplate !== undefined) {
     throw new Error('compDefine: expose.editTemplate is expose.sourceDefaultCreate(env) now (comp-expose.js).');
   }
-  const { meta, icon, viewModeList, editModeList, sourceDefaultCreate, apiList, objectView, objectInner, pagination, portal, blockLabelGet, ...exposeOther } = expose;
+  const { meta, icon, viewModeList, editModeList, sourceDefaultCreate, apiList, objectView, objectInner, pagination, portal, blockLabelGet, hold, ...exposeOther } = expose;
   if (blockLabelGet !== undefined && typeof blockLabelGet !== 'function') throw new Error('compDefine: expose.blockLabelGet(component, context) must be a function.');
   return {
     ...exposeOther,
@@ -195,7 +195,29 @@ export function compExposeNormalize(expose = {}) {
     pagination: paginationNormalize(pagination),
     portal: portalNormalize(portal),
     blockLabelGet,
+    hold: holdNormalize(hold),
   };
+}
+
+// expose.hold: the component holds blocks of other components in its data (a timetable holding
+// meetings: doc_page_impl_mdx_comp.md#a-component-holding-others). A block is what a block of a
+// document holds, { comp, lang, raw, props? }; data is the holder's, as dataFields reads it,
+// { raw, lang, ...props }. Every function is pure:
+//   heldListGet(data)               [{ key, block }]: what it holds, the key stable while its data is
+//   takeCheck(data, block, context) why it cannot take the block, '' when it can
+//   take(data, block, context)      { raw, props? }: its data with the block in it
+//   letGo(data, key)                { raw, props?, block }: its data without the held block of that
+//                                   key, and the block; optional (a holder that keeps what it takes)
+// context: { compDefinitionGet(compName) -> the definition of a component by its name (to read what
+// the block exposes, its time), point?: { x, y } where it was dropped, 0 to 1 across the holder }
+function holdNormalize(hold) {
+  if (hold === undefined) return undefined;
+  if (!hold || typeof hold !== 'object' || Array.isArray(hold)) throw new Error('compDefine: expose.hold must be { heldListGet, takeCheck, take, letGo? }.');
+  for (const name of ['heldListGet', 'takeCheck', 'take']) {
+    if (typeof hold[name] !== 'function') throw new Error(`compDefine: expose.hold.${name} must be a function.`);
+  }
+  if (hold.letGo !== undefined && typeof hold.letGo !== 'function') throw new Error('compDefine: expose.hold.letGo must be a function.');
+  return { heldListGet: hold.heldListGet, takeCheck: hold.takeCheck, take: hold.take, ...(hold.letGo ? { letGo: hold.letGo } : {}) };
 }
 
 // what a component calls a block of its own (expose.blockLabelGet): { text, title }, or null
@@ -329,6 +351,10 @@ function metaNormalize(meta) {
   if (meta.assetSaveMode !== undefined && !ASSET_SAVE_MODE_LIST.includes(meta.assetSaveMode)) {
     throw new Error(`compDefine: expose.meta.assetSaveMode must be one of ${ASSET_SAVE_MODE_LIST.join(', ')}.`);
   }
+  const group = meta.configPackage;
+  if (group !== undefined && (!group || typeof group !== 'object' || !/^[a-z][a-z0-9-]*$/.test(String(group.name ?? '')) || !Array.isArray(group.configDefineList))) {
+    throw new Error('compDefine: expose.meta.configPackage must be { name, label?, description?, configDefineList }, name the name of the package (doc_page_impl_config.md#package-level-config).');
+  }
   if (meta.slashAliasList !== undefined && !Array.isArray(meta.slashAliasList)) {
     throw new Error('compDefine: expose.meta.slashAliasList must be an array.');
   }
@@ -445,6 +471,41 @@ export function compExposeGet(definition, name) {
 
 export function compMetaGet(definition) {
   return definition?.expose?.meta ?? metaDefault;
+}
+
+// ---------- a component holding others (expose.hold, holdNormalize above) ----------
+
+// whether a holder takes a block, asked while something is dragged over it: '' it does, else why
+// not; undefined when it holds nothing at all (no hold). A holder that fails is a refusal saying so
+export function compHoldTakeReasonGet(definition, data, block, context) {
+  const hold = definition?.expose?.hold;
+  if (!hold) return undefined;
+  if (!block?.comp) return 'only a block of a component can be held';
+  try {
+    return String(hold.takeCheck(data, block, context) ?? '');
+  } catch (error) {
+    return `it could not tell: ${error?.message ?? error}`;
+  }
+}
+
+// the holder's data with the block in it, { raw, props? }; throws what the holder refuses
+export function compHoldTake(definition, data, block, context) {
+  const hold = definition?.expose?.hold;
+  if (!hold) throw new Error('This component holds no other.');
+  const reason = compHoldTakeReasonGet(definition, data, block, context);
+  if (reason) throw new Error(reason);
+  const result = hold.take(data, block, context);
+  if (!result || typeof result.raw !== 'string') throw new Error('expose.hold.take answers { raw, props? }.');
+  return result;
+}
+
+// the holder's data without the held block of a key, and the block: { raw, props?, block }; null
+// when it lets nothing go (no letGo, no such key)
+export function compHoldLetGo(definition, data, key) {
+  const letGo = definition?.expose?.hold?.letGo;
+  if (!letGo) return null;
+  const result = letGo(data, key);
+  return result && typeof result.raw === 'string' && result.block?.comp ? result : null;
 }
 
 // the apis a component exposes (none for a legacy definition)

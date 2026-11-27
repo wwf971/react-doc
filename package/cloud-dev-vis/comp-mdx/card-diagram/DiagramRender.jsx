@@ -14,6 +14,7 @@ import { nodeStyleVarsOf } from './DiagramNodeStyle.js';
 import { DiagramResizeHandles } from './DiagramResizeHandles.jsx';
 import { nodeResizeAxisListOf } from './DiagramNodeResize.js';
 import { useNodeOverflowWatch } from './DiagramNodeOverflow.js';
+import { nodeTakeMarkText } from './DiagramNodeTake.js';
 
 // what every node and edge of a canvas shares: the component config, the
 // node registry of the component (registry, node-registry.js: the card of
@@ -125,6 +126,9 @@ export const DiagramNode = observer(function DiagramNode({ id, data }) {
 	// that draws its own selection (a table, an operator, a label) keeps its own (DiagramVisualEdit.css)
 	const isSelectedWhole = Boolean(editor) && selection?.nodeId === id && !selection.connectionId;
 	const isConnectable = Boolean(editor) && !editor.isLocked;
+	// something dragged over it that it holds (DiagramNodeTake.js): it takes it, or why not; marked on
+	// its box, for every kind, as the selection is
+	const takeMark = editor?.store.nodeTakeMarkGet?.(id) ?? null;
 	// the node selected is resized by the handles on the frame of its selection, in what its box can
 	// change (DiagramNodeResize.js: the same rule for every node); not where the structure is given
 	const contract = registry?.kindByType[node.renderer?.type]?.contract;
@@ -132,7 +136,8 @@ export const DiagramNode = observer(function DiagramNode({ id, data }) {
 	// nodeResizeAxisListGet: between two lines of a locator), which its handles then leave alone
 	const resizeAxisList = isSelectedWhole && !editor.isLocked && !editor.store.isStructureFixed ? (editor.featureList ?? []).reduce((axisList, session) => session.nodeResizeAxisListGet?.(id, axisList) ?? axisList, nodeResizeAxisListOf(node, contract)) : [];
 	return (
-		<div ref={root} className={`doc-vis-node${node.isBackground && !editor ? ' is-background' : ''}${node.size.height === 'auto' ? ' is-height-auto' : ''}${node.isDerived ? ' is-derived' : ''}`} data-search={searchMark.state ?? undefined} data-selected={isSelectedWhole ? '' : undefined} style={{ height: node.size.height === 'auto' ? 'auto' : '100%' }}>
+		<div ref={root} className={`doc-vis-node${node.isBackground && !editor ? ' is-background' : ''}${node.size.height === 'auto' ? ' is-height-auto' : ''}${node.isDerived ? ' is-derived' : ''}`} data-search={searchMark.state ?? undefined} data-selected={isSelectedWhole ? '' : undefined} data-take={takeMark ? (takeMark.reason ? 'refused' : 'taken') : undefined} style={{ height: node.size.height === 'auto' ? 'auto' : '100%' }}>
+			{takeMark ? <div className="doc-vis-take-mark nodrag nopan" role="status">{nodeTakeMarkText(takeMark)}</div> : null}
 			<div ref={contentRef} className="doc-vis-node-content not-prose" style={nodeStyleVarsOf(node)}>
 				<DiagramNodeContent id={id} node={node} config={config} registry={registry} editor={editorContent} anchorRef={anchorRef} visualization={visualization} />
 			</div>

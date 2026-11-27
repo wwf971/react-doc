@@ -25,6 +25,7 @@ import { cardGraphNormalize, cardGraphSearchMatch, cardGraphSizeGet } from './Ca
 import { parametricCanvasFeature } from '../card-diagram-parametric-canvas/ParametricFeature.jsx';
 import { CardComp } from './CardComp.jsx';
 import { CARD_COMP_SIZE_MODE_LIST, CARD_COMP_TYPE, cardCompNodeCreate, cardCompNormalize, cardCompSectionListBuild } from './CardCompData.js';
+import { cardCompTake, cardCompTakeReasonGet } from './CardCompHold.js';
 
 // The node kinds of the base series (card-diagram-impl.md#node-registries): a
 // generic table card with authored fields and rows, without any limit on
@@ -283,6 +284,10 @@ export const cardCompNodeKind = {
 		// its values one by one, when its component offers them, and its data as text (CardCompData.js);
 		// the definition of its component is the page's, asked of the editor
 		cardSectionListGet: ({ nodeId, node, store, editor, change }) => cardCompSectionListBuild({ nodeId, node, store, change, definition: node.data?.comp ? editor?.compDefinitionGet?.(node.data.comp) ?? null : null }),
+		// a holder when its component holds others (expose.hold: a weekly timetable): a card of a
+		// component dropped on it is taken into its data (CardCompHold.js, DiagramNodeTake.js)
+		nodeTakeReasonGet: cardCompTakeReasonGet,
+		nodeTake: cardCompTake,
 	},
 	schema: null,
 	Card: CardComp,

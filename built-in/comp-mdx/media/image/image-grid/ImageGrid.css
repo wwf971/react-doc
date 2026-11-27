@@ -58,7 +58,7 @@
 
 .doc-image-grid-edit-field-name {
 	color: var(--color-fd-muted-foreground);
-	font-family: var(--font-mono, ui-monospace, monospace);
+	font-variant-numeric: tabular-nums;
 	font-size: 0.7rem;
 }
 

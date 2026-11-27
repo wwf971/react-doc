@@ -299,6 +299,52 @@ export class DiagramEditStore {
 		this.history.groupClose();
 	}
 
+	// ---------- a node holding others (card-diagram-impl.md#a-node-holding-others, DiagramNodeTake.js) ----------
+
+	// what a node something is dragged over says: { reason } ('' it takes it), or null. Each node reads
+	// its own (a computed of its own), so a drag passing over a card draws that card alone
+	nodeTakeMarkGet(nodeId) {
+		return this.itemComputedGet(`take:${nodeId}`, () => {
+			const take = this.interaction?.take;
+			return take?.nodeId === nodeId ? { reason: take.reason ?? '' } : null;
+		});
+	}
+
+	// a node dropped on a holder that takes it: the holder's data with it (its kind's nodeTake), the
+	// node gone, its lines detached with their ends free where they were; one step, the holder selected
+	nodeTake(holderId, holderData, droppedId, { positionGet } = {}) {
+		if (this.kind !== 'diagram' || this.isStructureFixed || holderId === droppedId) return false;
+		if (!this.nodeGet(holderId) || !this.nodeGet(droppedId)) return false;
+		const isChanged = this.changeApply(documentNext => {
+			// the holder first: removing the node dropped shifts the places of the nodes after it
+			documentNext.setIn([...this.nodePathGet(holderId), 'data'], documentNext.createNode(holderData));
+			this.nodeRemoveWrite(documentNext, droppedId, { positionGet });
+		});
+		if (isChanged) this.select(holderId);
+		return isChanged;
+	}
+
+	// a holder letting go of what it held: its data without it; what it held taken by another holder
+	// (takerId, takerData: that one's data with it), or a node of its own at a position (released: the
+	// node without id and place, { idPrefix, renderer, size, data, handles }). One step; what it went
+	// to is selected. -> the id of that node, null when refused
+	nodeRelease(holderId, holderData, released, { position = null, takerId = null, takerData = null } = {}) {
+		if (this.kind !== 'diagram' || this.isStructureFixed || !this.nodeGet(holderId)) return null;
+		if (takerId && (!this.nodeGet(takerId) || takerId === holderId)) return null;
+		if (!takerId && (!released || !position)) return null;
+		const { idPrefix = 'node', ...nodeRest } = released ?? {};
+		const node = takerId ? null : { id: idNext(idPrefix, this.nodes), ...nodeRest, position: { x: Math.round(position.x), y: Math.round(position.y) } };
+		const isChanged = this.changeApply(documentNext => {
+			documentNext.setIn([...this.nodePathGet(holderId), 'data'], documentNext.createNode(holderData));
+			if (takerId) documentNext.setIn([...this.nodePathGet(takerId), 'data'], documentNext.createNode(takerData));
+			else documentNext.addIn(['nodes'], documentNext.createNode(node));
+		});
+		if (!isChanged) return null;
+		const idTo = takerId ?? node.id;
+		this.select(idTo);
+		return idTo;
+	}
+
 	saveTargetSet(value) { if (['asset', 'inline'].includes(value)) this.saveTarget = value; }
 
 	// ---------- queries ----------

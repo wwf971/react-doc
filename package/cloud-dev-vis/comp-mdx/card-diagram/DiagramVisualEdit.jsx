@@ -15,6 +15,7 @@ import { DiagramPanel, panelCardHeadActionListGet } from './DiagramPanel.jsx';
 import { cardModelBuild } from './DiagramEditCardModel.js';
 import { endpointIsDangling, pointNodeIdBuild } from './DiagramERData.js';
 import { diagramRemovalOf } from './DiagramRemove.js';
+import { nodeTakeDataGet, nodeTakeTargetGet } from './DiagramNodeTake.js';
 import { DiagramRemoveConfirm } from './DiagramRemoveConfirm.jsx';
 import { DEPTH_MOVE_DESCRIPTION, DEPTH_MOVE_KEY, DEPTH_MOVE_LABEL, DEPTH_MOVE_LIST, depthTargetOfKey } from './DiagramDepth.js';
 import './DiagramVisualEdit.css';
@@ -328,6 +329,42 @@ export const DiagramVisualEdit = observer(function DiagramVisualEdit({ data, con
 		// the definition of a component of the page by the name a node writes (a card holding one: its
 		// values in the edit card), or null where the page has none
 		compDefinitionGet: name => (name ? compDefinitionNormalize(compDefinitionGet(compById ?? {}, compIdResolve(sourceStore?.configDoc, name))) ?? null : null),
+		// the preferences of a package, resolved for the document the diagram is in (a holder reads them:
+		// the first day of a week), {} where the page has none (main/doc_page_impl_config.md#package-level-config)
+		packageConfigGet: name => stores.configStore?.packageConfigGet?.(name, stores.docStore?.docCurrentPath ?? '') ?? {},
+		// ---- a node holding others (card-diagram-impl.md#a-node-holding-others, DiagramNodeTake.js) ----
+		// the node at a point of the canvas that answers for a node dropped there: { nodeId, reason }, or null
+		nodeTakeTargetGet: ({ dropped, point, exceptIdList = [] }) => (point && canvas.current?.nodeIdListAt
+			? nodeTakeTargetGet({ store, registry: store.registry, editor, dropped, idListAt: canvas.current.nodeIdListAt(point), exceptIdList })
+			: null),
+		// a node dragged: the holder under the pointer marked (it takes it, or why not), told the store
+		// only when it changes
+		nodeDrag: (node, pointer) => {
+			if (store.interaction?.type !== 'nodeDrag' || isFixed || isLocked) return;
+			const dropped = store.nodeGet(node.id);
+			const take = dropped ? editor.nodeTakeTargetGet({ dropped, point: pointer, exceptIdList: [node.id] }) : null;
+			const before = store.interaction.take ?? null;
+			if ((before?.nodeId ?? '') !== (take?.nodeId ?? '') || (before?.reason ?? '') !== (take?.reason ?? '')) store.interactionSet({ ...store.interaction, take });
+		},
+		// what a node held let go at a point of the canvas (the card of a holder asks, CardComp.jsx): its
+		// data without it, and what it held taken by the holder there that takes it, or a node of its own
+		// there. A holder there refusing it refuses the release, saying why. -> { code, message }
+		//   point: where it is let go (what is under it is asked); position: the top left corner of a node of
+		//   its own (default the point)
+		nodeRelease: ({ nodeId, holderData, released, point, position = point }) => {
+			if (isFixed || isLocked) return { code: -1, message: isFixed ? 'The structure of this diagram is given here.' : 'The diagram is being saved.' };
+			const take = editor.nodeTakeTargetGet({ dropped: { id: '', ...released }, point, exceptIdList: [nodeId] });
+			if (take?.reason) return { code: -1, message: `Not taken there: ${take.reason}` };
+			let takerData = null;
+			if (take) {
+				const answer = nodeTakeDataGet({ store, registry: store.registry, editor, holderId: take.nodeId, dropped: { id: '', ...released } });
+				if (answer.message) return { code: -1, message: answer.message };
+				takerData = answer.data;
+			}
+			let idTo = null;
+			change(() => { idTo = store.nodeRelease(nodeId, holderData, released, take ? { takerId: take.nodeId, takerData } : { position }); });
+			return idTo ? { code: 0 } : { code: -1, message: store.message || 'It was not let go.' };
+		},
 		// ---- removing what is selected (card-diagram-impl.md#removing-what-is-selected) ----
 		// what Delete would take away now: a feature first (what it focuses, a node it places), else
 		// what the path selects (DiagramRemove.js); null: nothing. Every session is asked, also one
@@ -492,7 +529,15 @@ export const DiagramVisualEdit = observer(function DiagramVisualEdit({ data, con
 		// after the drop, so the final position is read then; the pointer is
 		// where the author let go
 		nodeDragStop: (node, pointer) => {
+			// a holder under the pointer that takes it: the node goes into it (DiagramNodeTake.js)
+			const take = store.interaction?.type === 'nodeDrag' ? store.interaction.take : null;
 			if (store.interaction?.type === 'nodeDrag') store.interactionSet(null);
+			if (take && take.reason === '') {
+				const dropped = store.nodeGet(node.id);
+				const answer = dropped ? nodeTakeDataGet({ store, registry: store.registry, editor, holderId: take.nodeId, dropped }) : { message: '' };
+				if (answer.data) { change(() => store.nodeTake(take.nodeId, answer.data, node.id, { positionGet: editor.handlePositionGet })); return; }
+				if (answer.message) store.message = answer.message;
+			}
 			requestAnimationFrame(() => {
 				const position = canvas.current?.positionGet(node.id) ?? node.position;
 				if (node.type === 'visualizationPoint') {

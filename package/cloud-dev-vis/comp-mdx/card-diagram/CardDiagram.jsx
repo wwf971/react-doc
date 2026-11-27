@@ -272,6 +272,21 @@ const DiagramERCanvas = observer(function DiagramERCanvas({ store, viewState, is
 				}
 				return nearest;
 			},
+			// the nodes whose box holds a canvas position, the one drawn over the others first (a holder a
+			// node is dropped on: DiagramNodeTake.js)
+			nodeIdListAt: (position) => {
+				const hitList = [];
+				for (const node of store.nodeList) {
+					if (node.type !== 'visualizationNode') continue;
+					const internal = getInternalNode(node.id);
+					const width = internal?.measured?.width ?? node.width;
+					const height = internal?.measured?.height ?? node.height;
+					if (!internal || !width || !height) continue;
+					const { x, y } = internal.internals.positionAbsolute;
+					if (position.x >= x && position.x <= x + width && position.y >= y && position.y <= y + height) hitList.push({ id: node.id, z: internal.internals.z ?? node.zIndex ?? 0 });
+				}
+				return hitList.sort((a, b) => b.z - a.z).map(hit => hit.id);
+			},
 			nodeRectGet: id => wrapper.current?.querySelector(`.react-flow__node[data-id="${CSS.escape(id)}"]`)?.getBoundingClientRect() ?? null,
 			edgeRectGet: id => {
 				// a line with a label: the box of its words, so its card stands beside what was clicked.
@@ -403,6 +418,7 @@ const DiagramERCanvas = observer(function DiagramERCanvas({ store, viewState, is
 			multiSelectionKeyCode={null}
 			onNodesChange={store.nodeListChange}
 			onNodeDragStart={isEditing ? (_event, node) => editor.nodeDragStart(node) : undefined}
+			onNodeDrag={isEditing ? (event, node) => editor.nodeDrag?.(node, event.clientX !== undefined ? screenToFlowPosition({ x: event.clientX, y: event.clientY }) : null) : undefined}
 			onNodeDragStop={isEditing ? (event, node) => editor.nodeDragStop(node, event.clientX !== undefined ? screenToFlowPosition({ x: event.clientX, y: event.clientY }) : null) : undefined}
 			// React Flow turns the pointer off on a node that takes no interaction
 			// at all; a mouse-enter handler keeps it on, so the text of a card

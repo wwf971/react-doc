@@ -171,6 +171,7 @@ export type DocEditMiddlewareOptions = {
 // what follows the address of a declaration in a config/value key path:
 // [Key] or [compConfig, CompName, Key]
 const COMP_CONFIG_KEY = 'compConfig';
+const PACKAGE_CONFIG_KEY = 'packageConfig';
 
 type Middleware = (req: IncomingMessage, res: ServerResponse, next: () => void) => void;
 
@@ -609,14 +610,15 @@ function configValueRouteHandle(res: ServerResponse, body: any, config: DocEditC
   jsonSend(res, 200, { code: 0, data: { file, keyPath, value: body.value }, message: '' });
 }
 
-// keyPath is a key of the declaration at declarationPath: [...declarationPath, Key]
-// or [...declarationPath, compConfig, CompName, Key]
+// keyPath is a key of the declaration at declarationPath: [...declarationPath, Key],
+// [...declarationPath, compConfig, CompName, Key] or [...declarationPath, packageConfig, packageName, Key]
 function configKeyPathIsInside(keyPath: (string | number)[], declarationPath: (string | number)[]): boolean {
   if (!declarationPath.every((step, index) => keyPath[index] === step)) return false;
   const rest = keyPath.slice(declarationPath.length);
   if (!rest.every((step) => typeof step === 'string')) return false;
-  if (rest.length === 1) return rest[0] !== COMP_CONFIG_KEY;
-  return rest.length === 3 && rest[0] === COMP_CONFIG_KEY;
+  const isOwnerMap = rest[0] === COMP_CONFIG_KEY || rest[0] === PACKAGE_CONFIG_KEY;
+  if (rest.length === 1) return !isOwnerMap;
+  return rest.length === 3 && isOwnerMap;
 }
 
 // the previous content is kept as {file}.bak, then the file is rewritten

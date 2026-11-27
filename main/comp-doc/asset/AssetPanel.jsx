@@ -99,7 +99,7 @@ const ItemSection = observer(function ItemSection({ item, panel, isWritable, isB
     <section className="doc-asset-section">
       <dl className="doc-asset-fields">
         <dt>item</dt>
-        <dd className="doc-asset-mono">{panel.store} / {item.itemId}</dd>
+        <dd className="doc-asset-value">{panel.store} / {item.itemId}</dd>
         <dt>name</dt>
         <dd>
           {isChangeable
@@ -109,25 +109,25 @@ const ItemSection = observer(function ItemSection({ item, panel, isWritable, isB
         <dt>component</dt>
         <dd title="the component whose data the item is (doc_page_impl_mdx_comp.md#components-and-the-asset-service-layer)">
           {isChangeable
-            ? <EditValueInline value={item.component?.name ?? ''} placeholder="(none)" className="doc-asset-mono" onCommit={(name) => panel.componentSet(name)} />
-            : <span className="doc-asset-mono">{item.component?.name ?? '(none)'}</span>}
+            ? <EditValueInline value={item.component?.name ?? ''} placeholder="(none)" className="doc-asset-value" onCommit={(name) => panel.componentSet(name)} />
+            : <span className="doc-asset-value">{item.component?.name ?? '(none)'}</span>}
         </dd>
         <dt>lang</dt>
-        <dd className="doc-asset-mono">{item.lang || '(none)'} <span className="doc-asset-muted">(.{item.fileExt})</span></dd>
+        <dd className="doc-asset-value">{item.lang || '(none)'} <span className="doc-asset-muted">(.{item.fileExt})</span></dd>
         <dt>type</dt>
-        <dd className="doc-asset-mono">{item.contentType}</dd>
+        <dd className="doc-asset-value">{item.contentType}</dd>
         <dt>place</dt>
         <dd>
           <ItemPlace item={item} panel={panel} isChangeable={isChangeable} />
         </dd>
         <dt>head</dt>
-        <dd className="doc-asset-mono">{item.versionIdHead}</dd>
+        <dd className="doc-asset-value">{item.versionIdHead}</dd>
         <dt>created</dt>
-        <dd className="doc-asset-mono">{item.timeCreated}</dd>
+        <dd className="doc-asset-value">{item.timeCreated}</dd>
         <dt>events</dt>
         <dd>
-          <span className="doc-asset-mono">{item.eventList.length}</span>
-          {eventLast ? <span className="doc-asset-muted">, last <span className="doc-asset-mono">{eventLast.eventType} {eventLast.time}</span></span> : null}
+          <span className="doc-asset-value">{item.eventList.length}</span>
+          {eventLast ? <span className="doc-asset-muted">, last <span className="doc-asset-value">{eventLast.eventType} {eventLast.time}</span></span> : null}
           <button type="button" className="doc-asset-link" onClick={() => panel.eventListToggle()}>
             {panel.isEventListOpen ? 'hide' : 'show all'}
           </button>
@@ -200,10 +200,10 @@ function EventList({ eventList }) {
       <tbody>
         {eventList.map((event, index) => (
           <tr key={`${event.time}-${index}`}>
-            <td className="doc-asset-mono doc-asset-muted">{event.time}</td>
-            <td className="doc-asset-mono">{event.eventType}</td>
-            <td className="doc-asset-mono doc-asset-muted">{event.versionId ?? ''}</td>
-            <td className="doc-asset-mono doc-asset-muted">{event.userId ?? ''}</td>
+            <td className="doc-asset-value doc-asset-muted">{event.time}</td>
+            <td className="doc-asset-value">{event.eventType}</td>
+            <td className="doc-asset-value doc-asset-muted">{event.versionId ?? ''}</td>
+            <td className="doc-asset-value doc-asset-muted">{event.userId ?? ''}</td>
           </tr>
         ))}
       </tbody>
@@ -380,7 +380,7 @@ const VersionSection = observer(function VersionSection({ item, panel, isWritabl
                   data-head={isHead ? '' : undefined}
                   onClick={() => panel.versionSelect(version.versionId)}
                 >
-                  <td className="doc-asset-mono doc-asset-version-id">{version.versionId}</td>
+                  <td className="doc-asset-value doc-asset-version-id">{version.versionId}</td>
                   <td className="doc-asset-version-badges">
                     {isHead ? <span className="doc-badge-outline" data-primary="">head</span> : null}
                     {isRead && panel.versionIdRef ? <span className="doc-badge-outline">read here</span> : null}
@@ -389,15 +389,15 @@ const VersionSection = observer(function VersionSection({ item, panel, isWritabl
                     {version.isLocked ? <Lock size={11} aria-label="locked" /> : null}
                   </td>
                   <td
-                    className="doc-asset-mono doc-asset-muted doc-asset-version-uses"
+                    className="doc-asset-value doc-asset-muted doc-asset-version-uses"
                     title={isHead && isUsageKnown ? `${usageCount.head} following the head, ${pinnedCount} pinned to ${version.versionId}` : undefined}
                   >
                     {usesText}
                   </td>
-                  <td className="doc-asset-mono doc-asset-muted">{version.time}</td>
-                  <td className="doc-asset-mono doc-asset-muted doc-asset-version-size">{sizeTextGet(version.size)}</td>
+                  <td className="doc-asset-value doc-asset-muted">{version.time}</td>
+                  <td className="doc-asset-value doc-asset-muted doc-asset-version-size">{sizeTextGet(version.size)}</td>
                   <td className="doc-asset-version-note" title={version.note}>{version.note}</td>
-                  <td className="doc-asset-mono doc-asset-muted doc-asset-version-prev" title={version.versionIdPrevList.join(', ')}>
+                  <td className="doc-asset-value doc-asset-muted doc-asset-version-prev" title={version.versionIdPrevList.join(', ')}>
                     {version.versionIdPrevList.join(', ')}
                   </td>
                 </tr>
@@ -408,12 +408,12 @@ const VersionSection = observer(function VersionSection({ item, panel, isWritabl
       </div>
       {versionSelected ? (
         <p className="doc-asset-dependency-list">
-          <span className="doc-asset-mono doc-asset-muted">{versionSelected.versionId}</span>
+          <span className="doc-asset-value doc-asset-muted">{versionSelected.versionId}</span>
           <span className="doc-asset-muted"> depends on: </span>
           {(versionSelected.dependencyList ?? []).length === 0
             ? <span className="doc-asset-muted">nothing declared</span>
             : (versionSelected.dependencyList ?? []).map((dependency, index) => (
-              <span key={index} className="doc-asset-mono doc-asset-dependency" title={dependency.type}>
+              <span key={index} className="doc-asset-value doc-asset-dependency" title={dependency.type}>
                 {dependency.type === 'source'
                   ? dependency.path
                   : `${dependency.itemId}${dependency.versionId ? `@${dependency.versionId}` : ' (head)'}`}
@@ -424,7 +424,7 @@ const VersionSection = observer(function VersionSection({ item, panel, isWritabl
       {versionSelected ? <VersionMetadataLine item={item} panel={panel} versionId={versionSelected.versionId} /> : null}
       {versionSelected && isWritable && !item.isDeleted ? (
         <div className="doc-asset-actions">
-          <span className="doc-asset-mono doc-asset-muted">{versionSelected.versionId}</span>
+          <span className="doc-asset-value doc-asset-muted">{versionSelected.versionId}</span>
           <button
             type="button"
             className="doc-button"
@@ -478,11 +478,11 @@ const VersionMetadataLine = observer(function VersionMetadataLine({ item, panel,
   const isEmpty = Object.keys(metadata).length === 0;
   return (
     <p className="doc-asset-dependency-list">
-      <span className="doc-asset-mono doc-asset-muted">{versionId}</span>
+      <span className="doc-asset-value doc-asset-muted">{versionId}</span>
       <span className="doc-asset-muted"> metadata: </span>
       {isEmpty
         ? <span className="doc-asset-muted">none</span>
-        : <span className="doc-asset-mono doc-asset-version-metadata">{JSON.stringify(metadata)}</span>}
+        : <span className="doc-asset-value doc-asset-version-metadata">{JSON.stringify(metadata)}</span>}
     </p>
   );
 });
@@ -526,7 +526,7 @@ const DataSection = observer(function DataSection({ item, panel, isWritable, isB
   else {
     title = (
       <>
-        data of <span className="doc-asset-mono">{versionId}</span>
+        data of <span className="doc-asset-value">{versionId}</span>
         {isHeadSelected ? ' (head)' : ''}
         {edit ? <span className="doc-asset-muted">, editing</span> : null}
       </>
@@ -645,9 +645,9 @@ const BinaryInfo = observer(function BinaryInfo({ item, panel, versionId, stateV
         <dt>data</dt>
         <dd>not text ({item.contentType})</dd>
         <dt>size</dt>
-        <dd className="doc-asset-mono">{sizeTextGet(stateVersion.size)}</dd>
+        <dd className="doc-asset-value">{sizeTextGet(stateVersion.size)}</dd>
         <dt>sha1</dt>
-        <dd className="doc-asset-mono">{stateVersion.hash}</dd>
+        <dd className="doc-asset-value">{stateVersion.hash}</dd>
       </dl>
       {isImage ? <img className="doc-asset-binary-preview" src={url} alt={item.name || item.itemId} /> : null}
       <div className="doc-asset-actions">

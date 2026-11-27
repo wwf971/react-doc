@@ -90,6 +90,8 @@ The blocks the slash mode of a document puts are typed the same way, with their 
 
 A card holds one component, or none. Reach for it when what the card says is already a component (a meeting, a task list); for a short fact, a `card-note` is lighter. How it works: [card-diagram-impl.md](card-diagram-impl.md#a-component-in-a-card).
 
+**A component holding others** (a weekly timetable of oa) is one node with what it holds. While the diagram is edited, drag a card onto it to put it in (the timetable is framed green while it takes it, in the warning color with the reason while it does not), and drag an entry out of it to make it a card again; each is a step Ctrl/⌘ + Z takes back. How it works: [A node holding others](card-diagram-impl.md#a-node-holding-others).
+
 ## Lines out of the bottom of a card: the footer
 
 A card made of rows (a table, a resource card, a DynamoDB table, a group of routes: any kind with a schema) ends with its last row. A line leaving that edge would seem to leave the last row, or the last field. So a line about the card as a whole that leaves downward leaves from the card's **footer**: a strip under its rows, as wide as the card, in the muted color of its head, with the small square of each handle on it.

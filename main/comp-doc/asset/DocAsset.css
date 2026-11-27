@@ -29,7 +29,7 @@
 }
 
 .doc-asset-frame-object {
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font-variant-numeric: tabular-nums;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -168,8 +168,10 @@
   font-weight: 550;
 }
 
-.doc-asset-mono {
-  font-family: var(--font-mono, ui-monospace, monospace);
+/* a value of the asset layer (an id, a time, a version, a size): the face of the page, its figures in
+   tabular digits; monospace is for code alone (AGENTS.md: Typography) */
+.doc-asset-value {
+  font-variant-numeric: tabular-nums;
   font-size: 0.74rem;
 }
 
@@ -327,8 +329,9 @@
   border-radius: 2px;
 }
 
-/* the metadata of a version, one line of json that wraps anywhere */
+/* the metadata of a version, one line of json that wraps anywhere: code, so monospace */
 .doc-asset-version-metadata {
+  font-family: var(--font-mono, ui-monospace, monospace);
   overflow-wrap: anywhere;
 }
 

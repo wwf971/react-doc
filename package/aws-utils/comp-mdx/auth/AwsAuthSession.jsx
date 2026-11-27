@@ -90,7 +90,7 @@ const AwsAuthMe = observer(function AwsAuthMe({ model, session, consumerList }) 
         <AwsAuthFact label="User name" value={user?.userName || identity.userName || '—'} />
         <AwsAuthFact label="Name" value={user?.name || identity.name || '—'} />
         <AwsAuthFact label="Email" value={user?.email || identity.email || '—'} />
-        <AwsAuthFact label="User id" value={user?.userId || identity.userId || (me.status === 'loading' ? 'reading' : '—')} title="The id our services keep data under: it stays when another identity is linked to the person" isMono />
+        <AwsAuthFact label="User id" value={user?.userId || identity.userId || (me.status === 'loading' ? 'reading' : '—')} title="The id our services keep data under: it stays when another identity is linked to the person" isFigure />
         <AwsAuthFact label="Roles" value={roleList.length > 0 ? roleList.join(', ') : 'none'} />
         <AwsAuthFact label="Authenticator app" value={user?.isMfaRequired ? `${mfaText}; required by your account admin` : mfaText} />
         <AwsAuthFact label="Session kept" value={session.keep === 'local' ? 'on this browser, until signing out' : 'while this tab is open'} />
@@ -114,11 +114,11 @@ const AwsAuthMe = observer(function AwsAuthMe({ model, session, consumerList }) 
   );
 });
 
-export function AwsAuthFact({ label, value, title = '', isMono = false }) {
+export function AwsAuthFact({ label, value, title = '', isFigure = false }) {
   return (
     <div className="aws-auth-fact" title={title || undefined}>
       <span className="aws-auth-fact-label">{label}</span>
-      <span className="aws-auth-fact-value" {...(isMono ? { 'data-mono': true } : {})}>{value}</span>
+      <span className="aws-auth-fact-value" {...(isFigure ? { 'data-figure': true } : {})}>{value}</span>
     </div>
   );
 }

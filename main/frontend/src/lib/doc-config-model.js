@@ -1,4 +1,4 @@
-import { CONFIG_LEVEL_DEFAULT, COMP_CONFIG_KEY, configDeclaredIs, configValueMerge, configValueNormalize, variableExpand } from './doc-config-define.js';
+import { CONFIG_LEVEL_DEFAULT, COMP_CONFIG_KEY, configDeclaredIs, configKeyIsOwnerMap, configOwnerMapOf, configPackageNameOf, configValueMerge, configValueNormalize, variableExpand } from './doc-config-define.js';
 
 // Resolves every config declaration of the doc page into one config model.
 // Design: doc_page_impl_config.md
@@ -26,7 +26,10 @@ import { CONFIG_LEVEL_DEFAULT, COMP_CONFIG_KEY, configDeclaredIs, configValueMer
 //
 // component-level keys (doc_page_impl_config.md#component-level-config) are
 // resolved the same way, per component: the layers read their compConfig,
-// levels 3-5 read the "compConfig" mapping inside the declared config.
+// levels 3-5 read the "compConfig" mapping inside the declared config. A
+// package's keys (#package-level-config) are resolved as a component's, under
+// the owner id package:{name}: "packageConfig" { name: { K: value } } of a
+// declared config, and the same owner id in the compConfig of a layer.
 //
 // a string value may hold ${name}: it is replaced by configDoc.variable[name]
 // at every level (variableExpand).
@@ -63,7 +66,9 @@ export function configModelBuild({
   if (configDoc?.variable !== undefined && !configDeclaredIs(configDoc.variable)) {
     console.warn('[doc-config] variable must be a mapping');
   }
-  const compOptions = { compConfigDefineByCompId, compIdResolve, variableByName };
+  // an owner id of a package is its own id; a component is named as written
+  const ownerIdResolve = (ownerKey) => (configPackageNameOf(ownerKey) ? ownerKey : compIdResolve(ownerKey));
+  const compOptions = { compConfigDefineByCompId, compIdResolve: ownerIdResolve, variableByName };
   const layerListBelow = layerList.filter((layer) => !layer.isAboveDocLevels);
   const layerListAbove = layerList.filter((layer) => layer.isAboveDocLevels);
 
@@ -120,7 +125,7 @@ export function configModelBuild({
     ];
     for (const { configDeclared, level, originText } of levelList) {
       configLevelApply(configResolved, configDeclared, { configDefineByKey, variableByName, level, originText });
-      compConfigLevelApply(compConfigResolved, configDeclared?.[COMP_CONFIG_KEY], { ...compOptions, level, originText: `${COMP_CONFIG_KEY} of ${originText}` });
+      compConfigLevelApply(compConfigResolved, configOwnerMapOf(configDeclared), { ...compOptions, level, originText: `${COMP_CONFIG_KEY} of ${originText}` });
     }
     for (const layer of layerListAbove) {
       layerApply(configResolved, compConfigResolved, layer, { configDefineByKey, variableByName, ...compOptions });
@@ -195,8 +200,8 @@ function configLevelApply(configResolved, configDeclared, { configDefineByKey, v
   if (!configDeclaredIs(configDeclared)) return;
   const isLayer = level !== 'source' && level !== 'sidePanel' && level !== 'doc' && level !== 'partIndex';
   for (const [key, valueDeclared] of Object.entries(configDeclared)) {
-    // component-level values live under their own key (compConfigLevelApply)
-    if (key === COMP_CONFIG_KEY) continue;
+    // component-level and package-level values live under their own keys (compConfigLevelApply)
+    if (configKeyIsOwnerMap(key)) continue;
     const define = configDefineByKey.get(key);
     if (!define) {
       console.warn(`[doc-config] unknown config key "${key}" in ${originText}`);
@@ -230,7 +235,7 @@ export function configDeclaredListMerge(configList, { defineByKey, variableByNam
   for (const configDeclared of configList) {
     if (!configDeclaredIs(configDeclared)) continue;
     for (const [key, valueDeclared] of Object.entries(configDeclared)) {
-      if (key === COMP_CONFIG_KEY) continue;
+      if (configKeyIsOwnerMap(key)) continue;
       const define = defineByKey.get(key);
       if (!define) {
         result[key] = valueDeclared;
@@ -285,7 +290,8 @@ function compConfigLevelApply(compConfigByCompId, compConfigDeclared, { compConf
     const compId = compIdResolve(compName);
     const defineByKey = compConfigDefineByCompId.get(compId);
     if (!defineByKey) {
-      console.warn(`[doc-config] component "${compName}" (${compId}) declares no config keys; ${originText}`);
+      const packageName = configPackageNameOf(compId);
+      console.warn(packageName ? `[doc-config] no package "${packageName}" declares config keys; packageConfig of ${originText.replace(`${COMP_CONFIG_KEY} of `, '')}` : `[doc-config] component "${compName}" (${compId}) declares no config keys; ${originText}`);
       continue;
     }
     compConfigOneApply(compConfigByCompId.get(compId), configDeclared, defineByKey, { variableByName, level, originText: `${originText}, ${compName}` });
@@ -318,12 +324,12 @@ function compConfigOneApply(configResolved, configDeclared, defineByKey, { varia
 //   isPageScopeOk   page-level keys are accepted (a config layer)
 // -> [{ key, valueDeclared, value, isValid, message }] in declaration order;
 //    value has its variables expanded, message says why a key is not used.
-//    compConfig is left out: check each component's mapping on its own.
+//    compConfig and packageConfig are left out: check each owner's mapping on its own.
 export function configDeclaredCheck(configDeclared, { defineByKey, variableByName = {}, isPageScopeOk = true }) {
   if (!configDeclaredIs(configDeclared)) return [];
   const result = [];
   for (const [key, valueDeclared] of Object.entries(configDeclared)) {
-    if (key === COMP_CONFIG_KEY) continue;
+    if (configKeyIsOwnerMap(key)) continue;
     const define = defineByKey.get(key);
     if (!define) {
       result.push({ key, valueDeclared, value: valueDeclared, isValid: false, message: 'unknown key' });

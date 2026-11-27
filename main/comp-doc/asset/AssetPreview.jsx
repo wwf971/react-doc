@@ -26,7 +26,7 @@ export const AssetPreview = observer(function AssetPreview({ panel }) {
 
   let subject;
   if (preview.isDraft) subject = 'the draft, as a save would render it now';
-  else if (preview.versionId) subject = <>version <span className="doc-asset-mono">{preview.versionId}</span></>;
+  else if (preview.versionId) subject = <>version <span className="doc-asset-value">{preview.versionId}</span></>;
   else subject = 'no version selected';
 
   return (

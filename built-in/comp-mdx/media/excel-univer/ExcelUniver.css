@@ -52,5 +52,5 @@
 
 .doc-mdx-excel-univer-edit-range {
   min-width: 4rem;
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font-variant-numeric: tabular-nums;
 }

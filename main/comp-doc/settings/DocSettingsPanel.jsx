@@ -348,7 +348,8 @@ function layerCompItemListBuild(layer, context) {
   const groupList = configStore.layerCompGroupListGet(layer.id).map((group) => ({
     id: `${layer.id}:comp:${group.compKey}`,
     type: 'group',
-    label: group.compName || group.compKey,
+    // a component by its name, a package by its name and the word package
+    label: configStore.ownerLabelGet(group.compId) || group.compName || group.compKey,
     children: group.itemList.map((item) => {
       const itemId = `${layer.id}:comp:${group.compKey}::${item.key}`;
       if (layer.isDeclarationViewOffered) return displayItemBuild(itemId, item);
@@ -411,7 +412,7 @@ function resultCompItemListBuild({ configStore }) {
         resolved?.valueByKey[define.key],
         resolved?.levelByKey[define.key],
       ));
-    if (children.length > 0) groupList.push({ id: `${SETTINGS_RESULT_ID}:comp:${compId}`, type: 'group', label: compName, children });
+    if (children.length > 0) groupList.push({ id: `${SETTINGS_RESULT_ID}:comp:${compId}`, type: 'group', label: configStore.ownerLabelGet(compId), children });
   }
   return itemListOrNote(groupList, SETTINGS_RESULT_ID, 'no registered component declares config keys');
 }
@@ -593,7 +594,7 @@ const KeyAddItem = observer(function KeyAddItem({ layerId, isComp }) {
   const optionList = isComp
     ? configStore.layerCompKeyAddableListGet(layerId).map(({ compId, compName, define }) => ({
         value: `${compId}::${define.key}`,
-        label: `${compName}.${define.key}`,
+        label: `${configStore.ownerLabelGet(compId) || compName}.${define.key}`,
       }))
     : configStore.layerKeyAddableListGet(layerId).map((define) => ({ value: define.key, label: define.key }));
   if (optionList.length === 0) return <span className="doc-settings-note">every key is declared in this layer</span>;
@@ -656,7 +657,7 @@ const DeclarationGrid = observer(function DeclarationGrid({ layerId, isComp }) {
         {groupList.map((group) => [
           isComp ? (
             <div key={`group:${group.compId}`} className="doc-settings-grid-row is-group">
-              <div className="doc-settings-grid-key">{group.compName}</div>
+              <div className="doc-settings-grid-key">{configStore.ownerLabelGet(group.compId) || group.compName}</div>
             </div>
           ) : null,
           ...group.rowList.map((row) => (

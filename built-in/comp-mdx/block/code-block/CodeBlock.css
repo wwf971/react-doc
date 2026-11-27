@@ -98,7 +98,7 @@
 	background: var(--color-fd-card);
 	color: var(--color-fd-foreground);
 	cursor: pointer;
-	font-family: var(--font-mono);
+	font-variant-numeric: tabular-nums;
 	font-size: 0.82rem;
 	text-align: left;
 	transition: border-color 120ms ease, background-color 120ms ease, box-shadow 120ms ease;

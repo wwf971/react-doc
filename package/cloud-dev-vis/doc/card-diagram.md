@@ -21,6 +21,8 @@ many diagrams in one viewport    the switching layer: card-diagram-flexible-swit
 a layer over every diagram       a feature of the registry: card-diagram-impl.md#features
 drawing tools, groups by rules   the parametric canvas: card-diagram-parametric-canvas.md
 a thing at a glance              a mark, a kind of its own: card-diagram-impl.md#marks
+a node holding others            a contract of its kind, nodeTakeReasonGet / nodeTake:
+                                 card-diagram-impl.md#a-node-holding-others
 a diagram where a canvas is in   DiagramStatic: card-diagram-impl.md#a-diagram-without-a-canvas
 the way
 how a line runs (anchors, routes) DiagramRoute: card-diagram-connection-line.md
@@ -135,6 +137,7 @@ Things to be careful about, each learned once:
 - **A popup opened at a point keeps a corner on it.** A context menu or the panel of a double-click stands to the right of and below the pointer, and turns about it on the axis where it does not fit (`DiagramPopupPlace.js`); it is never shifted so that no corner is where it was asked for.
 - **A selected node is marked by one frame, exactly on its box** (`data-selected` of the node wrapper: a thin line of the focus color, as thick on the screen at every zoom), whatever its kind; no card draws a selection of itself as a whole (a part of it, a row or a field, it marks its own way). Every node whose box can change has its **resize handles on that frame** (one rule read from the node, `DiagramNodeResize.js`; a kind overrides it only where it is wrong, `contract.resizeAxisList`), drawn by the engine beside the content of the card (`DiagramResizeHandles.jsx`), never inside it: what stands out of a card's content box makes it scroll. A resize handle is never a node handle: where a node handle stands at the middle of an edge, that edge has no pill, and the node handle stays above the strip that resizes the edge.
 - **Styles** are the shared classes of the edit layer where one exists (`.doc-button-icon`, `.doc-button-group`, `.doc-path`, `.doc-note`); the series css holds what is the series' own (an accent, a header color), never a second button style.
+- **One face.** Every word and value a card shows (a title, a label, a time, an id, a number) is in the sans-serif of the page; figures that line up are tabular digits (`font-variant-numeric: tabular-nums`). A monospace face is for code alone (a fence, a source typed), never for a value because it is typed in an app ([Typography](../../../AGENTS.md#typography)).
 
 ## The wheel over a canvas
 

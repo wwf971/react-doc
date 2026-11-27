@@ -2,7 +2,7 @@ import { makeAutoObservable, untracked } from 'mobx';
 import type { DocSourceStore } from './DocSourceStore.js';
 import type { DocEnvStore } from './DocEnvStore.js';
 import type { DocStore } from './DocStore.js';
-import { compConfigDefineByCompIdBuild, configDefineByKeyBuild, configLayerDefineList } from '../lib/doc-config-define.js';
+import { compConfigDefineByCompIdBuild, configDefineByKeyBuild, configLayerDefineList, configPackageGroupByNameBuild, configPackageIdOf, configPackageNameOf } from '../lib/doc-config-define.js';
 import { configDeclaredCheck, configDeclaredListMerge, configModelBuild } from '../lib/doc-config-model.js';
 import { compIdBuiltinByName, compIdResolve } from '../../../comp-doc/registry/comp-registry.js';
 import {
@@ -160,6 +160,8 @@ export class DocConfigStore {
       valueGlobalGet: (key: string) => this.valueGlobalGet(key),
       compConfigGet: (compId: string, docPath: string) => this.compConfigGet(compId, docPath),
       compConfigDefineListGet: (compId: string) => this.compConfigDefineListGet(compId),
+      packageConfigGet: (packageName: string, docPath: string) => this.packageConfigGet(packageName, docPath),
+      packageConfigDefineListGet: (packageName: string) => this.compConfigDefineListGet(configPackageIdOf(packageName)),
     });
     makeAutoObservable(this, {
       configDefineByKey: false,
@@ -193,10 +195,17 @@ export class DocConfigStore {
     });
   }
 
-  // the keys the registered components declare; follows replaceCompById
+  // the keys the registered components declare, and the packages whose components carry their
+  // preferences (owner id package:{name}); follows replaceCompById
   get compConfigDefineByCompId(): Map<string, Map<string, ConfigDefine>> {
     void this.docStore.compByIdVersion;
     return compConfigDefineByCompIdBuild(this.docStore.compById);
+  }
+
+  // the package config groups, by package name (doc_page_impl_config.md#package-level-config)
+  get configPackageGroupByName(): Map<string, { name: string; label?: string; description?: string }> {
+    void this.docStore.compByIdVersion;
+    return configPackageGroupByNameBuild(this.docStore.compById);
   }
 
   // built again when a config can have changed, not on every write of a
@@ -225,6 +234,11 @@ export class DocConfigStore {
       compConfigDefineByCompId: this.compConfigDefineByCompId,
       compIdResolve: (compName: string) => compIdResolve(this.sourceStore.configDoc, compName),
     });
+  }
+
+  // the owner id of an owner key of a declaration: a component's name resolved, a package's id as it is
+  private ownerIdResolve(ownerKey: string): string {
+    return configPackageNameOf(ownerKey) ? ownerKey : compIdResolve(this.sourceStore.configDoc, ownerKey);
   }
 
   // the defines the settings panel lists
@@ -465,7 +479,9 @@ export class DocConfigStore {
 
   // the name a component is written with in documents (config compRegistry
   // maps names to ids, then the built-in names); '' for an id no name maps to
+  // A package's owner id is the key it is listed under itself (package:oa)
   compNameGet(compId: string): string {
+    if (configPackageNameOf(compId)) return compId;
     const compRegistry = this.sourceStore.configDoc?.compRegistry ?? {};
     for (const [compName, compIdMapped] of Object.entries(compRegistry)) {
       if (compIdMapped === compId) return compName;
@@ -513,7 +529,7 @@ export class DocConfigStore {
     originGet: (compKey: string, key: string) => string,
   ): ConfigCompGroup[] {
     return Object.entries(compConfig).map(([compKey, config]) => {
-      const compId = isCompKeyedById ? compKey : compIdResolve(this.sourceStore.configDoc, compKey);
+      const compId = isCompKeyedById ? compKey : this.ownerIdResolve(compKey);
       const defineByKey = this.compConfigDefineByCompId.get(compId) ?? new Map<string, ConfigDefine>();
       return {
         compKey,
@@ -530,7 +546,7 @@ export class DocConfigStore {
     if (isCompKeyedById) return compConfig[compId] ?? {};
     const result: Record<string, any> = {};
     for (const [compName, config] of Object.entries(compConfig)) {
-      if (compIdResolve(this.sourceStore.configDoc, compName) === compId) Object.assign(result, config);
+      if (this.ownerIdResolve(compName) === compId) Object.assign(result, config);
     }
     return result;
   }
@@ -621,6 +637,21 @@ export class DocConfigStore {
   compConfigGet(compId: string, docPath = ''): Record<string, any> {
     const byCompId = this.configModel.compConfigByDocPath.get(docPath) ?? this.configModel.compConfigGlobalByCompId;
     return byCompId.get(compId)?.valueByKey ?? {};
+  }
+
+  // what the settings panel calls an owner of keys: a component by its name, a package by its
+  // name and the word package ("oa (package)")
+  ownerLabelGet(compId: string): string {
+    const packageName = configPackageNameOf(compId);
+    if (!packageName) return this.compNameGet(compId);
+    const group = this.configPackageGroupByName.get(packageName);
+    return `${group?.label || packageName} (package)`;
+  }
+
+  // key -> value of a package's keys for one document ({} for a package without keys); a path that
+  // is not a collected document gets page values (doc_page_impl_config.md#package-level-config)
+  packageConfigGet(packageName: string, docPath = ''): Record<string, any> {
+    return this.compConfigGet(configPackageIdOf(packageName), docPath);
   }
 
   compValueGlobalGet(compId: string, key: string): any {

@@ -32,7 +32,7 @@ a component definition (compDefine)
     │   ├── meta                     facts: label, description, isReadOnly, isEditSourceAccepted, isInsertCommon,
     │   │                            isEditEnterButtonOnly, isAssetOnly, isEditAssetAccepted, isNotInDoc,
     │   │                            isEditSlashEnabled, slashName, slashAliasList, isNotInNode, assetSaveMode,
-    │   │                            insertObjectPick, configDefineList, any key of its own
+    │   │                            insertObjectPick, configDefineList, configPackage, any key of its own
     │   ├── icon                     a component drawing its icon at any size
     │   ├── viewModeList             the ways its data is displayed, one default (config.viewMode)
     │   ├── editModeList             the ways its data is edited in place (+ the built-in source mode)
@@ -44,8 +44,10 @@ a component definition (compDefine)
     │   ├── pagination               its data laid out on pages: the flow, the pieces, where they are cut
     │   ├── portal                   it can draw a portal, a whole-window app of a frontend object: what it
     │   │                            is made for, where the standard switcher stands
-    │   └── blockLabelGet            what a block of it is called in edit mode, from what the block names
-    │                                (ObjectFrontend: the type of its object); else its tag name
+    │   ├── blockLabelGet            what a block of it is called in edit mode, from what the block names
+    │   │                            (ObjectFrontend: the type of its object); else its tag name
+    │   └── hold                     it holds blocks of other components in its data: what it holds, takes
+    │                                and lets go (a weekly timetable holding meetings: #a-component-holding-others)
     └── non-standard names: kept as declared, read by whoever knows them (compExposeGet)
         ├── visualizationNode        e.g. the node contract of a card diagram: anchorListGet, sizeDefault
         ├── dataFields               its data value by value, for whoever edits it without drawing it, as a
@@ -79,6 +81,7 @@ compDefine(Xxx, {
     objectView:    { typeList, contextList, priority }               the objects it draws, for the object registry
     pagination:    { pieceListGet, pieceTypeById, pageClassName?, pageSpec? }   its data on pages (doc_page_impl_pagination.md)
     portal:        true | { deviceList?, switcherPlace? }             it can draw a portal (doc_page_impl_portal.md)
+    hold:          { heldListGet, takeCheck, take, letGo? }          it holds blocks of other components
     anythingElse:  kept as written                                  for a host or a later feature
   },
 })
@@ -108,6 +111,7 @@ Facts about the component that are not modes or drawings, as one object, so that
 | `assetSaveMode` | — | `inPlace` or `newVersion`: the save mode an asset item gets when the page creates it for a block of this component (from the insert menu, or by **to asset**). Without it the item has no save mode, which saves in place ([Save modes](doc_page_impl_asset.md#save-modes)). Only the creation reads it; the item's own mode decides every later save |
 | `insertObjectPick` | — | `{ typeList, isCreateOffered }`: its block names an object of the [object registry](doc_page_impl_obj.md) of these types, so the insert menu asks for the object first (a search limited to them, and with `isCreateOffered` the creation of a new one) and calls `sourceDefaultCreate` with `env.objectRef` ([Creating a block naming an object](doc_page_impl_edit.md#creating-a-block-naming-an-object)). `ObjectFrontend` declares it |
 | `configDefineList` | `[]` | the shape of its component-level config: which keys exist, their types, defaults, descriptions. Only the shape; the values come from the config layers and the document levels, and reach the component as `config.compConfig` ([Component-level config](doc_page_impl_config.md#component-level-config)) |
+| `configPackage` | — | `{ name, label?, description?, configDefineList }`: the preferences of its package, one group declared once by the package and carried by each of its components that reads them; the values reach it as `config.packageConfig` ([Package-level config](doc_page_impl_config.md#package-level-config)) |
 
 A component may add keys of its own to `meta`; they are kept beside the standard ones.
 
@@ -514,6 +518,37 @@ Both would be rules the page could only keep while it is the one writing. A bloc
 A component may change its own block without an editor session: its data (`dataReplaceRequest { raw }`, [Component awareness](#component-awareness)) or the props of its marker (`blockPropSetRequest { props }`: the named props replace those of the same name, `null` or `''` removes one; a value holding `,`, a line break or `-->` is refused, since it belongs in the data). The edit layer finds the block by its index in edit mode (`source.blockIndex`, given by the edit body) and, **in reading mode**, by the marker line of its block (`source.sourceLine`, which the registry boundary puts in every event of a block), reading the document and building its model first; so a component switches what its block shows the same way while the document is read or edited, wherever the page can write (on the development server), and gets the reason where it cannot. Both requests are of the edit domain and go through its one write path (`operationApply`: the hash of the text, the history, the component states of the lines).
 
 The props are the block's in both data forms: the marker keeps them when the data is an asset reference, so an asset-backed block takes props, and changes them, exactly as an inline one; its data, shared by every block reading the item, is not touched by them. This is the place for a parameter of one block (a title, a view, a filter) over data that several blocks share. The apis `doc/blockDataSet` and `doc/blockPropSet` make the same two changes from the palette or a caller outside the page ([Unified api registry](doc_page_impl_api.md)). The entry component of the frontend objects keeps the mode and the parameters of its item in its data and switches them this way ([Switching what the block shows](doc_page_impl_obj_frontend.md#the-entry-component)).
+
+## A component holding others
+
+Some components are made of other components: a weekly timetable holds meetings and courses, each a component of its own that also stands alone as a block. Such a component is a **holder**: its data keeps **blocks** of other components whole, each exactly what a block of a document holds, `{ comp, lang, raw, props }` (the tag name, the language of its text, its text, the props of its marker), and it draws each with that component. To whatever is around it (a document, a card of a card diagram) the holder and what it holds are **one thing**: one block, one node.
+
+<!--renderComp=DiagramText-->
+```text
+holder (TimetableWeek)            data: entryList: [{ comp, lang, raw }, ...]
+ ├── draws each held block         RegisteredComp of its component, placement commentBlock
+ │     its reports answered        editDraftChange / dataReplaceRequest of a block:
+ │                                 the holder's own data with that block changed
+ ├── expose.hold                   what it holds, takes, lets go (pure, from its data)
+ │     takeCheck reads the block   through the block's component: compDefinitionGet
+ │                                 (the timetable reads expose.timeItem: when it is)
+ └── config.hold (from a host)     a held block dragged out of it: released there
+```
+
+**What it says it does: `expose.hold`.** A standard name of the exposure, checked at registration (`comp-expose.js`), four pure functions of the holder's data (`{ raw, lang, ...props }`, as `dataFields` read it):
+
+| function | answers |
+| --- | --- |
+| `heldListGet(data)` | `[{ key, block }]`: what it holds, a key stable while its data is |
+| `takeCheck(data, block, context)` | why it does not take a block, `''` when it does |
+| `take(data, block, context)` | `{ raw, props? }`: its data with the block in it (a timetable not bound to a week binds itself to the week of the first one) |
+| `letGo(data, key)` | `{ raw, props?, block }`: its data without the held block of that key, and the block; optional, for a holder that keeps what it takes |
+
+`context` is `{ compDefinitionGet(name), packageConfigGet(name), point? }`. A holder knows what it is given only through the **exposure of the block's component**: the timetable takes a block whose component says when it is (`expose.timeItem` of the oa package, [A card at a time](../package/oa/doc/time.md#a-card-at-a-time)), never a component by name, so a component of another package that exposes the same is taken too. `packageConfigGet` gives it its preferences as it would be drawn (the first day of a week). Whoever asks goes through the accessors, which turn a failure into a refusal that says so: `compHoldTakeReasonGet` (`undefined` for a component that holds nothing), `compHoldTake`, `compHoldLetGo`.
+
+**What it draws.** Each held block through the page's boundary (`RegisteredComp`, placement `commentBlock`), with the block context cut (`DocEditBlockContext` null: a held block is no block of the document), its reports answered by the holder: a change of its data (`editDraftChange`, `dataReplaceRequest`) is the holder's own data with that block changed, reported as the holder reports a change of its own (written into the draft of its session, or at once when it is edited in place). While the holder is edited, a held component offering an edit mode in place (`isInPlace`) is drawn in it, so its values are typed where they stand inside the holder, as on the component alone ([Editability](doc_page_impl_edit.md#editability-everything-a-reader-sees-is-edited-where-it-stands)). The timetable draws an entry as a box of its day and the component in a card floating over the box at a click.
+
+**What a host may give it: `config.hold`.** Moving blocks into a holder and out of it is the business of what the holder stands in, not of the holder. A host that can do it hands the holder, while it is edited, `config.hold`: `dragMove(key, point)` (what letting the held block of that key go at a point of the screen would do: `{ text, isRefused }`; it marks what is there), `release(key, point)` (`{ code, message }`), `dragEnd()`. A card of a card diagram gives it: a card dropped on a holder is taken, a held block dragged out is a card of its own or goes into another holder ([A node holding others](../package/cloud-dev-vis/doc/card-diagram-impl.md#a-node-holding-others)). A document gives none yet ([TODO](doc_page_impl_TODO.md#blocks-into-a-holder-in-a-document)): there a holder adds and removes its blocks itself (the timetable: a click on a free time, an entry's right-click menu).
 
 ## The state of the document
 

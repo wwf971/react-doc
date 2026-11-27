@@ -269,7 +269,7 @@ li .doc-code-icon[data-align='top'],
   border-radius: 3px;
   background: color-mix(in srgb, var(--color-fd-foreground) 2.5%, transparent);
   color: var(--color-fd-muted-foreground);
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font-variant-numeric: tabular-nums;
   font-size: 0.85em;
 }
 
@@ -361,7 +361,7 @@ li .doc-code-icon[data-align='top'],
    languages met most in a list below it, floating over the editor */
 .doc-code-lines-lang {
   color: var(--color-fd-muted-foreground);
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font-variant-numeric: tabular-nums;
 }
 
 .doc-code-lang-field {
@@ -377,7 +377,7 @@ li .doc-code-icon[data-align='top'],
   border-radius: 2px;
   background: var(--color-fd-background);
   color: var(--color-fd-foreground);
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font-variant-numeric: tabular-nums;
   font-size: 0.75rem;
   outline: none;
 }
@@ -403,7 +403,7 @@ li .doc-code-icon[data-align='top'],
 }
 
 .doc-code-lang-option .doc-search-result-label {
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font-variant-numeric: tabular-nums;
 }
 
 .doc-code-lang-current {

@@ -50,7 +50,7 @@ export const AssetUsageTable = observer(function AssetUsageTable({
             const isOtherComponent = componentNameItem !== '' && usage.compName !== componentNameItem;
             return (
               <tr key={`${docPath}#${usage.place.sourceLine}`}>
-                <td className="doc-asset-mono">{usage.compName || usage.componentId}</td>
+                <td className="doc-asset-value">{usage.compName || usage.componentId}</td>
                 <td className="doc-asset-usage-place">
                   <button
                     type="button"
@@ -74,12 +74,12 @@ export const AssetUsageTable = observer(function AssetUsageTable({
                   </button>
                 </td>
                 {isItemShown ? (
-                  <td className="doc-asset-mono doc-asset-muted">{usage.reference.itemId || usage.reference.name || ''}</td>
+                  <td className="doc-asset-value doc-asset-muted">{usage.reference.itemId || usage.reference.name || ''}</td>
                 ) : null}
                 <td>
                   {usage.reference.versionId === 'head'
                     ? <span className="doc-badge-outline" data-primary="" title="follows the head">head</span>
-                    : <span className="doc-asset-mono" title="pinned to this version">{usage.reference.versionId}</span>}
+                    : <span className="doc-asset-value" title="pinned to this version">{usage.reference.versionId}</span>}
                 </td>
                 <td>
                   <span className="doc-asset-usage-notes">

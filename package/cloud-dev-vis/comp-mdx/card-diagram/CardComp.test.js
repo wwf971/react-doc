@@ -202,3 +202,76 @@ test('a card of an asset-only component holds the reference to an item made for 
   assert.match(refused.message, /read-only/);
   assert.equal(callList.filter(call => call[0] === 'create').length, 1);
 });
+
+// A node holding others (card-diagram-impl.md#a-node-holding-others): a card of a component holding
+// others (expose.hold, here a list of names) takes a card dropped on it, refuses one saying why, and
+// lets one go again, as a card of its own or into another holder; each a step undone whole
+test('a holder takes a card dropped on it, refuses another with the reason, and lets one go', async () => {
+  const { compHoldTakeReasonGet } = await import('../../../../main/comp-doc/registry/comp-expose.js');
+  const { nodeTakeDataGet, nodeTakeTargetGet } = await import('./DiagramNodeTake.js');
+  const { cardCompLetGo, cardCompNodeOfBlock } = await import('./CardCompHold.js');
+  const lineList = (raw) => String(raw ?? '').split('\n').filter(Boolean);
+  const listHold = {
+    heldListGet: (data) => lineList(data.raw).map((line, index) => ({ key: String(index), block: JSON.parse(line) })),
+    takeCheck: (_data, block) => (block.comp === 'Meeting' ? '' : `${block.comp} is not a meeting`),
+    take: (data, block) => ({ raw: [...lineList(data.raw), JSON.stringify(block)].join('\n') }),
+    letGo: (data, key) => {
+      const list = lineList(data.raw);
+      const block = list[Number(key)] ? JSON.parse(list[Number(key)]) : null;
+      return block ? { raw: list.filter((_, index) => index !== Number(key)).join('\n'), block } : null;
+    },
+  };
+  const definitionByName = { Holder: { expose: { meta: { label: 'Holder' }, hold: listHold } }, Meeting: { expose: { meta: { label: 'Meeting' } } }, Other: { expose: { meta: { label: 'Other' } } } };
+  const editor = { compDefinitionGet: (name) => definitionByName[name] ?? null, packageConfigGet: () => ({}) };
+  const diagram = `version: 1
+nodes:
+  - { id: holder, renderer: { type: card-comp }, position: { x: 0, y: 0 }, data: { comp: Holder, lang: yaml, raw: '' } }
+  - { id: holder-2, renderer: { type: card-comp }, position: { x: 600, y: 0 }, data: { comp: Holder, lang: yaml, raw: '' } }
+  - id: meeting
+    renderer: { type: card-comp }
+    position: { x: 300, y: 0 }
+    data: { comp: Meeting, lang: yaml, raw: "title: Sync\\n" }
+    handles: [{ id: out, direction: out, anchor: { side: right } }]
+  - { id: other, renderer: { type: card-comp }, position: { x: 300, y: 200 }, data: { comp: Other, lang: yaml, raw: '' } }
+  - { id: note, renderer: { type: card-note }, position: { x: 300, y: 400 }, data: { title: A note } }
+connections:
+  - { id: line, source: { nodeId: meeting, handleId: out }, target: { position: { x: 500, y: 100 } } }
+`;
+  const store = new DiagramEditStore(diagram, 'diagram', () => undefined, cardDiagramNodeRegistry);
+  const ask = (droppedId, idListAt) => nodeTakeTargetGet({ store, registry: store.registry, editor, dropped: store.nodeGet(droppedId), idListAt, exceptIdList: [droppedId] });
+  assert.deepEqual(ask('meeting', ['meeting', 'holder']), { nodeId: 'holder', reason: '' });
+  assert.deepEqual(ask('other', ['holder']), { nodeId: 'holder', reason: 'Other is not a meeting' });
+  assert.deepEqual(ask('note', ['holder']), { nodeId: 'holder', reason: 'it holds the cards of components' });
+  assert.equal(ask('meeting', ['note', 'other']), null, 'a node that holds nothing answers nothing');
+  assert.equal(compHoldTakeReasonGet(definitionByName.Meeting, {}, { comp: 'Meeting' }, {}), undefined);
+
+  // taken: the holder holds its block, the card is gone, its line keeps a free end; one step
+  const { data } = nodeTakeDataGet({ store, registry: store.registry, editor, holderId: 'holder', dropped: store.nodeGet('meeting') });
+  assert.equal(store.nodeTake('holder', data, 'meeting', { positionGet: () => ({ x: 320, y: 40 }) }), true);
+  assert.equal(store.nodeGet('meeting'), undefined);
+  assert.deepEqual(JSON.parse(store.nodeGet('holder').data.raw), { comp: 'Meeting', lang: 'yaml', raw: 'title: Sync\n' });
+  assert.deepEqual(store.connectionGet('line').source, { position: { x: 320, y: 40 } }, 'its line is not dropped: its end is free where it was');
+  assert.equal(store.selection.nodeId, 'holder');
+  store.undo();
+  assert.equal(store.nodeGet('meeting').data.comp, 'Meeting');
+  assert.equal(store.nodeGet('holder').data.raw, '');
+  store.redo();
+
+  // let go on the canvas: a card of its own there; into another holder: that one holds it
+  const letGo = cardCompLetGo({ node: store.nodeGet('holder'), editor, key: '0' });
+  assert.equal(letGo.holderData.raw, '');
+  const released = cardCompNodeOfBlock(letGo.block, editor.compDefinitionGet('Meeting'));
+  const idNew = store.nodeRelease('holder', letGo.holderData, released, { position: { x: 900.6, y: 50 } });
+  assert.equal(idNew, 'meeting-1');
+  assert.deepEqual(store.nodeGet(idNew).data, { comp: 'Meeting', lang: 'yaml', raw: 'title: Sync\n' });
+  assert.deepEqual(store.nodeGet(idNew).position, { x: 901, y: 50 });
+  assert.equal(store.nodeGet('holder').data.raw, '');
+  store.undo();
+  assert.equal(store.nodeGet('meeting-1'), undefined);
+  assert.equal(lineList(store.nodeGet('holder').data.raw).length, 1);
+  const { data: takerData } = nodeTakeDataGet({ store, registry: store.registry, editor, holderId: 'holder-2', dropped: { id: '', ...released } });
+  assert.equal(store.nodeRelease('holder', letGo.holderData, released, { takerId: 'holder-2', takerData }), 'holder-2');
+  assert.equal(store.nodeGet('holder').data.raw, '');
+  assert.equal(lineList(store.nodeGet('holder-2').data.raw).length, 1);
+  assert.equal(store.nodeRelease('holder', letGo.holderData, released, { takerId: 'holder' }), null, 'never into itself');
+});

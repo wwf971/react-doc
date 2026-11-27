@@ -44,7 +44,7 @@
 .doc-math-block-edit[data-empty]::after {
   content: attr(data-label);
   color: var(--color-fd-muted-foreground);
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font-variant-numeric: tabular-nums;
   font-size: 0.8em;
 }
 

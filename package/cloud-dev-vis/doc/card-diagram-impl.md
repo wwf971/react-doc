@@ -304,6 +304,36 @@ The page draws the component with the item's data (`CompAssetHost`), and what th
 
 The component knows nothing of the diagram: what it does in a document it does in a card. An app that draws diagrams outside a doc page gives the components it offers through its host ([zatelier drawboard](@zatelier/.../zdb_impl_ui.md#components-in-a-drawing)).
 
+### A node holding others
+
+A node may **hold** others: a weekly timetable holds meetings and courses, each a card of its own a moment before. Held, they are part of the holder's data and the two are **one node**: one box, one set of lines, one step to move. The engine knows no node that holds; a kind says so in its **contract**, and the engine asks it (`DiagramNodeTake.js`):
+
+| contract | answers |
+| --- | --- |
+| `nodeTakeReasonGet({ holder, dropped, editor })` | `undefined`: it takes nothing of the sort; `''`: it takes the dropped node; a text: it would, but not this one, and why |
+| `nodeTake({ holder, dropped, editor })` | the holder's data with the dropped node in it; throws what it refuses |
+
+<!--renderComp=DiagramText-->
+```text
+a node dragged                              onNodeDrag: the node under the pointer
+  over a holder that answers   ──►          marked on its box (data-take): green, "Let go:
+                                            it takes it", or the warning color and why not
+  let go there, taken          ──►  one step: the holder's data (nodeTake), the node removed,
+                                            its lines detached, their ends free (standard 7)
+  let go there, refused        ──►  a move, as anywhere
+
+a held thing dragged out of its holder      the holder's card asks the editor: nodeRelease
+  over a holder that takes it  ──►  one step: both holders' data
+  over a holder refusing it    ──►  refused, saying why: nothing changes
+  anywhere else                ──►  one step: the holder's data, a node of its own there
+```
+
+- **Dropped on a holder.** While a node is dragged (`onNodeDrag` of the canvas, `editor.nodeDrag`), the topmost node under the pointer whose kind answers is the target (`canvas.nodeIdListAt`, `nodeTakeTargetGet`); the store keeps it in the gesture (`interaction.take`) and each node reads its own mark (`nodeTakeMarkGet`, a computed per node: a drag draws only the cards it passes over). The mark is the engine's, on the box of any kind, as the frame of the selection is (`DiagramRender.jsx`, `DiagramVisualEdit.css`). Let go on a holder that takes it, `nodeTake` writes the holder's data and removes the dropped node with `nodeRemoveWrite` (its lines detached, never dropped), one step, the holder selected. Elsewhere the drop is the move it always was.
+- **Let go by a holder.** What a node holds is drawn by its card, which alone knows what is under the pointer inside it: a held thing dragged out of it is its gesture. At its end the card asks `editor.nodeRelease({ nodeId, holderData, released, point, position })`: the holder's data without the thing, and the node it becomes (`released`, without id and place). The engine asks what is at the point: a holder that takes it gets it (`nodeRelease` with the taker's data, one step for both), a holder refusing it refuses the release with its reason, and anywhere else it becomes a node of its own at `position`. While it is dragged the card marks what is under the pointer the same way (`interaction` of type `holdDrag`).
+- **What a release or a take is**, undone: one step of the history (`changeApply`), so Ctrl/⌘ + Z puts the node back where it was and the holder as it was. Not where the structure is given (`isStructureFixed`).
+
+**The card holding a component.** `card-comp` answers the contract through the component registry of the page (`CardCompHold.js`): its component holds others when it exposes `hold` ([A component holding others](../../../main/doc_page_impl_mdx_comp.md#a-component-holding-others)); a card dropped on it is the block it holds (`{ comp, lang, raw, props }`, data in an asset item excepted), asked of `expose.hold.takeCheck` and written by `expose.hold.take`; the context gives the holder `compDefinitionGet` (to read what the block exposes: its time) and `packageConfigGet` (the preferences of a package, through `editor.packageConfigGet`). While the diagram is edited, `CardComp` hands its component `config.hold` (`dragMove`, `release`, `dragEnd`), and a block it lets go (`expose.hold.letGo`) becomes a `card-comp` node holding that block (`cardCompNodeOfBlock`: as wide as the component starts, an in and an out handle). The engine and the card know no holder by name: a weekly timetable taking a meeting is all the timetable's ([oa](../../oa/doc/timetable-week.md#in-a-card-diagram)).
+
 ## The words of a node
 
 Several things of a node are grabbed or pointed at, by different parts of the framework. Each has its own word, and a word is never used for another of them, in the data, the code or the documents:

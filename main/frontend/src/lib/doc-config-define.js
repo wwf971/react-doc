@@ -338,35 +338,111 @@ export function configDefineByKeyBuild(configDefineListExtra = []) {
   return configDefineByKey;
 }
 
-// the keys one registered component declares: compId -> (key -> define).
-// compById holds registry definitions; the shape of a component's config
-// is part of what it exposes, expose.meta.configDefineList
+// the keys of the owners of keys below the page: compId -> (key -> define).
+// An owner is a component (its keys: expose.meta.configDefineList) or a
+// package (its preferences: expose.meta.configPackage of the components that
+// read them, the group kept once under the id package:{name},
+// doc_page_impl_config.md#package-level-config). compById holds registry
+// definitions; the shape of a config is part of what a component exposes
 // (doc_page_impl_mdx_comp.md#what-a-component-exposes). a legacy component
-// (a bare React component) declares none.
+// (a bare React component) declares none. Two groups of one package name
+// that are not the same object: the first is kept, the second warned about.
 export function compConfigDefineByCompIdBuild(compById = {}) {
   const result = new Map();
+  const packageGroupByName = new Map();
   for (const [compId, definition] of Object.entries(compById)) {
-    const defineList = definition?.expose?.meta?.configDefineList;
-    if (!Array.isArray(defineList) || defineList.length === 0) continue;
-    const defineByKey = new Map();
-    for (const define of defineList) {
-      if (!define || typeof define.key !== 'string' || !define.key) continue;
-      defineByKey.set(define.key, {
-        type: 'any',
-        valueDefault: null,
-        description: '',
-        isUserSettable: true,
-        ...define,
-        scope: 'doc',
-      });
-    }
+    const defineByKey = configDefineByKeyOfList(definition?.expose?.meta?.configDefineList);
     if (defineByKey.size > 0) result.set(compId, defineByKey);
+    const group = definition?.expose?.meta?.configPackage;
+    if (!group || typeof group.name !== 'string' || !group.name) continue;
+    const groupKept = packageGroupByName.get(group.name);
+    if (groupKept && groupKept !== group) {
+      console.warn(`[doc-config] two config groups of the package "${group.name}" (${compId}): the first is kept`);
+      continue;
+    }
+    if (groupKept) continue;
+    packageGroupByName.set(group.name, group);
+    const packageDefineByKey = configDefineByKeyOfList(group.configDefineList);
+    if (packageDefineByKey.size > 0) result.set(configPackageIdOf(group.name), packageDefineByKey);
+  }
+  return result;
+}
+
+// a list of key definitions below the page (a component's, a package's) as key -> define;
+// every such key is document-level
+function configDefineByKeyOfList(defineList) {
+  const defineByKey = new Map();
+  if (!Array.isArray(defineList)) return defineByKey;
+  for (const define of defineList) {
+    if (!define || typeof define.key !== 'string' || !define.key) continue;
+    defineByKey.set(define.key, {
+      type: 'any',
+      valueDefault: null,
+      description: '',
+      isUserSettable: true,
+      ...define,
+      scope: 'doc',
+    });
+  }
+  return defineByKey;
+}
+
+// the package config groups the registered components carry, by package name: { name, label,
+// description, configDefineList } (the settings panel names a group by them)
+export function configPackageGroupByNameBuild(compById = {}) {
+  const result = new Map();
+  for (const definition of Object.values(compById)) {
+    const group = definition?.expose?.meta?.configPackage;
+    if (group && typeof group.name === 'string' && group.name && !result.has(group.name)) result.set(group.name, group);
   }
   return result;
 }
 
 // the key under which component-level values are declared in a config mapping
 export const COMP_CONFIG_KEY = 'compConfig';
+
+// the key under which package-level values are declared, { packageName: { Key: value } }
+// (doc_page_impl_config.md#package-level-config)
+export const PACKAGE_CONFIG_KEY = 'packageConfig';
+
+// a package's keys are resolved as those of a component, under an owner id of their own: package:oa.
+// A tag name has no ":", so the two never meet
+const PACKAGE_CONFIG_ID_PREFIX = 'package:';
+export function configPackageIdOf(packageName) {
+  return `${PACKAGE_CONFIG_ID_PREFIX}${packageName}`;
+}
+// the package an owner id names, '' for a component
+export function configPackageNameOf(ownerId) {
+  return typeof ownerId === 'string' && ownerId.startsWith(PACKAGE_CONFIG_ID_PREFIX) ? ownerId.slice(PACKAGE_CONFIG_ID_PREFIX.length) : '';
+}
+
+// the mappings below the page keys of one declared mapping, as one mapping by owner key: the
+// components by the name written (compConfig), the packages by their owner id (packageConfig)
+export function configOwnerMapOf(configDeclared) {
+  if (!configDeclaredIs(configDeclared)) return undefined;
+  const compConfig = configDeclared[COMP_CONFIG_KEY];
+  const packageConfig = configDeclared[PACKAGE_CONFIG_KEY];
+  if (compConfig === undefined && packageConfig === undefined) return undefined;
+  const result = configDeclaredIs(compConfig) ? { ...compConfig } : {};
+  if (configDeclaredIs(packageConfig)) {
+    for (const [packageName, config] of Object.entries(packageConfig)) result[configPackageIdOf(packageName)] = config;
+  } else if (packageConfig !== undefined) {
+    console.warn(`[doc-config] ${PACKAGE_CONFIG_KEY} must be a mapping of package names`);
+  }
+  return result;
+}
+
+// where the values of an owner are written in a declared mapping: [compConfig, TagName] or
+// [packageConfig, packageName]
+export function configOwnerPathOf(ownerKey) {
+  const packageName = configPackageNameOf(ownerKey);
+  return packageName ? [PACKAGE_CONFIG_KEY, packageName] : [COMP_CONFIG_KEY, ownerKey];
+}
+
+// the keys of a declared mapping that hold owners, not page keys
+export function configKeyIsOwnerMap(key) {
+  return key === COMP_CONFIG_KEY || key === PACKAGE_CONFIG_KEY;
+}
 
 // ${name} in a string replaced by variableByName[name]; an unknown name is
 // left as written and reported (unless isQuiet: the settings panel checks

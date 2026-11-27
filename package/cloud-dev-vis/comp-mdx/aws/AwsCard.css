@@ -10,11 +10,11 @@
 .doc-resource-card.is-aws-management, .doc-card-mark.is-aws-management { --resource-accent: #e7157b; --doc-card-accent: #e7157b; }
 
 /* the cards of rows with fixed fields: an attribute's name, a method, a path */
-.doc-aws-row-card .doc-aws-attribute-name, .doc-aws-row-card .doc-aws-route-path { font-family: var(--font-mono, ui-monospace, monospace); font-size: 0.68rem; overflow-wrap: anywhere; }
+.doc-aws-row-card .doc-aws-attribute-name, .doc-aws-row-card .doc-aws-route-path { font-variant-numeric: tabular-nums; font-size: 0.68rem; overflow-wrap: anywhere; }
 .doc-aws-row-card .doc-aws-route-method { font-size: 0.62rem; font-weight: 700; letter-spacing: 0.04em; color: var(--resource-accent); }
 .doc-aws-row-card .doc-aws-route-auth { color: var(--color-fd-muted-foreground); font-size: 0.66rem; }
 .doc-aws-row-card .doc-aws-route-auth.is-open { color: #b45309; font-weight: 650; }
-.doc-aws-row-card .doc-card-head-value { font-family: var(--font-mono, ui-monospace, monospace); font-size: 0.68rem; }
+.doc-aws-row-card .doc-card-head-value { font-variant-numeric: tabular-nums; font-size: 0.68rem; }
 
 /* a log group: the pill of a brief card in the accent of its family */
 .doc-card-brief.doc-aws-log-group { --doc-card-accent: #e7157b; }

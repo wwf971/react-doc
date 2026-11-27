@@ -99,7 +99,7 @@ export const ObjectFrontendSettings = observer(function ObjectFrontendSettings()
                     <td>{store.typeLabelGet(state.typeId)}</td>
                     <td className="doc-asset-muted">{decl.docPageAlias}</td>
                     <td className="doc-asset-muted doc-asset-version-size">{state.assetList.length}</td>
-                    <td className="doc-asset-mono doc-asset-muted">{decl.id}</td>
+                    <td className="doc-asset-value doc-asset-muted">{decl.id}</td>
                     <td className={state.status !== 'found' || issueCount > 0 ? 'doc-settings-tab-issue' : 'doc-asset-muted'}>
                       {state.status !== 'found' ? state.status : issueCount > 0 ? `${issueCount} to look at` : 'found'}
                     </td>
@@ -120,7 +120,7 @@ export const ObjectFrontendSettings = observer(function ObjectFrontendSettings()
             <tbody>
               {store.typeDeclaredList.map((type) => (
                 <tr key={type.id}>
-                  <td className="doc-asset-mono">{type.id}</td>
+                  <td className="doc-asset-value">{type.id}</td>
                   <td>{type.label}</td>
                   <td className="doc-asset-muted">{type.extendList.join(', ')}</td>
                   <td>
@@ -154,10 +154,10 @@ export const ObjectFrontendSettings = observer(function ObjectFrontendSettings()
             <tbody>
               {store.kindDeclaredList.map((kind) => (
                 <tr key={kind.id}>
-                  <td className="doc-asset-mono">{kind.id}</td>
+                  <td className="doc-asset-value">{kind.id}</td>
                   <td>{kind.label}</td>
                   <td className="doc-asset-muted">{objectFrontendKindContentText(kind.content)}</td>
-                  <td className="doc-asset-mono doc-asset-muted" title={`declared in ${kind.definedBy?.file ?? ''} (${kind.definedBy?.alias ?? kind.definedBy?.name ?? ''})`}>{kind.declaredBy}</td>
+                  <td className="doc-asset-value doc-asset-muted" title={`declared in ${kind.definedBy?.file ?? ''} (${kind.definedBy?.alias ?? kind.definedBy?.name ?? ''})`}>{kind.declaredBy}</td>
                   <td>
                     {kind.heldByList.length === 0 ? <span className="doc-asset-muted">none: offered to other types</span> : kind.heldByList.map((one, index) => (
                       <span key={one.typeId} title={`held as ${one.name}`}>{index > 0 ? ' · ' : ''}{one.typeId}</span>
@@ -185,7 +185,7 @@ export const ObjectFrontendSettings = observer(function ObjectFrontendSettings()
           <p className="doc-note">Entry assets of objects no doc page lists (their line was removed, or the object was deleted keeping its assets).</p>
           {store.orphanEntryList.map(({ id, item }) => (
             <div key={item.itemId} className="doc-settings-tab-row">
-              <span className="doc-asset-mono">{id}</span>
+              <span className="doc-asset-value">{id}</span>
               <span className="doc-asset-muted">entry {item.itemId} · {item.groupPath || item.folder}</span>
               {writeReason ? null : docPageCreateList.map((docPage) => (
                 <button key={docPage.alias} type="button" className="doc-button" disabled={isWriting} onClick={() => void store.register(docPage.alias, item.itemId)}>
@@ -209,7 +209,7 @@ const ObjectFrontendIncomingRow = observer(function ObjectFrontendIncomingRow({ 
   const kindSet = (value) => store.settingsKindSet(item.itemId, value);
   return (
     <div className="doc-settings-tab-row">
-      <span className="doc-asset-mono">{item.itemId}</span>
+      <span className="doc-asset-value">{item.itemId}</span>
       <span className="doc-asset-muted">{item.name || '(no name)'} · {item.lang}{item.owner ? ` · declares ${item.owner.ref}` : ''}{item.groupPath ? ` · ${item.groupPath}` : ''}</span>
       {isWritable ? (
         <>
@@ -249,7 +249,7 @@ const ObjectFrontendDetail = observer(function ObjectFrontendDetail({ id }) {
         <span className="doc-asset-muted">description</span>
         <EditValueInline value={state.description} placeholder="(none)" isLocked={!isWritable || isWriting || state.status !== 'found'} onCommit={(value) => void store.metaSet(id, { description: value })} />
         <span className="doc-asset-muted">reference</span>
-        <span className="doc-asset-mono">{state.ref}</span>
+        <span className="doc-asset-value">{state.ref}</span>
         <span className="doc-asset-muted">type</span>
         <span>{store.typeLabelGet(state.typeId)} <span className="doc-asset-muted">{state.typeId}</span></span>
         <span className="doc-asset-muted">entry asset</span>

@@ -449,8 +449,8 @@
   color: var(--color-fd-muted-foreground);
 }
 
-.doc-service-detail-code {
-  font-family: var(--font-mono, ui-monospace, monospace);
+.doc-service-detail-value {
+  font-variant-numeric: tabular-nums;
   font-size: 0.72rem;
   overflow-wrap: anywhere;
 }
@@ -565,8 +565,8 @@
   text-align: left;
 }
 
-.doc-service-table-row > .doc-service-table-cell-code {
-  font-family: var(--font-mono, ui-monospace, monospace);
+.doc-service-table-row > .doc-service-table-cell-value {
+  font-variant-numeric: tabular-nums;
   font-size: 0.68rem;
 }
 

@@ -12,6 +12,7 @@ import { ValueMenu } from './DiagramValueControls.jsx';
 import { cardCompEntryListBuild } from './CardCompEntry.js';
 import { cardCompIsAssetRef, cardCompPropsWithView, cardCompViewIsTile, cardCompViewListOf } from './CardCompData.js';
 import { cardCompAssetEntryCreate, cardCompAssetWrite } from './CardCompAsset.js';
+import { cardCompIsReleasing, cardCompLetGo, cardCompNodeOfBlock } from './CardCompHold.js';
 import { DiagramRenderContext } from './DiagramRender.jsx';
 import { nodeSizeModeOf } from './DiagramNodeResize.js';
 import { nodeOverflowWatch } from './DiagramNodeOverflow.js';
@@ -59,6 +60,13 @@ import './CardComp.css';
 // reference, and what the component writes goes to the item (CardCompAsset.js), its draft kept here
 // while its edit mode is open, never written over the reference.
 //
+// A component holding others (expose.hold: a weekly timetable) is a holder of the diagram
+// (card-diagram-impl.md#a-node-holding-others): a card dropped on it is taken (the kind's contract,
+// CardCompHold.js); and while the diagram is edited the card hands it config.hold, so what it holds can
+// be dragged out of it: dragMove(key, point) marks what is under the pointer and answers what letting
+// go there does ({ text, isRefused }), release(key, point) lets it go there (a card of its own, or taken
+// by the holder there), dragEnd() clears the mark. point: { clientX, clientY } of the screen.
+//
 // The component knows nothing of the diagram: it is edited as in a document. Its reports never reach
 // the edit layer of the document around the diagram: the block context is cut, and the reports of
 // the edit domain are answered here.
@@ -69,6 +77,8 @@ export const CardComp = observer(function CardComp({ node, editor, nodeId }) {
 	const session = store?.compEdit?.nodeId === nodeId ? store.compEdit : null;
 	const isSelected = Boolean(store) && store.selection?.nodeId === nodeId && !store.selection?.connectionId;
 	const isFixed = Boolean(store?.isStructureFixed);
+	// read by the card selected alone (its group is the only one there): a drag redraws no other card
+	const isDragging = isSelected && ['nodeDrag', 'holdDrag'].includes(store?.interaction?.type);
 	const [floatElement, floatElementSet] = useState(null);
 	const configDoc = stores?.sourceStore?.configDoc;
 	const definition = data.comp ? compDefinitionNormalize(compDefinitionGet(stores?.compById ?? {}, compIdResolve(configDoc, data.comp))) : undefined;
@@ -215,12 +225,45 @@ export const CardComp = observer(function CardComp({ node, editor, nodeId }) {
 		return undefined;
 	};
 
+	// what it holds dragged out of it (a component holding others, while the diagram is edited): the
+	// block it lets go of, the node that block becomes, and what is under the pointer
+	const isReleasing = Boolean(editor) && !isFixed && (isInPlace || Boolean(session)) && cardCompIsReleasing(store?.nodeGet(nodeId) ?? node, editor);
+	const releaseOf = (key, point) => {
+		const nodeNow = store.nodeGet(nodeId);
+		const letGo = nodeNow ? cardCompLetGo({ node: nodeNow, editor, key }) : null;
+		if (!letGo) return null;
+		const released = cardCompNodeOfBlock(letGo.block, editor.compDefinitionGet(letGo.block.comp));
+		const flowPoint = point ? editor.canvas.current?.screenToFlow({ x: point.clientX, y: point.clientY }) ?? null : null;
+		return { ...letGo, released, flowPoint };
+	};
+	const hold = isReleasing ? {
+		dragMove: (key, point) => {
+			const release = point ? releaseOf(key, point) : null;
+			const take = release?.flowPoint ? editor.nodeTakeTargetGet({ dropped: { id: '', ...release.released }, point: release.flowPoint, exceptIdList: [nodeId] }) : null;
+			const before = store.interaction?.type === 'holdDrag' ? store.interaction.take ?? null : undefined;
+			if (before === undefined || (before?.nodeId ?? '') !== (take?.nodeId ?? '') || (before?.reason ?? '') !== (take?.reason ?? '')) store.interactionSet({ type: 'holdDrag', nodeId, take });
+			if (!take) return { text: 'Let go: a card of its own here', isRefused: false };
+			const label = editor.compDefinitionGet(store.nodeGet(take.nodeId)?.data?.comp)?.expose?.meta?.label ?? take.nodeId;
+			return take.reason ? { text: `${label} does not take it: ${take.reason}`, isRefused: true } : { text: `Let go: taken by ${label}`, isRefused: false };
+		},
+		dragEnd: () => { if (store.interaction?.type === 'holdDrag') store.interactionSet(null); },
+		release: (key, point) => {
+			if (store.interaction?.type === 'holdDrag') store.interactionSet(null);
+			const release = releaseOf(key, point);
+			if (!release?.flowPoint) return { code: -1, message: 'Nothing of it is let go there.' };
+			// a card of its own: its top left corner a little before the pointer, as if held by its title
+			const position = { x: release.flowPoint.x - 16, y: release.flowPoint.y - 12 };
+			return editor.nodeRelease({ nodeId, holderData: release.holderData, released: release.released, point: release.flowPoint, position });
+		},
+	} : undefined;
+
 	// the document it belongs to is the page's, if any: an app drawing diagrams has no document store
 	// (docStore null), and the boundary reads one only when no sourcePath is given
 	const configRuntime = {
 		instanceId: `card-comp:${nodeId}`,
 		sourcePath,
 		docState,
+		...(hold ? { hold } : {}),
 		...(session || isInPlace ? {
 			isEdit: true,
 			edit: {
@@ -245,7 +288,9 @@ export const CardComp = observer(function CardComp({ node, editor, nodeId }) {
 		<div className={`doc-card-comp${session ? ' is-editing nodrag nopan nowheel' : ''}${data.comp ? '' : ' is-empty'}`} data-comp={data.comp || undefined} data-size-mode={sizeMode}>
 			{/* where the bar of the component's editor goes, and the group of the card: over its top edge, at the size of the screen */}
 			{editor ? <div ref={floatElementSet} className="doc-card-comp-float nodrag nopan" /> : null}
-			{editor && isSelected && !session && !isFixed && definition ? (
+			{/* its group steps aside while something is dragged (a card over a holder: the mark of the
+			    holder stands where the group was, DiagramNodeTake.js) */}
+			{editor && isSelected && !session && !isFixed && definition && !isDragging ? (
 				<div className="doc-card-comp-bar nodrag nopan">
 					{actionList.length ? <EditButtonGroup actionList={actionList} isLocked={editor.isLocked} ariaLabel="The component of the card" /> : null}
 					{viewMenu}
