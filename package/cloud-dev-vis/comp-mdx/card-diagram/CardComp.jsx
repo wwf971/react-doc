@@ -1,13 +1,15 @@
 import { useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { observer } from 'mobx-react-lite';
-import { Pencil, Puzzle, TriangleAlert } from '../../../../main/frontend/UICommon.js';
+import { Expand, Pencil, Puzzle, TriangleAlert } from '../../../../main/frontend/UICommon.js';
 import { useDocStores } from '../../../../main/frontend/src/store/context.js';
 import { RegisteredComp } from '../../../../main/comp-doc/registry/RegisteredComp.jsx';
 import { DocEditBlockContext, DocEditBlockFloatContext } from '../../../../main/comp-doc/edit/DocEditDocContext.js';
 import { EditButtonGroup } from '../../../../main/comp-doc/edit/EditButtonGroup.jsx';
 import { compDefinitionNormalize, compIdResolve } from '../../../../main/comp-doc/registry/comp-registry.js';
 import { compDefinitionGet } from '../../../../main/comp-doc/registry/comp-definition.js';
-import { compEditModeListGet, compMetaGet } from '../../../../main/comp-doc/registry/comp-expose.js';
+import { compEditModeListGet, compIconGet, compMetaGet } from '../../../../main/comp-doc/registry/comp-expose.js';
+import { PanelPopup } from '../../../../main/comp-doc/popup/PanelPopup.jsx';
 import { ValueMenu } from './DiagramValueControls.jsx';
 import { cardCompEntryListBuild } from './CardCompEntry.js';
 import { cardCompIsAssetRef, cardCompPropsWithView, cardCompViewIsTile, cardCompViewListOf } from './CardCompData.js';
@@ -45,6 +47,13 @@ import './CardComp.css';
 //   its view              a component drawing its blocks in views (expose.blockViewList: Code, Mdx) has
 //                         them in a menu of the group over the card and in its edit card: view= of
 //                         its props, as on the marker of a block
+//
+// A component drawing a canvas of React Flow itself (meta.isFlowCanvas: a card diagram, its animation,
+// its switch) is drawn in the card as a **tile** (its icon, its name), and its canvas in a dialog of the
+// page (PanelPopup, out of the node): React Flow reads the handles of a node from everything inside it,
+// so a canvas drawn in a card would give the card the handles of its own cards. A click on the tile
+// opens the dialog; an edit mode chosen in the group of the card opens it too, the bar of its editor in
+// the head of the dialog; closing the dialog ends the session (what it reported is in the draft).
 //
 // Its box, by its size mode (CARD_COMP_SIZE_MODE_LIST, read from its size): its component's own size
 // (fit), or a width, a height or both given (wrap, tall, box). The component is drawn in the card's
@@ -129,8 +138,20 @@ export const CardComp = observer(function CardComp({ node, editor, nodeId }) {
 		return { code: -1, message: docState.editReason || 'The component of a card is changed in the editor of its diagram.' };
 	};
 
+	// a canvas of its own (meta.isFlowCanvas): a tile in the card, the canvas in a dialog, opened by a
+	// click on the tile or by an edit mode chosen; the bar of its editor in the head of the dialog
+	const isCanvas = meta?.isFlowCanvas === true;
+	const [isCanvasOpen, isCanvasOpenSet] = useState(false);
+	const [canvasFloatElement, canvasFloatElementSet] = useState(null);
+	useEffect(() => { if (isCanvas && session) isCanvasOpenSet(true); }, [isCanvas, session]);
+
 	// the card left while its component is edited: what it reported is in the draft, the session ends
-	useEffect(() => { if (session && !isSelected) store.compEditEnd(); }, [session, isSelected, store]);
+	// (not while its canvas is open in its dialog: the dialog is the place it is edited in)
+	useEffect(() => { if (session && !isSelected && !(isCanvas && isCanvasOpen)) store.compEditEnd(); }, [session, isSelected, store, isCanvas, isCanvasOpen]);
+	const canvasClose = () => {
+		if (session) store.compEditEnd();
+		isCanvasOpenSet(false);
+	};
 
 	// a component whose data must be an asset item gets its item first (the card then holds the
 	// reference); what kept it from being made is said in the group
@@ -317,6 +338,17 @@ export const CardComp = observer(function CardComp({ node, editor, nodeId }) {
 					<span>No component <strong>{data.comp}</strong> on this page</span>
 					{editor && !isFixed ? chooser(false) : null}
 				</div>
+			) : data.comp && isCanvas ? (
+				<CardCompCanvas label={meta?.label ?? data.comp} Icon={compIconGet(definition)} isEditor={Boolean(editor)} isOpen={isCanvasOpen} onOpen={() => isCanvasOpenSet(true)} onClose={canvasClose}
+					barRef={canvasFloatElementSet}>
+					<DocEditBlockContext.Provider value={null}>
+						<DocEditBlockFloatContext.Provider value={canvasFloatElement}>
+							<RegisteredComp compName={data.comp} placement="commentBlock"
+								input={{ raw: data.raw ?? '', lang: data.lang ?? 'yaml', propsAuthored: data.props ?? {} }}
+								configRuntime={configRuntime} onEventRuntime={onEventRuntime} />
+						</DocEditBlockFloatContext.Provider>
+					</DocEditBlockContext.Provider>
+				</CardCompCanvas>
 			) : data.comp ? (
 				<div ref={bodyRef} className="doc-card-comp-body">
 					<DocEditBlockContext.Provider value={null}>
@@ -337,3 +369,42 @@ export const CardComp = observer(function CardComp({ node, editor, nodeId }) {
 		</div>
 	);
 });
+
+// a component drawing a canvas of React Flow itself, held by a card: the tile in the card, and the
+// canvas in a dialog of the page, out of the node (a portal into the page: React Flow reads the handles
+// of a node from everything inside it). Read, a click on the tile opens it; in the editor a click
+// selects the card as on any card (a drag moves it), and its open button opens it. barRef: the place
+// in the head of the dialog where the bar of its editor goes while an edit mode is open
+function CardCompCanvas({ label, Icon, isEditor, isOpen, onOpen, onClose, barRef, children }) {
+	const open = (event) => { event.stopPropagation(); onOpen(); };
+	const tileContent = (
+		<>
+			<span className="doc-card-comp-canvas-icon" aria-hidden="true"><Icon /></span>
+			<span className="doc-card-comp-canvas-label">{label}</span>
+		</>
+	);
+	return (
+		<>
+			{isEditor ? (
+				<div className="doc-card-comp-canvas-tile">
+					{tileContent}
+					<button type="button" className="doc-card-comp-canvas-open nodrag nopan" title={`Open ${label}: a canvas of its own, in a dialog`} aria-haspopup="dialog" aria-expanded={isOpen} onClick={open}>
+						<Expand aria-hidden="true" />
+					</button>
+				</div>
+			) : (
+				<button type="button" className="doc-card-comp-canvas-tile" title={`${label}: a canvas of its own, opened in a dialog`} aria-haspopup="dialog" aria-expanded={isOpen} onClick={open}>
+					{tileContent}
+					<span className="doc-card-comp-canvas-open" aria-hidden="true"><Expand /></span>
+				</button>
+			)}
+			{isOpen && typeof document !== 'undefined' ? createPortal(
+				<PanelPopup panelId="cardCompCanvas" title={label} isOpen onClose={onClose} className="doc-card-comp-canvas-dialog" bodyClassName="doc-card-comp-canvas-body"
+					headerRightContent={<span ref={barRef} className="doc-card-comp-canvas-bar doc-edit-popup" />}>
+					{children}
+				</PanelPopup>,
+				document.body,
+			) : null}
+		</>
+	);
+}

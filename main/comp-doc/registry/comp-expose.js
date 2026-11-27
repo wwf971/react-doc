@@ -72,7 +72,16 @@ import { PORTAL_DEVICE_LIST, PORTAL_SWITCHER_PLACE_LIST } from '../../frontend/s
 //                        `{/* ... */}` or any other comment syntax, for any
 //                        document format: it is the authoring form of the
 //                        project and it works (see edit-template.js)
-//                    { text }  the block exactly as written (an MDX element)
+//                    { text }  the block exactly as written (an MDX element, a
+//                        block of a form of its own: $$ lines of math)
+//   blockTextRead(text)
+//                  a component drawing a block of a document written in a form
+//                  of its own, not its marker and a fence (Code: a fenced code
+//                  block; MathBlock: $$ lines), reads that text as the data a
+//                  block of it holds: { lang, raw, props } , or null when the
+//                  text is not one such block. What holds a block as data (a
+//                  card of a card diagram) takes such a block by it
+//                  (compBlockTextRead)
 //                    undefined the component starts no block there (an
 //                        mdx-only component in an md document)
 //                  a component without it cannot be inserted from the menu
@@ -152,7 +161,7 @@ const metaDefault = Object.freeze({
   configDefineList: [],
   slashName: undefined,
   slashAliasList: [],
-  isNotInNode: false,
+  isFlowCanvas: false,
 });
 
 // a name typed after "/" (doc_page_impl_edit_slash.md): one word of letters, digits, "_" and "-"
@@ -165,7 +174,7 @@ const ASSET_SAVE_MODE_LIST = ['inPlace', 'newVersion'];
 // isAssetOnly renders there only with data from the asset service layer
 export const COMP_PLACEMENT_DOC_LIST = ['mdx', 'commentBlock'];
 
-export const compExposeNameStandardList = ['meta', 'icon', 'viewModeList', 'editModeList', 'sourceDefaultCreate', 'apiList', 'objectView', 'objectInner', 'pagination', 'portal', 'blockLabelGet', 'hold'];
+export const compExposeNameStandardList = ['meta', 'icon', 'viewModeList', 'editModeList', 'sourceDefaultCreate', 'blockTextRead', 'apiList', 'objectView', 'objectInner', 'pagination', 'portal', 'blockLabelGet', 'hold'];
 
 const REGEX_TYPE_ID = /^[a-z][a-z0-9-]*(\.[a-zA-Z][a-zA-Z0-9-]*)+$/;
 
@@ -180,8 +189,9 @@ export function compExposeNormalize(expose = {}) {
   if (expose.editTemplate !== undefined) {
     throw new Error('compDefine: expose.editTemplate is expose.sourceDefaultCreate(env) now (comp-expose.js).');
   }
-  const { meta, icon, viewModeList, editModeList, sourceDefaultCreate, apiList, objectView, objectInner, pagination, portal, blockLabelGet, hold, ...exposeOther } = expose;
+  const { meta, icon, viewModeList, editModeList, sourceDefaultCreate, blockTextRead, apiList, objectView, objectInner, pagination, portal, blockLabelGet, hold, ...exposeOther } = expose;
   if (blockLabelGet !== undefined && typeof blockLabelGet !== 'function') throw new Error('compDefine: expose.blockLabelGet(component, context) must be a function.');
+  if (blockTextRead !== undefined && typeof blockTextRead !== 'function') throw new Error('compDefine: expose.blockTextRead(text) must be a function returning { lang, raw, props } or null.');
   return {
     ...exposeOther,
     meta: metaNormalize(meta),
@@ -189,6 +199,7 @@ export function compExposeNormalize(expose = {}) {
     viewModeList: modeListNormalize(viewModeList, 'expose.viewModeList', []),
     editModeList: modeListNormalize(editModeList, 'expose.editModeList', [COMP_EDIT_MODE_SOURCE_ID]),
     sourceDefaultCreate: sourceDefaultCreateNormalize(sourceDefaultCreate),
+    blockTextRead,
     apiList: apiListNormalize(apiList),
     objectView: objectViewNormalize(objectView),
     objectInner: objectInnerNormalize(objectInner),
@@ -348,6 +359,11 @@ function metaNormalize(meta) {
   if (meta.configDefineList !== undefined && !Array.isArray(meta.configDefineList)) {
     throw new Error('compDefine: expose.meta.configDefineList must be an array.');
   }
+  // the former way out of a card of a card diagram; refused, so that it is not kept silently: a card
+  // holds every component a document holds as a block
+  if (meta.isNotInNode !== undefined) {
+    throw new Error('compDefine: expose.meta.isNotInNode is gone: a card of a card diagram holds every block of a document. A component drawing a canvas of React Flow itself declares meta.isFlowCanvas (held as a tile, drawn in a dialog).');
+  }
   if (meta.assetSaveMode !== undefined && !ASSET_SAVE_MODE_LIST.includes(meta.assetSaveMode)) {
     throw new Error(`compDefine: expose.meta.assetSaveMode must be one of ${ASSET_SAVE_MODE_LIST.join(', ')}.`);
   }
@@ -383,7 +399,7 @@ function metaNormalize(meta) {
     insertObjectPick: pick ? { typeList: pick.typeList.map(String), isCreateOffered: pick.isCreateOffered === true } : undefined,
     slashName: meta.slashName === undefined ? undefined : String(meta.slashName),
     slashAliasList: (meta.slashAliasList ?? []).map(String),
-    isNotInNode: meta.isNotInNode === true,
+    isFlowCanvas: meta.isFlowCanvas === true,
   };
 }
 
@@ -516,6 +532,27 @@ export function compApiListGet(definition) {
 // the icon the page draws for a component: its own, else the default one
 export function compIconGet(definition) {
   return definition?.expose?.icon ?? compIconDefault;
+}
+
+// whether the component can stand as a block of a document, at its top level and in the text of a
+// list item: its placements allow the comment block (a marker, then its block), or it names none (it
+// renders anywhere). What holds a block of a document as data holds every such component (a card of a
+// card diagram: package/cloud-dev-vis/doc/card-diagram-impl.md#a-component-in-a-card)
+export function compIsDocBlock(definition) {
+  if (!definition) return false;
+  return !definition.placementList || definition.placementList.includes('commentBlock');
+}
+
+// the data a block of the component holds, read from a block of a document written in the
+// component's own form (expose.blockTextRead: a fenced code block for Code, $$ lines for MathBlock):
+// { lang, raw, props }, or null when the text is no such block or the component reads none
+export function compBlockTextRead(definition, text) {
+  const read = definition?.expose?.blockTextRead;
+  if (!read) return null;
+  const result = read(String(text ?? ''));
+  if (!result || typeof result !== 'object' || typeof result.raw !== 'string') return null;
+  const props = result.props && typeof result.props === 'object' && !Array.isArray(result.props) ? result.props : {};
+  return { lang: typeof result.lang === 'string' && result.lang ? result.lang : 'text', raw: result.raw, props };
 }
 
 // the source of a new block of the component in the environment env (see

@@ -25,7 +25,7 @@ import './MathCopyLayer.css';
 
 const DISPLAY_SELECTOR = '.katex-display';
 // a formula being typed has its field, not this
-const EDITING_SELECTOR = '.doc-edit-surface, .doc-math-block-edit, [contenteditable]:not([contenteditable="false"])';
+const EDITING_SELECTOR = '.doc-edit-surface, .doc-math-block-edit, .doc-math-formula.is-open, [contenteditable]:not([contenteditable="false"])';
 const MENU_CLASS = 'doc-math-copy-menu';
 const GAP = 6;
 const HIDE_DELAY = 250;
@@ -223,7 +223,9 @@ function MathCopyMenuItem({ mode, Icon }) {
 
 // the place of the control: right after the end of what KaTeX drew (the
 // boxes of its .katex-html, not the row, which is as wide as the text), its
-// middle at their middle; kept inside the row of the formula
+// middle at their middle; inside the row of the formula when there is room
+// after it, else right after the row: never over the formula (a formula as
+// wide as its row, in a card of a diagram); inside the window
 function placeGet(display, width, height) {
   const row = display.getBoundingClientRect();
   const boxList = [...(display.querySelector('.katex-html')?.children ?? [])]
@@ -232,8 +234,9 @@ function placeGet(display, width, height) {
   const right = boxList.length ? Math.max(...boxList.map((rect) => rect.right)) : row.right;
   const top = boxList.length ? Math.min(...boxList.map((rect) => rect.top)) : row.top;
   const bottom = boxList.length ? Math.max(...boxList.map((rect) => rect.bottom)) : row.bottom;
+  const left = right + GAP + width <= row.right ? right + GAP : Math.max(right, row.right) + GAP;
   return {
-    left: Math.round(Math.max(row.left, Math.min(right + GAP, row.right - width))),
+    left: Math.round(Math.min(left, window.innerWidth - width - GAP)),
     top: Math.round((top + bottom) / 2 - height / 2),
   };
 }

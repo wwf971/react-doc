@@ -47,6 +47,19 @@ export function mathSpanListGet(text) {
   return spanList.sort((a, b) => a.start - b.start);
 }
 
+// the formula of a text that is one block of math, $$ lines and nothing else (a block of a
+// document), as the data of a block of the component MathBlock (its expose.blockTextRead: a card of a
+// card diagram holds it so): { lang: 'latex', raw: the formula }; null for any other text
+export function mathBlockTextRead(text) {
+  const source = String(text ?? '').replace(/\r\n?/g, '\n').trim();
+  const spanList = mathSpanListGet(source);
+  if (spanList.length !== 1 || !spanList[0].isRow || spanList[0].start !== 0 || spanList[0].end !== source.length) return null;
+  return { lang: MATH_BLOCK_LANG, raw: spanList[0].value };
+}
+
+// the language of the data of a block of MathBlock held as data: its formula, in LaTeX
+export const MATH_BLOCK_LANG = 'latex';
+
 // the source of a formula: inline in its dollars, a block between its lines
 // of $$. an inline formula is one line: its line breaks become spaces, and it
 // keeps no space next to its dollars, which would make it no math

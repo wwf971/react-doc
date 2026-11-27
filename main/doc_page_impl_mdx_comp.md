@@ -31,12 +31,13 @@ a component definition (compDefine)
     ├── standard names: normalized at registration, read through accessors
     │   ├── meta                     facts: label, description, isReadOnly, isEditSourceAccepted, isInsertCommon,
     │   │                            isEditEnterButtonOnly, isAssetOnly, isEditAssetAccepted, isNotInDoc,
-    │   │                            isEditSlashEnabled, slashName, slashAliasList, isNotInNode, assetSaveMode,
+    │   │                            isEditSlashEnabled, slashName, slashAliasList, isFlowCanvas, assetSaveMode,
     │   │                            insertObjectPick, configDefineList, configPackage, any key of its own
     │   ├── icon                     a component drawing its icon at any size
     │   ├── viewModeList             the ways its data is displayed, one default (config.viewMode)
     │   ├── editModeList             the ways its data is edited in place (+ the built-in source mode)
     │   ├── sourceDefaultCreate      the source of a new block, for the insert menu
+    │   ├── blockTextRead            its block of a form of its own read as its data (Code, MathBlock)
     │   ├── apiList                  the apis it offers the unified api registry, {compId}/{name}
     │   ├── objectView               the object types it draws, in which contexts (icon, inline, card, block)
     │   ├── objectInner              the frontend object types whose inner paths it answers for: what a path
@@ -74,12 +75,14 @@ compDefine(Xxx, {
   expose: {                                                     what it tells the page about itself
     meta:          { label, description, isReadOnly, isEditSourceAccepted, isInsertCommon,
                      isEditEnterButtonOnly, isAssetOnly, isEditAssetAccepted, isNotInDoc, isEditSlashEnabled,
-                     slashName, slashAliasList, isNotInNode, assetSaveMode, configDefineList, ... }
+                     slashName, slashAliasList, isFlowCanvas, assetSaveMode, configDefineList, ... }
     icon:          a component drawing the icon of Xxx at any size
     viewModeList:  [{ id, label, description, icon, isDefault, isDefaultInPlaceList }]   the ways its data is displayed
     editModeList:  [{ id, label, description, icon, isDefault }]   the ways its data is edited in place
     sourceDefaultCreate: (env) => { lang, raw, props } | { text } | undefined
                                                                  the source of a new block
+    blockTextRead: (text) => { lang, raw, props } | null           its block of a form of its own (a fence,
+                                                                 $$ lines) read as the data of a block of it
     apiList:       [apiDefine({ name, label, paramList, run, ... })]    the apis it offers the unified api registry
     objectView:    { typeList, contextList, priority }               the objects it draws, for the object registry
     pagination:    { pieceListGet, pieceTypeById, pageClassName?, pageSpec? }   its data on pages (doc_page_impl_pagination.md)
@@ -90,7 +93,9 @@ compDefine(Xxx, {
 })
 ```
 
-These names are **standard**: the page knows their shape, normalizes them at registration (`comp-expose.js`, `compExposeNormalize`; a wrong shape fails there, not later in some reader), and reads them where it needs them. Every other name is **non-standard**: kept exactly as declared, read by whoever knows it through `compExposeGet(definition, name)`, so a host application or a feature that does not exist yet can hang its own facts on a component without a change to the registry. A legacy definition (a bare React component in `compById`) exposes nothing and gets the defaults of every standard name. The standard names are read through small accessors rather than by reaching into the definition (`compMetaGet`, `compIconGet`, `compViewModeListGet`, `compEditModeListGet`, `compSourceDefaultGet`, `compApiListGet`, `compObjectViewGet`, `compExposeGet`); for a component that exposes nothing they return the defaults described below.
+These names are **standard**: the page knows their shape, normalizes them at registration (`comp-expose.js`, `compExposeNormalize`; a wrong shape fails there, not later in some reader), and reads them where it needs them. Every other name is **non-standard**: kept exactly as declared, read by whoever knows it through `compExposeGet(definition, name)`, so a host application or a feature that does not exist yet can hang its own facts on a component without a change to the registry. A legacy definition (a bare React component in `compById`) exposes nothing and gets the defaults of every standard name. The standard names are read through small accessors rather than by reaching into the definition (`compMetaGet`, `compIconGet`, `compViewModeListGet`, `compEditModeListGet`, `compSourceDefaultGet`, `compBlockTextRead`, `compApiListGet`, `compObjectViewGet`, `compExposeGet`); for a component that exposes nothing they return the defaults described below. Whether a component can stand as a block of a document (at its top level or in the text of a list item) is read from its placements by `compIsDocBlock` (`commentBlock` allowed, or no list); **what can stand so, a card of a card diagram holds** ([A component in a card](../package/cloud-dev-vis/doc/card-diagram-impl.md#a-component-in-a-card), checked over every component by `CardCompEntry.test.js` of cloud-dev-vis).
+
+`blockTextRead` is for a component drawing a block written in a form of its own, not its marker and a fence: `Code` reads a fenced code block (its lines, their language, the view and the title of its info string), `MathBlock` reads `$$` lines (its formula). What holds a block of a document as data (a card) takes such a block by it, never by a list of forms of its own.
 
 The exposures of the components registered by the package are kept beside the component when it has an editor of its own (`image-expose.js`, `image-grid-expose.js`, the demo `StockTable`), and in `comp-doc/registry/registry-expose.js` for the others; every component that can start a block of a document exposes a label, a description, an icon, and a `sourceDefaultCreate`.
 
@@ -110,7 +115,7 @@ Facts about the component that are not modes or drawings, as one object, so that
 | `isNotInDoc` | `false` | it cannot be a block of a document at all, because it renders elsewhere (a side-panel item); the insert menu does not offer it and a block of it shows an error ([Asset-only and not-in-doc](#asset-only-and-not-in-doc)) |
 | `isEditSlashEnabled` | `false` | a block of it offers the [slash mode](doc_page_impl_edit_slash.md) while it is edited as source: `/` opens the menu of slash actions (`/link …`). The default editors of paragraphs and lists (`Paragraph`, `List`) declare it; a component whose source is prose can too ([Which blocks offer it](doc_page_impl_edit_slash.md#which-blocks-offer-it)) |
 | `slashName`, `slashAliasList` | — , `[]` | the names that put a block of it at the caret in the [slash menu](doc_page_impl_edit_slash.md#components-in-the-slash-menu) (`/meeting-zoom-instance`), with the text of its default source; letters, digits, `-` and `_`, starting with a letter. Without a `slashName` it is not in the slash menu |
-| `isNotInNode` | `false` | a card of a card diagram may not hold it ([A component in a card](../package/cloud-dev-vis/doc/card-diagram-impl.md#a-component-in-a-card)): the diagram components themselves, so no canvas is drawn inside a canvas |
+| `isFlowCanvas` | `false` | it draws a canvas of React Flow itself (the diagram components): a card of a card diagram holds it as a **tile**, its canvas drawn in a dialog, since React Flow reads the handles of a node from everything inside it ([A component in a card](../package/cloud-dev-vis/doc/card-diagram-impl.md#a-component-in-a-card)). It never keeps a component out of a card: a card holds every component a document holds as a block |
 | `assetSaveMode` | — | `inPlace` or `newVersion`: the save mode an asset item gets when the page creates it for a block of this component (from the insert menu, or by **to asset**). Without it the item has no save mode, which saves in place ([Save modes](doc_page_impl_asset.md#save-modes)). Only the creation reads it; the item's own mode decides every later save |
 | `insertObjectPick` | — | `{ typeList, isCreateOffered }`: its block names an object of the [object registry](doc_page_impl_obj.md) of these types, so the insert menu asks for the object first (a search limited to them, and with `isCreateOffered` the creation of a new one) and calls `sourceDefaultCreate` with `env.objectRef` ([Creating a block naming an object](doc_page_impl_edit.md#creating-a-block-naming-an-object)). `ObjectFrontend` declares it |
 | `configDefineList` | `[]` | the shape of its component-level config: which keys exist, their types, defaults, descriptions. Only the shape; the values come from the config layers and the document levels, and reach the component as `config.compConfig` ([Component-level config](doc_page_impl_config.md#component-level-config)) |

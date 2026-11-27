@@ -122,12 +122,26 @@ A block of the document that is `$$` lines is edited by the registered component
              On a row              set apart, on lines of its own: $$
 ```
 
+### A block of math as data
+
+A card of a card diagram holds a block of math as it holds any block of a document ([A component in a card](../../../package/cloud-dev-vis/doc/card-diagram-impl.md#a-component-in-a-card)): `{ comp: MathBlock, lang: latex, raw: the formula }`. `MathBlock` can stand as a block (placement `commentBlock`) besides being the editor of `$$` lines, and says how it starts and how its native form is read (`math-block-expose.js`):
+
+| | |
+| --- | --- |
+| a new block | `$$` lines (`sourceDefaultCreate`: `{ text }`): the insert menu of a document writes them, **Math** among its components, so a document keeps its native form |
+| its native form read | `$$` lines and nothing else are the data of a block of it, the formula (`expose.blockTextRead`: `mathBlockTextRead`); a card takes `$$` lines so, from the insert menu and from a slash action |
+| drawn | the formula by KaTeX, centred, on a light surface with a thin edge as the cards around it (`MathFormula.jsx`); its copy control after it, never over it |
+| edited | its mode **Formula**, kept open in place by a card (`isInPlace`): a click types its LaTeX in the field below it, out of the flow; Ctrl/⌘ + Enter or a click elsewhere keeps it (one change), Escape gives it up; while it is open a drag on it selects nothing of the canvas (`nodrag nopan`). In a session of a block (a marker block of it in a document), the same, with the bar of the block |
+| made in a card | in the create panel, the words `math`, `formula`, `latex` find **Math**; `/card-comp/math` makes one: `/math` answers a block of math where a block alone is taken (`context.isBlockOnly`), a formula among the words everywhere else |
+
+A block of `$$` lines of a document is still drawn by the document and edited by the edit layer (above): the mode **Formula** is for a block held as data. An app with no documents registers the same component for its cards alone (`math-formula-comp.js`: `mathFormulaDefine`, no document renderer; zatelier-drawboard does).
+
 ## Registration
 
 | what | id | where |
 | --- | --- | --- |
 | the atom kind `math` (chips of a text, their field) | `text/math` | `main/comp-doc/edit/atom-kind-registry.js` |
-| the editor of a block of math | `common/MathBlock` (tag `MathBlock`), the default editor of the block kind `math` | `main/comp-doc/registry/registry.js`, `DocEditBlockEditor` |
+| the editor of a block of math, and a block of math held as data | `common/MathBlock` (tag `MathBlock`), the default editor of the block kind `math`; placements `edit` and `commentBlock` | `math-block-comp.js` (`mathBlockDefine`), in `main/comp-doc/registry/registry.js`; `DocEditBlockEditor` |
 | the action `/math` | `text/math` | `main/comp-doc/slash/slash-registry.js` |
 | the copy control of a formula on a row | `math/copy` (a layer of the page) | `main/comp-doc/registry/page-layer-registry.js` |
 
@@ -138,9 +152,12 @@ A block of the document that is `$$` lines is edited by the registered component
 | `MathData.js` | where math is in a text (`mathSpanListGet`), how a formula is written (`mathSourceBuild`), KaTeX drawing it and what is wrong with it (`mathRender`, `mathErrorGet`) |
 | `math-atom.js` | the atom kind `math` (`atomKindDefine`) |
 | `MathSourceField.jsx`, `.css` | the field below a formula, its keys |
-| `MathBlock.jsx`, `MathBlockEdit.jsx` | the editor of a block of math |
-| `math-slash.js` | `/math` |
-| `math.css` | the look of a formula while a text is edited |
+| `MathBlock.jsx`, `MathBlockEdit.jsx` | the editor of a block of math; a block held as data handed to `MathFormula.jsx` |
+| `MathFormula.jsx` | a block of math held as data: the formula drawn (`MathFormula`), its mode Formula (`MathFormulaEdit`) |
+| `math-block-expose.js` | what `MathBlock` tells the page: its start, its native form read, its mode |
+| `math-block-comp.js`, `math-formula-comp.js` | its definition for the page, and for an app with no documents |
+| `math-slash.js` | `/math`; a block of math where a block alone is taken |
+| `math.css` | the look of a formula while a text is edited, and of a block of math held as data |
 | `MathCopyLayer.jsx`, `.css` | the copy control of a formula on a row: where it floats, its forms |
 | `math-copy.js` | the copies and the files: the source of a drawn formula (`mathSourceOf`), the clipboard written (`mathCopy`), a file saved (`mathDownload`), the image (`html-to-image`) |
 | `math-svg.js` | a formula as an SVG of paths (MathJax), loaded when one is copied so |

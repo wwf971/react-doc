@@ -11,7 +11,7 @@ export function cardDiagramAnimationDefineOptionsBuild({ label, description, sou
 		placementList: ['mdx', 'commentBlock'],
 		isAssetAware: true,
 		expose: {
-			meta: { isEditAssetAccepted: true, isEditEnterButtonOnly: true, isNotInNode: true, label, description },
+			meta: { isEditAssetAccepted: true, isEditEnterButtonOnly: true, isFlowCanvas: true, label, description },
 			icon: Film,
 			sourceDefaultCreate,
 		},

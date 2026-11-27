@@ -6,11 +6,11 @@ import { textHighlight } from '../../../../main/comp-doc/object/ObjectSearchPane
 import { EditSourceSurface } from '../../../../main/comp-doc/edit/EditSourceSurface.jsx';
 import { useEditSlashConfig } from '../../../../main/comp-doc/slash/use-edit-slash-config.js';
 import { slashActionDefine } from '../../../../main/comp-doc/slash/slash-define.js';
-import { slashEffect } from '../../../../main/frontend/src/lib/doc-slash.js';
+import { SLASH_EFFECT_BLOCK, slashEffect } from '../../../../main/frontend/src/lib/doc-slash.js';
 import { useDocStores } from '../../../../main/frontend/src/store/context.js';
 import { nodeRegistrySearch } from './node-registry.js';
-import { cardCompEntryListBuild } from './CardCompEntry.js';
-import { CARD_COMP_TYPE, cardCompDataOfBlockSource, cardCompEntryMatch, cardCompViewIsTile } from './CardCompData.js';
+import { cardCompBlockReaderListBuild, cardCompEntryListBuild } from './CardCompEntry.js';
+import { CARD_COMP_TYPE, cardCompDataOfBlockSource, cardCompViewIsTile } from './CardCompData.js';
 import { cardCompAssetEntryCreate } from './CardCompAsset.js';
 import { compIdResolve } from '../../../../main/comp-doc/registry/comp-registry.js';
 import { compDefinitionGet } from '../../../../main/comp-doc/registry/comp-definition.js';
@@ -105,6 +105,19 @@ import { compDefinitionGet } from '../../../../main/comp-doc/registry/comp-defin
 const SOURCE_LIST_NONE = [];
 const ACTION_LIST_NONE = [];
 
+// the slash actions of the page that put a block (or answer one where a block alone is taken): what
+// /card-comp/ names, and what a card holds
+function blockActionListOf(isCompOffered, slashStore) {
+	return isCompOffered ? (slashStore?.actionList ?? []).filter(action => action.block) : [];
+}
+
+// whether every word typed is in the words of an entry
+function entryWordsMatch(wordList, text) {
+	const typedList = String(text ?? '').toLowerCase().split(/\s+/).filter(Boolean);
+	const hay = (wordList ?? []).join(' ').toLowerCase();
+	return typedList.every(word => hay.includes(word));
+}
+
 // the component of the page a tag name names, else undefined
 function compDefinitionFind(stores, compName) {
 	return compDefinitionGet(stores?.compById ?? {}, compIdResolve(stores?.sourceStore?.configDoc, compName));
@@ -144,10 +157,53 @@ export const DiagramCreatePanel = observer(function DiagramCreatePanel({ positio
 	// card-diagram-impl.md#a-component-in-a-card), each one an entry adding a card holding it, listed
 	// once something is typed, as the objects are (as the insert menu of a document finds them)
 	const isCompOffered = Boolean(editor.store && !editor.store.isStructureFixed && !isActionOnly && editor.store.registry?.kindByType[CARD_COMP_TYPE]);
+	// one naming an object (objectPick: the entry of a frontend object) asks for the object first: a
+	// state of the panel (objectPickStateOf below), as the insert menu of a document asks for it
 	const compEntryAllList = useMemo(() => (isCompOffered ? cardCompEntryListBuild({ compById: stores?.compById, configDoc: stores?.sourceStore?.configDoc }) : []).map(compEntry => ({
-		id: `comp:${compEntry.compName}`, label: compEntry.label, description: compEntry.description, icon: compEntry.icon, compEntry,
-		source: { choose: (entry, position, editorGiven) => compCardAdd(entry.compEntry, position, editorGiven) },
+		id: `comp:${compEntry.compName}`, label: compEntry.objectPick ? `${compEntry.label}…` : compEntry.label, description: compEntry.description, icon: compEntry.icon, compEntry,
+		wordList: [...compEntry.wordList, compEntry.label, compEntry.description ?? ''],
+		...(compEntry.objectPick
+			? { action: { id: `pick:${compEntry.compName}`, start: () => objectPickStateOf(compEntry) } }
+			: { source: { choose: (entry, position, editorGiven) => compCardAdd(entry.compEntry, position, editorGiven) } }),
 	})), [isCompOffered, stores?.compById, stores?.sourceStore?.configDoc]); // eslint-disable-line react-hooks/exhaustive-deps
+	// the components of the page that read a block of a form of its own (a fenced code block, $$ lines):
+	// a block a slash action puts is a card of the component reading it (cardCompDataOfBlockSource)
+	const readerList = useMemo(() => cardCompBlockReaderListBuild({ compById: stores?.compById, configDoc: stores?.sourceStore?.configDoc }), [stores?.compById, stores?.sourceStore?.configDoc]);
+	// the state asking for the object of a component naming one: the objects of its types matching the
+	// words typed (the object layer of the page), and a new one of each type the page creates (frontend
+	// objects, isCreateOffered); chosen, the card holds a block of the component naming it
+	const objectPickStateOf = (compEntry) => ({
+		id: `pick:${compEntry.compName}`,
+		label: compEntry.label,
+		placeholder: `Its object: a name, a type, an id (${compEntry.label})`,
+		search: async (text) => {
+			const objectStore = stores?.objectStore;
+			const typeCreateList = compEntry.objectPick.isCreateOffered && stores?.objectFrontendStore && objectStore
+				? stores.objectFrontendStore.typeOfferList.filter(type => compEntry.objectPick.typeList.some(typeId => objectStore.typeRegistry.isAssignable(type.id, typeId)))
+				: [];
+			const entryCreateList = typeCreateList.map(type => ({ id: `new:${type.id}`, typeId: type.id, label: `New ${type.label}`, description: 'a new object, then a card showing it', icon: Plus }));
+			if (!objectStore?.query) return { entryList: entryCreateList, note: 'The objects of this page cannot be searched here.' };
+			const result = await objectStore.query({ typeList: compEntry.objectPick.typeList, limit: 200 });
+			const wordList = String(text ?? '').toLowerCase().split(/\s+/).filter(Boolean);
+			const entryObjectList = (result?.objectList ?? []).map(descriptor => {
+				const typeLabel = descriptor.typeList?.[0] ? objectStore.typeLabelGet(descriptor.typeList[0]) : '';
+				return { id: descriptor.ref, label: descriptor.label || descriptor.ref, description: [typeLabel, descriptor.description].filter(Boolean).join(' · ') };
+			}).filter(entry => wordList.every(word => `${entry.label} ${entry.description} ${entry.id}`.toLowerCase().includes(word))).slice(0, 30);
+			return { entryList: [...entryObjectList, ...entryCreateList], note: entryObjectList.length ? '' : `No object of ${compEntry.label} matches` };
+		},
+		choose: async (entry, api) => {
+			let objectRef = entry.id;
+			if (entry.typeId) {
+				const created = await stores.objectFrontendStore.createForInsert(entry.typeId, stores?.docStore?.docCurrentPath ?? '');
+				if (created.code !== 0) throw new Error(created.message);
+				objectRef = created.data.ref;
+			}
+			const source = compEntry.sourceForObjectGet(objectRef);
+			if (!source) throw new Error(`${compEntry.label} starts no block for ${objectRef}`);
+			await compCardAdd({ ...compEntry, source }, api.position, api.editor);
+			return undefined;
+		},
+	});
 	// a card holding a component; one whose data must be an asset item gets its item first, and what
 	// kept it from being made is said in the editor (createChoose: what the promise throws)
 	const compCardAdd = async (compEntry, positionGiven, editorGiven) => {
@@ -161,12 +217,30 @@ export const DiagramCreatePanel = observer(function DiagramCreatePanel({ positio
 	};
 	// a card holding the block a slash action of the page answered (slashEffect.block), as it put it
 	const blockCardAdd = (blockSource, positionGiven, editorGiven) => {
-		const data = cardCompDataOfBlockSource(blockSource);
+		const data = cardCompDataOfBlockSource(blockSource, readerList);
 		if (!data) throw new Error('A card holds one block of a document; this text is not one.');
 		const isTile = cardCompViewIsTile(compDefinitionFind(stores, data.comp), data.props);
 		editorGiven.change(() => editorGiven.store.nodeCompAdd({ compName: data.comp, source: { lang: data.lang, raw: data.raw, props: data.props }, isTile }, positionGiven));
 	};
-	const compEntryList = queryWords.trim() ? compEntryAllList.filter(entry => cardCompEntryMatch(entry.compEntry, queryWords)) : [];
+	// what a slash action of the page puts as a block, found by its words too when no component entry
+	// starts it (a fenced code block: a card of Code), so "code" finds what /card-comp/code makes
+	const blockEntryAllList = useMemo(() => {
+		const compNameSet = new Set(compEntryAllList.map(entry => entry.compEntry.compName));
+		const list = [];
+		for (const action of blockActionListOf(isCompOffered, slashStore)) {
+			let effect;
+			try { effect = action.run?.({ isBlockOnly: true }); } catch { continue; }
+			if (effect?.type !== SLASH_EFFECT_BLOCK) continue;
+			const blockData = cardCompDataOfBlockSource(effect.source, readerList);
+			if (!blockData || compNameSet.has(blockData.comp)) continue;
+			compNameSet.add(blockData.comp);
+			list.push({ id: `block:${action.name}`, label: action.label, description: action.description, icon: action.icon ?? Plus,
+				wordList: [action.name, ...(action.aliasList ?? []), blockData.comp, action.label, action.description ?? ''],
+				source: { choose: (entry, positionGiven, editorGiven) => blockCardAdd(effect.source, positionGiven, editorGiven) } });
+		}
+		return list;
+	}, [compEntryAllList, readerList, isCompOffered, slashStore?.actionList]); // eslint-disable-line react-hooks/exhaustive-deps
+	const compEntryList = queryWords.trim() ? [...compEntryAllList, ...blockEntryAllList].filter(entry => entryWordsMatch(entry.wordList, queryWords)) : [];
 	const entryList = [...kindEntryList, ...compEntryList];
 	const option = editor.store && !editor.store.isStructureFixed && !isActionOnly ? objectSearchOptionGet(editor.store) : { isEnabled: false, typeList: [] };
 	const session = objectService?.searchSessionGet && option.isEnabled ? objectService.searchSessionGet(sessionKey, { typeList: option.typeList, fetchMax: 20 }) : undefined;
@@ -190,8 +264,10 @@ export const DiagramCreatePanel = observer(function DiagramCreatePanel({ positio
 	// a scope: after `/card-comp/` comes the slash of a document, the page's own actions that put a
 	// block (/code icon, /mdx card, /meeting-zoom-instance), unchanged; the block one answers is taken
 	// by the field (onBlockInsert) as the card's
-	const slashContext = useMemo(() => ({ sourcePath: stores?.docStore?.docCurrentPath ?? '', configValueGet: key => stores?.configStore?.valueDocGet?.(stores?.docStore?.docCurrentPath ?? '', key) }), [stores?.docStore?.docCurrentPath, stores?.configStore]);
-	const blockActionList = isCompOffered ? (slashStore?.actionList ?? []).filter(action => action.block) : [];
+	// isBlockOnly: the field takes a block alone (a card holds it), so an action putting a formula among
+	// words in a document answers a block of math here (slash-define.js: block)
+	const slashContext = useMemo(() => ({ sourcePath: stores?.docStore?.docCurrentPath ?? '', configValueGet: key => stores?.configStore?.valueDocGet?.(stores?.docStore?.docCurrentPath ?? '', key), isBlockOnly: true }), [stores?.docStore?.docCurrentPath, stores?.configStore]);
+	const blockActionList = blockActionListOf(isCompOffered, slashStore);
 	const slashActionList = useMemo(() => {
 		const nameSet = new Set();
 		const list = [];

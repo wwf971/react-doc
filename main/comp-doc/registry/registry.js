@@ -37,7 +37,7 @@ import { Tag } from '../../../built-in/comp-mdx/tag/Tag.jsx';
 import { TagLabel } from '../../../built-in/comp-mdx/tag/TagLabel.jsx';
 import { TagOverview } from '../../../built-in/comp-mdx/tag/TagOverview.jsx';
 import { BlockSource } from '../../../built-in/comp-mdx/text/BlockSource.jsx';
-import { MathBlock } from '../../../built-in/comp-mdx/math/MathBlock.jsx';
+import { mathBlockDefine } from '../../../built-in/comp-mdx/math/math-block-comp.js';
 import { Code } from '../../../built-in/comp-mdx/text/Code.jsx';
 import { Mdx } from '../../../built-in/comp-mdx/text/Mdx.jsx';
 import { Heading } from '../../../built-in/comp-mdx/text/Heading.jsx';
@@ -280,8 +280,9 @@ export const compById = {
   'common/ListItem': compDefine(ListItem, { placementList: ['edit'], expose: { meta: { isEditSlashEnabled: true } } }),
   'common/BlockSource': compDefine(BlockSource, { placementList: ['edit'] }),
   // a block of math ($$): the formula drawn in place, its source typed below
-  // it (the built-in component math, built-in/comp-mdx/math/comp_math.md#a-block-of-math)
-  'common/MathBlock': compDefine(MathBlock, { placementList: ['edit'] }),
+  // it (the built-in component math, built-in/comp-mdx/math/comp_math.md#a-block-of-math);
+  // also a block held as data (commentBlock: a card of a card diagram, its formula the data)
+  'common/MathBlock': mathBlockDefine,
   // compatibility ids: existing consumer configs map tags to these ids
   'common/DocFileTree': compFileTree,
   'common/DocIndex': compIndex,

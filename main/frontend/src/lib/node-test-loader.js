@@ -54,5 +54,22 @@ export async function load(url, context, nextLoad) {
       shortCircuit: true,
     };
   }
+  if (url.startsWith('file:') && url.endsWith('.js') && !url.includes('/node_modules/')) {
+    const source = readFileSync(fileURLToPath(url), 'utf8');
+    // what vite does for import.meta.glob (a folder of icons a series registers): here no file, so a
+    // module using it loads in a test (the registry of every package, read by CardCompEntry.test.js)
+    if (source.includes('import.meta.glob(')) {
+      return {
+        format: 'module',
+        source: source.replaceAll('import.meta.glob(', '((..._glob) => ({}))('),
+        shortCircuit: true,
+      };
+    }
+    // a module of the component folders of a doc page is an ES module, as vite reads it: a doc page
+    // has no package.json saying so, and node would read it as CommonJS
+    if (url.includes('/.doc-page/')) {
+      return { format: 'module', source, shortCircuit: true };
+    }
+  }
   return nextLoad(url, context);
 }

@@ -8,6 +8,16 @@ import { cardCompAssetEntryCreate, cardCompAssetWrite } from './CardCompAsset.js
 import { codeSlashAction } from '../../../../built-in/comp-mdx/text/code-slash.js';
 import { mdxSlashAction } from '../../../../built-in/comp-mdx/text/mdx-slash.js';
 import { codeExpose, mdxExpose } from '../../../../main/comp-doc/registry/registry-expose.js';
+import { compBlockTextRead } from '../../../../main/comp-doc/registry/comp-expose.js';
+import { mathBlockExpose } from '../../../../built-in/comp-mdx/math/math-block-expose.js';
+import { mathSlashAction } from '../../../../built-in/comp-mdx/math/math-slash.js';
+
+// the components of a page that read a block of a form of their own (cardCompBlockReaderListBuild):
+// Code a fenced code block, MathBlock $$ lines
+const readerList = [
+  { compName: 'Code', read: (text) => compBlockTextRead({ expose: codeExpose }, text) },
+  { compName: 'MathBlock', read: (text) => compBlockTextRead({ expose: mathBlockExpose }, text) },
+];
 
 // A card holding a component (card-diagram-impl.md#a-component-in-a-card): its commands, each a step
 // of the history or none, and what its edit card offers
@@ -122,18 +132,29 @@ test('a block of a document is a card: a code block holds Code, an MDX block Mdx
   assert.deepEqual(mdxSlashAction.block.viewList.map(view => view.id), ['icon', 'card']);
   // what they answer, by default and in a view chosen
   const sourceOf = effect => effect.source;
-  assert.deepEqual(cardCompDataOfBlockSource(sourceOf(codeSlashAction.run({}))), { comp: 'Code', lang: 'text', raw: '' });
+  assert.deepEqual(cardCompDataOfBlockSource(sourceOf(codeSlashAction.run({})), readerList), { comp: 'Code', lang: 'text', raw: '' });
   const iconItem = codeSlashAction.param.itemListGet('', {}).find(item => item.id === 'icon');
-  assert.deepEqual(cardCompDataOfBlockSource(sourceOf(codeSlashAction.param.itemChoose(iconItem, '', {}))), { comp: 'Code', lang: 'text', raw: '', props: { view: 'icon' } });
+  assert.deepEqual(cardCompDataOfBlockSource(sourceOf(codeSlashAction.param.itemChoose(iconItem, '', {})), readerList), { comp: 'Code', lang: 'text', raw: '', props: { view: 'icon' } });
   assert.deepEqual(cardCompDataOfBlockSource(sourceOf(mdxSlashAction.run({}))), { comp: 'Mdx', lang: 'md', raw: '' });
   const cardItem = mdxSlashAction.param.itemListGet('', {}).find(item => item.id === 'card');
   assert.deepEqual(cardCompDataOfBlockSource(sourceOf(mdxSlashAction.param.itemChoose(cardItem, '', {}))), { comp: 'Mdx', lang: 'md', raw: '', props: { view: 'card' } });
   // a fence with lines, its language, title and view; a longer fence holding a shorter one
-  assert.deepEqual(cardCompDataOfBlockSource('```python title="a.py" view=plain\ndef add(a, b):\n    return a + b\n```'), { comp: 'Code', lang: 'python', raw: 'def add(a, b):\n    return a + b\n', props: { view: 'plain', title: 'a.py' } });
+  assert.deepEqual(cardCompDataOfBlockSource('```python title="a.py" view=plain\ndef add(a, b):\n    return a + b\n```', readerList), { comp: 'Code', lang: 'python', raw: 'def add(a, b):\n    return a + b\n', props: { view: 'plain', title: 'a.py' } });
   assert.deepEqual(cardCompDataOfBlockSource('<!--renderComp=Mdx,title=Notes-->\n````md\n# Notes\n```sh\nls\n```\n````'), { comp: 'Mdx', lang: 'md', raw: '# Notes\n```sh\nls\n```\n', props: { title: 'Notes' } });
-  // what is not one block is no card
-  assert.equal(cardCompDataOfBlockSource('a paragraph'), null);
-  assert.equal(cardCompDataOfBlockSource('```js\nnot closed'), null);
+  // a block of math: $$ lines, read by MathBlock; /math answers one where a block alone is taken
+  assert.deepEqual(cardCompDataOfBlockSource('$$\nE = mc^2\n$$', readerList), { comp: 'MathBlock', lang: 'latex', raw: 'E = mc^2' });
+  assert.ok(mathSlashAction.block, '/math says it answers a block where a block alone is taken');
+  assert.deepEqual(cardCompDataOfBlockSource(sourceOf(mathSlashAction.run({ isBlockOnly: true })), readerList), { comp: 'MathBlock', lang: 'latex', raw: 'x' });
+  const rowItem = mathSlashAction.param.itemListGet('', {}).find(item => item.id === 'row');
+  assert.equal(mathSlashAction.param.itemChoose(rowItem, '', {}).type, 'atom', 'in a document /math stays a formula among the text');
+  // a block of another form after its marker, as the document hands it to its component (a quote)
+  assert.deepEqual(cardCompDataOfBlockSource('<!--renderComp=BlockSimple,type=info,title=Note-->\n> Text of the block.', readerList), { comp: 'BlockSimple', lang: '', raw: '> Text of the block.', props: { type: 'info', title: 'Note' } });
+  // what is not one block is no card; a fence no component of the page reads neither
+  assert.equal(cardCompDataOfBlockSource('a paragraph', readerList), null);
+  assert.equal(cardCompDataOfBlockSource('$$\nx\n$$\n\nand a paragraph', readerList), null);
+  assert.equal(cardCompDataOfBlockSource('<!--renderComp=BlockSimple-->\n> one\n\nanother', readerList), null);
+  assert.equal(cardCompDataOfBlockSource('```js\nnot closed', readerList), null);
+  assert.equal(cardCompDataOfBlockSource('```js\nx\n```'), null);
   assert.equal(cardCompDataOfBlockSource(undefined), null);
 });
 

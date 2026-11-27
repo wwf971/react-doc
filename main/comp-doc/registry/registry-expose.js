@@ -25,7 +25,7 @@ import {
   PanelsTopLeft,
   Rows3,
 } from '../../frontend/UICommon.js';
-import { CODE_VIEW_SLASH_LIST } from '../../../built-in/comp-mdx/text/code-slash.js';
+import { CODE_VIEW_SLASH_LIST, codeBlockTextRead } from '../../../built-in/comp-mdx/text/code-slash.js';
 import { MDX_VIEW_ENTRY_LIST } from '../../../built-in/comp-mdx/text/MdxData.js';
 
 // What the components registered in registry.js expose about themselves
@@ -160,6 +160,8 @@ export const codeExpose = {
   meta: { label: 'Code', description: 'Lines of code or text drawn as a fenced code block, from data: the lines of a code block moved into the asset service layer.' },
   icon: FileCode,
   blockViewList: CODE_VIEW_SLASH_LIST,
+  // a fenced code block of a document is a block of Code, its lines its data (a card holding it)
+  blockTextRead: codeBlockTextRead,
 };
 
 export const mdxExpose = {

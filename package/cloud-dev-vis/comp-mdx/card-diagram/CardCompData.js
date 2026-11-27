@@ -20,10 +20,8 @@
 
 import { commentMarkerParse } from '../../../../main/frontend/src/lib/remark-comment-comp.js';
 import { assetRefLangIs } from '../../../../main/frontend/src/lib/doc-asset-ref.js';
-import { codeInfoLangGet, codeInfoTitleGet, codeInfoViewGet } from '../../../../main/frontend/src/lib/rehype-code-view.js';
-// the component the lines of a fenced block are drawn by when they are its data, as the core moves a
-// code block into the asset store (doc_page_impl_mdx_code.md#the-lines-in-the-asset-service-layer)
-import { CODE_COMPONENT_NAME } from '../../../../main/frontend/src/lib/doc-edit-code.js';
+import { codeInfoLangGet } from '../../../../main/frontend/src/lib/rehype-code-view.js';
+import { blockFenceRead } from '../../../../main/frontend/src/lib/doc-block-fence.js';
 
 export const CARD_COMP_TYPE = 'card-comp';
 
@@ -68,35 +66,42 @@ export function cardCompIsAssetRef(data = {}) {
 }
 
 // the data of a card holding what a block of a document is, from the text of the block (what a
-// slash action puts at the caret, slashEffect.block): a component block (its marker, then its fence)
-// gives its component, its props and its data; a fenced code block gives the component Code with
-// the lines, their language and the view and the title of its info string. null: a text a card
-// cannot hold (more than one block, a block of another form)
+// slash action puts at the caret, slashEffect.block; what the insert menu writes for a component):
+//   a component block, its marker then its block: its component, its props, and its data as the
+//     document hands them to the component (remark-comment-comp.js): a fenced block its lines and
+//     its language; a block of another form (a quote after the marker of BlockSimple) its text, with
+//     no language
+//   a block of a form of its own (a fenced code block, $$ lines of math): the component of the page
+//     that reads it (readerList: expose.blockTextRead, cardCompBlockReaderListBuild in
+//     CardCompEntry.js), with what it reads
+// null: a text a card cannot hold (more than one block, a block no component reads)
 //   <!--renderComp=Mdx,view=card-->        { comp: 'Mdx', lang: 'md', raw: '', props: { view: 'card' } }
 //   ```md
 //   ```
 //   ```text view=icon                     { comp: 'Code', lang: 'text', raw: '', props: { view: 'icon' } }
 //   ```
-export function cardCompDataOfBlockSource(source) {
-	const lineList = String(source ?? '').replace(/\r\n?/g, '\n').trim().split('\n');
+//   $$                                    { comp: 'MathBlock', lang: 'latex', raw: 'x' }
+//   x
+//   $$
+export function cardCompDataOfBlockSource(source, readerList = []) {
+	const text = String(source ?? '').replace(/\r\n?/g, '\n').trim();
+	if (!text) return null;
+	const lineList = text.split('\n');
 	const marker = commentMarkerParse(lineList[0]);
-	const fence = fenceRead(marker ? lineList.slice(1) : lineList);
-	if (!fence) return null;
-	if (marker) return { comp: marker.compName, lang: codeInfoLangGet(fence.info) || 'yaml', raw: fence.raw, ...(Object.keys(marker.props).length ? { props: marker.props } : {}) };
-	const view = codeInfoViewGet(fence.info);
-	const title = codeInfoTitleGet(fence.info);
-	const props = { ...(view ? { view } : {}), ...(title ? { title } : {}) };
-	return { comp: CODE_COMPONENT_NAME, lang: codeInfoLangGet(fence.info) || 'text', raw: fence.raw, ...(Object.keys(props).length ? { props } : {}) };
-}
-
-// the one fenced block the lines are, from its opening to its closing fence: { info, raw }, or null
-function fenceRead(lineList) {
-	const open = /^(`{3,}|~{3,})(.*)$/.exec(lineList[0] ?? '');
-	if (!open) return null;
-	const close = lineList.length - 1;
-	if (close < 1 || !new RegExp(`^${open[1][0]}{${open[1].length},}\\s*$`).test(lineList[close])) return null;
-	const body = lineList.slice(1, close);
-	return { info: open[2].trim(), raw: body.length ? `${body.join('\n')}\n` : '' };
+	if (marker) {
+		const props = Object.keys(marker.props).length ? { props: marker.props } : {};
+		const rest = lineList.slice(1).join('\n').trim();
+		const fence = blockFenceRead(rest);
+		if (fence) return { comp: marker.compName, lang: codeInfoLangGet(fence.info) || 'yaml', raw: fence.raw, ...props };
+		// one block of another form: no line left empty between its lines
+		if (!rest || /\n\s*\n/.test(rest)) return null;
+		return { comp: marker.compName, lang: '', raw: rest, ...props };
+	}
+	for (const reader of readerList) {
+		const data = reader.read(text);
+		if (data) return { comp: reader.compName, lang: data.lang, raw: data.raw, ...(data.props && Object.keys(data.props).length ? { props: { ...data.props } } : {}) };
+	}
+	return null;
 }
 
 // the view of a card's component, written as view= on the marker of a block of it, when the component

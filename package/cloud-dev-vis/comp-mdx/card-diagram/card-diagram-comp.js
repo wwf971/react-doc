@@ -17,8 +17,10 @@ import { cardDiagramNodeRegistry } from './card-diagram-node-registry.js';
 export const cardDiagramMetaShared = {
 	isEditAssetAccepted: true,
 	isEditEnterButtonOnly: true,
-	// a canvas of its own: never held by a card of a diagram (card-diagram-impl.md#a-component-in-a-card)
-	isNotInNode: true,
+	// a canvas of React Flow of its own: a card of a diagram holds it as a tile and draws it in a dialog,
+	// since React Flow reads the handles of a node from everything inside it
+	// (card-diagram-impl.md#a-component-in-a-card)
+	isFlowCanvas: true,
 };
 
 // what a corner of a node drawn to a size does when it is dragged in the editor (DiagramResizeHandles.jsx):

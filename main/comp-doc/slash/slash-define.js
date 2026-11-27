@@ -21,7 +21,11 @@
 //     icon         a component drawing its icon
 //     block        optional { viewList }: it puts a block at the caret, in one of
 //                  these views (set by slashBlockActionDefine, and by the actions
-//                  of the components, slash-comp.js)
+//                  of the components, slash-comp.js); or it answers a block where
+//                  a surface takes a block alone (context.isBlockOnly: the create
+//                  panel of a card diagram), whatever it puts in a text (/math: a
+//                  formula among the words in a paragraph, a block of math in a
+//                  card)
 //     scope        optional { actionList }: a "/" right after its name enters the
 //                  scope, whose slash text these actions read by the same grammar
 //                  (/card-comp/code icon: the create panel of a card diagram).

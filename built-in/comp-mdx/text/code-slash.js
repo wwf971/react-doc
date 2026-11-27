@@ -1,7 +1,8 @@
 import { SquareCode } from '../../../main/frontend/UICommon.js';
 import { slashBlockActionDefine } from '../../../main/comp-doc/slash/slash-define.js';
 import { codeViewEntryListBuild } from '../../../main/comp-doc/edit/code-view-entry.js';
-import { codeInfoLangSet, codeInfoViewSet, codeViewConfigKeyGet } from '../../../main/frontend/src/lib/rehype-code-view.js';
+import { codeInfoLangGet, codeInfoLangSet, codeInfoTitleGet, codeInfoViewGet, codeInfoViewSet, codeViewConfigKeyGet } from '../../../main/frontend/src/lib/rehype-code-view.js';
+import { blockFenceRead } from '../../../main/frontend/src/lib/doc-block-fence.js';
 
 // /code: a fenced code block at the caret (doc_page_impl_mdx_code.md), put
 // there as /mdx puts an MDX block: in the text of a list item a block of its
@@ -36,6 +37,18 @@ export const codeSlashAction = slashBlockActionDefine({
   viewDefaultGet: (context) => context?.configValueGet?.(codeViewConfigKeyGet(context?.place)),
   sourceBuild: (view) => codeBlockSourceBuild(view),
 });
+
+// the data a block of the component Code holds, read from a fenced code block of a document (its
+// expose.blockTextRead): the lines, their language, and the view and the title of its info string;
+// null for a text that is not one fenced block. A card of a card diagram holds a code block so
+//   ```python title="a.py" view=plain     { lang: 'python', raw: 'def add…\n', props: { view: 'plain', title: 'a.py' } }
+export function codeBlockTextRead(text) {
+  const fence = blockFenceRead(text);
+  if (!fence) return null;
+  const view = codeInfoViewGet(fence.info);
+  const title = codeInfoTitleGet(fence.info);
+  return { lang: codeInfoLangGet(fence.info) || 'text', raw: fence.raw, props: { ...(view ? { view } : {}), ...(title ? { title } : {}) } };
+}
 
 // the source of a new code block: an empty fence, its view in its info string
 // when one is chosen (the language then written as text: the first word of an

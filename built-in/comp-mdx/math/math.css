@@ -84,3 +84,48 @@
   display: flex;
   margin: 1em 0;
 }
+
+/* a block of math held as data (MathBlock, placement commentBlock: a card of a card diagram): the
+   formula set apart and centred on a light surface with a thin edge, as the cards around it are
+   drawn (a block of $$ lines of a document is drawn by the document, with no surface); edited, a
+   click on it types its source below it (MathFormulaEdit), the frame of a value open drawn inside
+   its box */
+.doc-math-formula {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-height: 2.6em;
+  padding: 0.45em 0.7em;
+  border: 1px solid var(--color-fd-border);
+  border-radius: 0.7em;
+  background: var(--color-fd-card);
+  color: var(--color-fd-card-foreground);
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+}
+
+.doc-math-formula .katex-display {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+}
+
+.doc-math-formula[data-empty]::after {
+  content: attr(data-label);
+  color: var(--color-fd-muted-foreground);
+  font-size: 0.85em;
+}
+
+.doc-math-formula.is-editing {
+  cursor: text;
+}
+
+.doc-math-formula.is-editing:hover {
+  background: color-mix(in srgb, var(--color-fd-primary) 6%, transparent);
+}
+
+.doc-math-formula.is-open {
+  background: color-mix(in srgb, var(--color-fd-primary) 7%, var(--color-fd-background));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-fd-primary) 50%, transparent);
+}

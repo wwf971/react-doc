@@ -16,6 +16,7 @@ A component designed for a page of text meets these on a canvas, and each one br
 | **A card's box cuts what is beyond it** (the body of a card holding a component has `overflow: hidden`). | A toolbar or a popover positioned outside the card with CSS: it is cut, and the canvas under it takes the click. |
 | **The canvas is zoomed.** The card's text is small (0.64rem) and shrinks further when zoomed out. | Controls sized like the content: unreadable when zoomed out, huge relative to the card when zoomed in. |
 | **Many cards are seen at once, close to each other.** | Controls drawn on every card at once; anything floating above or below a card lands on its neighbour. |
+| **A canvas inside a card.** React Flow reads the handles of a node from everything inside it. | A diagram drawn live in a card would give the card the handles of its own cards: a component drawing a canvas of React Flow declares `meta.isFlowCanvas` and is held as a tile, its canvas in a dialog. |
 | **Several hosts draw the same component**: a block of a document (a session, a bar with Save), a card of a diagram (in place, written at once), a card in a popover of a holder, an app with no document store. | Something that works in the host it was tried in and not in another. |
 
 ## Principles

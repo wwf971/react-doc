@@ -135,10 +135,14 @@ slashActionDefine({
 })
 
 context = { sourcePath, docPageAlias, source, object,   the document edited, its doc page, the source service
-            place, configValueGet }                       object, the object service layer (what /object lists
+            place, configValueGet, isBlockOnly }          object, the object service layer (what /object lists
                                                           from); where a block put at the caret stands (undefined:
                                                           a block of the document, 'inListItem': the text of a list
-                                                          item) and the config of the document (configValueGet(key))
+                                                          item) and the config of the document (configValueGet(key));
+                                                          isBlockOnly: the surface takes a block alone (the create
+                                                          panel of a card diagram), so an action declaring block
+                                                          answers one (/math: a block of math, not a formula among
+                                                          words)
 effect  = slashEffect.replace(text, { isMarked }) | slashEffect.paramSet(text) | slashEffect.cancel()
         | slashEffect.actionSet(name, param)     another action of the surface goes on (below)
         | slashEffect.block(source)              a block at the caret (below)
